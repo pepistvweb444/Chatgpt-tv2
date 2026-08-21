@@ -4,251 +4,61 @@
     android:layout_height="match_parent"
     android:background="#090B10">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="horizontal"
-        android:padding="22dp">
-
-        <LinearLayout
-            android:layout_width="176dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:padding="10dp"
-            android:background="#11141B">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="JARVIS"
-                android:textColor="#FFFFFF"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:padding="12dp" />
-
-            <TextView
-                android:id="@+id/statusText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="● Listo"
-                android:textColor="#79E6CF"
-                android:textSize="13sp"
-                android:padding="12dp" />
-
-            <Button android:id="@+id/homeButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="⌂  Inicio" />
-            <Button android:id="@+id/chatButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="✦  Chat" />
-            <Button android:id="@+id/visionButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="◉  Vision" />
-            <Button android:id="@+id/homeControlButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="⌂  Casa" />
-            <Button android:id="@+id/routinesButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="◷  Rutinas" />
-            <Button android:id="@+id/notificationsButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="●  Avisos" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:padding="22dp">
+        <LinearLayout android:layout_width="190dp" android:layout_height="match_parent" android:orientation="vertical" android:padding="10dp" android:background="#11141B">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="JARVIS" android:textColor="#FFFFFF" android:textSize="24sp" android:textStyle="bold" android:padding="12dp" />
+            <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="● Listo" android:textColor="#79E6CF" android:textSize="13sp" android:padding="12dp" />
+            <Button android:id="@+id/homeButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="⌂  Inicio" />
+            <Button android:id="@+id/chatButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="✦  Chat" />
+            <Button android:id="@+id/chatsButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="☰  Mis chats" />
+            <Button android:id="@+id/connectionsButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="↔  Conexiones" />
+            <Button android:id="@+id/visionButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="◉  Vision" />
+            <Button android:id="@+id/homeControlButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="⌂  Casa" />
+            <Button android:id="@+id/routinesButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="◷  Rutinas" />
+            <Button android:id="@+id/notificationsButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="●  Avisos" />
             <Space android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-            <Button android:id="@+id/settingsButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="⚙  Ajustes" />
+            <Button android:id="@+id/settingsButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="⚙  Ajustes" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_marginStart="18dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:id="@+id/pageTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Tu día, de un vistazo"
-                        android:textColor="#FFFFFF"
-                        android:textSize="30sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:id="@+id/pageSubtitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Ahora · información, casa y ChatGPT"
-                        android:textColor="#9CA6B8"
-                        android:textSize="16sp" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="18dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:id="@+id/pageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tu día, de un vistazo" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/pageSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ahora · información, casa y ChatGPT" android:textColor="#9CA6B8" android:textSize="16sp" />
                 </LinearLayout>
-
-                <Button
-                    android:id="@+id/micButton"
-                    android:layout_width="168dp"
-                    android:layout_height="58dp"
-                    android:text="🎙  HABLAR" />
+                <Button android:id="@+id/micButton" android:layout_width="168dp" android:layout_height="58dp" android:text="🎙  HABLAR" />
             </LinearLayout>
 
-            <HorizontalScrollView
-                android:layout_width="match_parent"
-                android:layout_height="184dp"
-                android:layout_marginTop="16dp"
-                android:scrollbars="none">
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/cardNow"
-                        android:layout_width="270dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="12dp"
-                        android:padding="20dp"
-                        android:background="#1B2230"
-                        android:text="NOW BRIEF\n\nBuenos días\nTu resumen aparecerá aquí\n\n✦ Pregunta lo que quieras"
-                        android:textColor="#FFFFFF"
-                        android:textSize="17sp" />
-
-                    <TextView
-                        android:layout_width="230dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="12dp"
-                        android:padding="20dp"
-                        android:background="#171D28"
-                        android:text="TIEMPO\n\nConsulta el tiempo actual\ny la previsión con ChatGPT\n\n☀ Actualizado desde Internet"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/cardHome"
-                        android:layout_width="230dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="12dp"
-                        android:padding="20dp"
-                        android:background="#171D28"
-                        android:text="CASA\n\nLuces · Persianas\nClima · Escenas\n\n⌂ Control rápido"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/cardMessages"
-                        android:layout_width="230dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="12dp"
-                        android:padding="20dp"
-                        android:background="#171D28"
-                        android:text="COMUNICACIONES\n\nCorreo · Mensajes\nLlamadas · Avisos\n\n● Centro personal"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/cardRoutine"
-                        android:layout_width="230dp"
-                        android:layout_height="match_parent"
-                        android:padding="20dp"
-                        android:background="#171D28"
-                        android:text="RUTINAS\n\nBriefing + hogar\nAutomatizaciones\n\n◷ Próximas acciones"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
+            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="184dp" android:layout_marginTop="16dp" android:scrollbars="none">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal">
+                    <TextView android:id="@+id/cardNow" android:layout_width="270dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="20dp" android:background="#1B2230" android:text="NOW BRIEF\n\nTu resumen inteligente\nAgenda · avisos · noticias\n\n✦ Pregunta lo que quieras" android:textColor="#FFFFFF" android:textSize="17sp" />
+                    <TextView android:layout_width="230dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="20dp" android:background="#171D28" android:text="TIEMPO\n\nInformación actual con búsqueda web\n\n☀ Internet activo" android:textColor="#FFFFFF" android:textSize="16sp" />
+                    <TextView android:id="@+id/cardHome" android:layout_width="230dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="20dp" android:background="#171D28" android:text="CASA\n\nLuces · Persianas\nClima · Escenas\n\n⌂ Control rápido" android:textColor="#FFFFFF" android:textSize="16sp" />
+                    <TextView android:id="@+id/cardMessages" android:layout_width="230dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="20dp" android:background="#171D28" android:text="CONEXIONES\n\nCorreo · MCPs\nCalendario · Servicios\n\n↔ Estado en Conexiones" android:textColor="#FFFFFF" android:textSize="16sp" />
+                    <TextView android:id="@+id/cardRoutine" android:layout_width="230dp" android:layout_height="match_parent" android:padding="20dp" android:background="#171D28" android:text="RUTINAS\n\nBriefing + hogar\nAutomatizaciones\n\n◷ Próximas acciones" android:textColor="#FFFFFF" android:textSize="16sp" />
                 </LinearLayout>
             </HorizontalScrollView>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:orientation="horizontal"
-                android:layout_marginTop="14dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="3"
-                    android:orientation="vertical"
-                    android:background="#11151D"
-                    android:padding="18dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="ChatGPT"
-                        android:textColor="#FFFFFF"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
-
-                    <ScrollView
-                        android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="1"
-                        android:layout_marginTop="10dp">
-                        <TextView
-                            android:id="@+id/transcript"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:textColor="#EEF2F7"
-                            android:textSize="18sp"
-                            android:lineSpacingExtra="7dp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal" android:layout_marginTop="14dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:orientation="vertical" android:background="#11151D" android:padding="18dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ChatGPT · memoria activa" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/currentChatLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Nuevo chat" android:textColor="#9CA6B8" android:textSize="13sp" android:paddingTop="4dp" />
+                    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp">
+                        <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#EEF2F7" android:textSize="18sp" android:lineSpacingExtra="7dp" />
                     </ScrollView>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:gravity="center_vertical">
-                        <EditText
-                            android:id="@+id/messageInput"
-                            android:layout_width="0dp"
-                            android:layout_height="58dp"
-                            android:layout_weight="1"
-                            android:hint="Pregunta a Jarvis…"
-                            android:textColor="#FFFFFF"
-                            android:textColorHint="#858E9E"
-                            android:background="#1A202B"
-                            android:paddingHorizontal="18dp"
-                            android:singleLine="true" />
-                        <Button
-                            android:id="@+id/sendButton"
-                            android:layout_width="124dp"
-                            android:layout_height="58dp"
-                            android:layout_marginStart="10dp"
-                            android:text="ENVIAR" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:gravity="center_vertical">
+                        <EditText android:id="@+id/messageInput" android:layout_width="0dp" android:layout_height="58dp" android:layout_weight="1" android:hint="Pregunta a Jarvis…" android:textColor="#FFFFFF" android:textColorHint="#858E9E" android:background="#1A202B" android:paddingHorizontal="18dp" android:singleLine="true" />
+                        <Button android:id="@+id/sendButton" android:layout_width="124dp" android:layout_height="58dp" android:layout_marginStart="10dp" android:text="ENVIAR" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="250dp"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:layout_marginStart="14dp">
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="1"
-                        android:padding="18dp"
-                        android:background="#151A24"
-                        android:text="VISION\n\nPregunta por lo que estás viendo: ropa, lugares, actores o productos."
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="1"
-                        android:layout_marginTop="12dp"
-                        android:padding="18dp"
-                        android:background="#151A24"
-                        android:text="PRÓXIMO\n\nWidgets vivos, chats sincronizados y conectores MCP en todos tus dispositivos."
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp" />
+                <LinearLayout android:layout_width="250dp" android:layout_height="match_parent" android:orientation="vertical" android:layout_marginStart="14dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:padding="18dp" android:background="#151A24" android:text="MIS CHATS\n\nPulsa ‘Mis chats’ para recuperar conversaciones y continuar con su contexto." android:textColor="#FFFFFF" android:textSize="16sp" />
+                    <TextView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="12dp" android:padding="18dp" android:background="#151A24" android:text="MCP + WEB\n\nPulsa ‘Conexiones’ para ver búsqueda web y los MCP configurados en el backend." android:textColor="#FFFFFF" android:textSize="16sp" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
-    <Button
-        android:id="@+id/assistantBubble"
-        android:layout_width="76dp"
-        android:layout_height="76dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="24dp"
-        android:text="✦"
-        android:textSize="28sp"
-        android:contentDescription="Abrir asistente" />
+    <Button android:id="@+id/assistantBubble" android:layout_width="76dp" android:layout_height="76dp" android:layout_gravity="bottom|end" android:layout_margin="24dp" android:text="✦" android:textSize="28sp" android:contentDescription="Abrir asistente" />
 </FrameLayout>
