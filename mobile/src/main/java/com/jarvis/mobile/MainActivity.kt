@@ -61,7 +61,46 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.voiceSettings).setOnClickListener { showVoiceSettings() }
         findViewById<Button>(R.id.camera).setOnClickListener { openCamera() }
         findViewById<Button>(R.id.files).setOnClickListener { openFiles() }
+        findViewById<Button>(R.id.phoneControl).setOnClickListener { startActivity(Intent(this, DeviceHubActivity::class.java)) }
+        findViewById<Button>(R.id.wakeWord).setOnClickListener { toggleWakeWord() }
         recentChats.setOnClickListener { showChats() }
+
+        if (intent?.getBooleanExtra("wake_word_triggered", false) == true) {
+            status.text = "Hola Jarvis detectado · te escucho"
+            handler.postDelayed({ startVoiceCapture() }, 350)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("wake_word_triggered", false)) {
+            status.text = "Hola Jarvis detectado · te escucho"
+            handler.postDelayed({ startVoiceCapture() }, 250)
+        }
+    }
+
+    private fun toggleWakeWord() {
+        val enabled = prefs.getBoolean("wake_word_enabled", false)
+        if (enabled) {
+            stopService(Intent(this, WakeWordService::class.java))
+            prefs.edit().putBoolean("wake_word_enabled", false).apply()
+            Toast.makeText(this, "Activación 'Hola Jarvis' desactivada", Toast.LENGTH_SHORT).show()
+            status.text = "Hola Jarvis · desactivado"
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_WAKE_AUDIO)
+            return
+        }
+        startWakeWordService()
+    }
+
+    private fun startWakeWordService() {
+        ContextCompat.startForegroundService(this, Intent(this, WakeWordService::class.java))
+        prefs.edit().putBoolean("wake_word_enabled", true).apply()
+        Toast.makeText(this, "Di 'Hola Jarvis' para activarme", Toast.LENGTH_LONG).show()
+        status.text = "Hola Jarvis · escuchando en segundo plano"
     }
 
     private fun newConversation(showToast: Boolean): String {
@@ -323,7 +362,7 @@ class MainActivity : AppCompatActivity() {
         var rest = clean
         while (rest.isNotBlank()) {
             if (rest.length <= 520) { out.add(rest); break }
-            val cut = rest.take(520).lastIndexOfAny(charArrayOf('.', '!', '?', ';', ',' )).let { if (it < 180) 500 else it + 1 }
+            val cut = rest.take(520).lastIndexOfAny(charArrayOf('.', '!', '?', ';', ',')).let { if (it < 180) 500 else it + 1 }
             out.add(rest.take(cut).trim()); rest = rest.drop(cut).trim()
         }
         return out
@@ -374,6 +413,7 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startVoiceCapture()
+        if (requestCode == REQ_WAKE_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startWakeWordService()
     }
 
     override fun onDestroy() {
@@ -385,5 +425,6 @@ class MainActivity : AppCompatActivity() {
         private const val REQ_AUDIO = 20
         private const val REQ_CAMERA = 21
         private const val REQ_FILE = 22
+        private const val REQ_WAKE_AUDIO = 23
     }
 }
