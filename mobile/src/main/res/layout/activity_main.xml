@@ -6,11 +6,7 @@
     android:background="#0B0B0B"
     android:padding="12dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="54dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="54dp" android:orientation="horizontal" android:gravity="center_vertical">
         <Button android:id="@+id/chats" android:layout_width="48dp" android:layout_height="48dp" android:text="☰" android:textSize="19sp" />
         <TextView android:id="@+id/title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="10dp" android:text="Jarvis" android:textColor="#FFFFFF" android:textSize="22sp" android:textStyle="bold" />
         <Button android:id="@+id/connections" android:layout_width="wrap_content" android:layout_height="48dp" android:text="Complementos" />
@@ -24,7 +20,7 @@
             <TextView android:layout_width="165dp" android:layout_height="match_parent" android:layout_marginEnd="8dp" android:padding="13dp" android:background="#171717" android:text="NOW BRIEF\nResumen · agenda · avisos" android:textColor="#FFFFFF" android:textSize="13sp" />
             <TextView android:layout_width="145dp" android:layout_height="match_parent" android:layout_marginEnd="8dp" android:padding="13dp" android:background="#171717" android:text="CASA\nLuces · clima · escenas" android:textColor="#FFFFFF" android:textSize="13sp" />
             <TextView android:layout_width="150dp" android:layout_height="match_parent" android:layout_marginEnd="8dp" android:padding="13dp" android:background="#171717" android:text="VISION\nCámara · fotos · archivos" android:textColor="#FFFFFF" android:textSize="13sp" />
-            <TextView android:layout_width="170dp" android:layout_height="match_parent" android:padding="13dp" android:background="#171717" android:text="COMPLEMENTOS\nMCP · correo · domótica" android:textColor="#FFFFFF" android:textSize="13sp" />
+            <TextView android:layout_width="170dp" android:layout_height="match_parent" android:padding="13dp" android:background="#171717" android:text="TELÉFONO\nLlamadas · SMS · apps" android:textColor="#FFFFFF" android:textSize="13sp" />
         </LinearLayout>
     </HorizontalScrollView>
 
@@ -34,12 +30,16 @@
         <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#F5F5F5" android:textSize="17sp" android:lineSpacingExtra="8dp" android:padding="10dp" />
     </ScrollView>
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="6dp">
-        <Button android:id="@+id/camera" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="📷 Cámara" />
-        <Button android:id="@+id/files" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="＋ Archivos" />
-        <Button android:id="@+id/voiceSettings" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="🔊 Voz" />
-        <Button android:id="@+id/tools" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="⚙ MCP" />
-    </LinearLayout>
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="46dp" android:scrollbars="none" android:layout_marginTop="6dp">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="44dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <Button android:id="@+id/camera" android:layout_width="105dp" android:layout_height="44dp" android:text="📷 Cámara" />
+            <Button android:id="@+id/files" android:layout_width="105dp" android:layout_height="44dp" android:text="＋ Archivos" />
+            <Button android:id="@+id/voiceSettings" android:layout_width="95dp" android:layout_height="44dp" android:text="🔊 Voz" />
+            <Button android:id="@+id/tools" android:layout_width="95dp" android:layout_height="44dp" android:text="⚙ MCP" />
+            <Button android:id="@+id/phoneControl" android:layout_width="120dp" android:layout_height="44dp" android:text="📱 Teléfono" />
+            <Button android:id="@+id/wakeWord" android:layout_width="135dp" android:layout_height="44dp" android:text="🎙 Hola Jarvis" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="7dp">
         <Button android:id="@+id/mic" android:layout_width="54dp" android:layout_height="56dp" android:text="🎤" />
