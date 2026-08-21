@@ -78,6 +78,17 @@ jobs:
           path: Jarvis-TV-v0.2-debug.apk
           if-no-files-found: error
 
+      - name: Record successful APK run ID
+        if: success()
+        shell: bash
+        run: |
+          echo "${{ github.run_id }}" > LATEST_RUN_ID.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LATEST_RUN_ID.txt
+          git commit -m "ci: record successful APK run [skip ci]" || true
+          git push
+
       - name: Publish APK release
         if: success()
         env:
@@ -90,14 +101,13 @@ jobs:
             gh release create v0.2 Jarvis-TV-v0.2-debug.apk --title "Jarvis TV v0.2" --notes "Android TV debug APK generated automatically by GitHub Actions."
           fi
 
-      - name: Publish APK payload and run ID
+      - name: Publish APK payload for ChatGPT
         if: success()
         shell: bash
         run: |
           base64 -w 0 Jarvis-TV-v0.2-debug.apk > Jarvis-TV-v0.2-debug.apk.b64
-          echo "${{ github.run_id }}" > LATEST_RUN_ID.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Jarvis-TV-v0.2-debug.apk.b64 LATEST_RUN_ID.txt
+          git add Jarvis-TV-v0.2-debug.apk.b64
           git commit -m "build: publish Jarvis TV v0.2 APK payload [skip ci]" || true
           git push
