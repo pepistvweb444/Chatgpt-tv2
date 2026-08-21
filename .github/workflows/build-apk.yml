@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jarvis-tv-apk-main
@@ -46,10 +46,31 @@ jobs:
           gradle --version
           sdkmanager --list_installed
 
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Build debug APK and capture log
+        id: build_apk
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --stacktrace :app:assembleDebug > build.log 2>&1
+          status=$?
+          tail -n 250 build.log > build-last-250-lines.txt
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          cat build-last-250-lines.txt
+          exit $status
+
+      - name: Persist failure log in repository
+        if: failure() && steps.build_apk.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          cp build-last-250-lines.txt BUILD_FAILURE_LOG.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add BUILD_FAILURE_LOG.txt
+          git commit -m "ci: persist latest Android build failure [skip ci]" || true
+          git push
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-TV-v0.2-debug
