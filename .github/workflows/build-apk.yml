@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths-ignore:
-      - 'Jarvis-TV-v0.4.1-debug.apk.b64'
+      - 'Jarvis-TV-v0.5-debug.apk.b64'
       - 'LATEST_RUN_ID.txt'
       - 'BUILD_FAILURE_LOG.txt'
   workflow_dispatch:
@@ -61,13 +61,13 @@ jobs:
           git push
       - name: Rename APK
         if: success()
-        run: cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.4.1-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.5-debug.apk
       - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-TV-v0.4.1-debug
-          path: Jarvis-TV-v0.4.1-debug.apk
+          name: Jarvis-TV-v0.5-debug
+          path: Jarvis-TV-v0.5-debug.apk
           if-no-files-found: error
       - name: Record successful run ID
         if: success()
@@ -77,26 +77,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_RUN_ID.txt
-          git commit -m "ci: record successful v0.4.1 APK run [skip ci]" || true
+          git commit -m "ci: record successful v0.5 APK run [skip ci]" || true
           git push
-      - name: Publish v0.4.1 release
+      - name: Publish v0.5 release
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v0.4.1 >/dev/null 2>&1; then
-            gh release upload v0.4.1 Jarvis-TV-v0.4.1-debug.apk --clobber
+          if gh release view v0.5 >/dev/null 2>&1; then
+            gh release upload v0.5 Jarvis-TV-v0.5-debug.apk --clobber
           else
-            gh release create v0.4.1 Jarvis-TV-v0.4.1-debug.apk --title "Jarvis TV v0.4.1" --notes "Backend/OpenAI diagnostics, default Vercel backend, explicit overlay permission control, persistent assistant bubble and microphone diagnostics."
+            gh release create v0.5 Jarvis-TV-v0.5-debug.apk --title "Jarvis TV v0.5" --notes "Fire TV direct microphone capture, OpenAI transcription and speech, default backend, accessibility overlay fallback and persistent assistant bubble."
           fi
       - name: Publish APK payload for ChatGPT
         if: success()
         shell: bash
         run: |
-          base64 -w 0 Jarvis-TV-v0.4.1-debug.apk > Jarvis-TV-v0.4.1-debug.apk.b64
+          base64 -w 0 Jarvis-TV-v0.5-debug.apk > Jarvis-TV-v0.5-debug.apk.b64
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Jarvis-TV-v0.4.1-debug.apk.b64
-          git commit -m "build: publish Jarvis TV v0.4.1 APK payload [skip ci]" || true
+          git add Jarvis-TV-v0.5-debug.apk.b64
+          git commit -m "build: publish Jarvis TV v0.5 APK payload [skip ci]" || true
           git push
