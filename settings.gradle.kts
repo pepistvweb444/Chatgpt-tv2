@@ -14,5 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "JarvisTV"
+rootProject.name = "Jarvis"
 include(":app")
+include(":mobile")
