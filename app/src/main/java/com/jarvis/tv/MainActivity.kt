@@ -1,62 +1,289 @@
 package com.jarvis.tv
 
 import android.Manifest
+import android.app.AlertDialog
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
-import android.content.Intent
+import android.speech.tts.TextToSpeech
+import android.view.KeyEvent
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
+import java.util.UUID
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var transcript: TextView
     private lateinit var input: EditText
+    private lateinit var title: TextView
+    private lateinit var subtitle: TextView
+    private lateinit var status: TextView
+    private var tts: TextToSpeech? = null
+    private val prefs by lazy { getSharedPreferences("jarvis", MODE_PRIVATE) }
+    private var conversationId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
         transcript = findViewById(R.id.transcript)
         input = findViewById(R.id.messageInput)
+        title = findViewById(R.id.pageTitle)
+        subtitle = findViewById(R.id.pageSubtitle)
+        status = findViewById(R.id.statusText)
+        tts = TextToSpeech(this, this)
+        conversationId = prefs.getString("conversationId", null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString("conversationId", it).apply()
+        }
+        restoreHistory()
+        bindUi()
+        showHome()
+    }
+
+    private fun bindUi() {
         findViewById<Button>(R.id.sendButton).setOnClickListener { sendMessage() }
         findViewById<Button>(R.id.micButton).setOnClickListener { startVoiceInput() }
-        findViewById<Button>(R.id.settingsButton).setOnClickListener {
-            transcript.append("\n\nJarvis: Ajustes de v0.2. La integración segura con OpenAI se conectará mediante backend, sin guardar claves API en el APK.")
-        }
+        findViewById<Button>(R.id.assistantBubble).setOnClickListener { startVoiceInput() }
+        findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettings() }
+        findViewById<Button>(R.id.homeButton).setOnClickListener { showHome() }
+        findViewById<Button>(R.id.chatButton).setOnClickListener { showChat() }
+        findViewById<Button>(R.id.visionButton).setOnClickListener { showVision() }
+        findViewById<Button>(R.id.homeControlButton).setOnClickListener { showHomeControls() }
+        findViewById<Button>(R.id.routinesButton).setOnClickListener { showRoutines() }
+        findViewById<Button>(R.id.notificationsButton).setOnClickListener { showNotifications() }
+        input.setOnEditorActionListener { _, _, _ -> sendMessage(); true }
+    }
+
+    private fun assistantName() = prefs.getString("assistantName", "Jarvis") ?: "Jarvis"
+    private fun wakeWord() = prefs.getString("wakeWord", "Hola ChatGPT") ?: "Hola ChatGPT"
+
+    private fun showHome() {
+        title.text = "${assistantName()} · Vision Home"
+        subtitle.text = "Información contextual, voz, casa y comunicaciones en un solo lugar"
+        status.text = "● Listo · ${wakeWord()}"
+        if (transcript.text.isBlank()) appendAssistant("Hola. Soy ${assistantName()}. Pulsa el micrófono del mando o la burbuja AI para hablar conmigo.", false)
+    }
+
+    private fun showChat() {
+        title.text = "ChatGPT"
+        subtitle.text = "La conversación se conserva con un identificador para sincronizarla con Jarvis móvil"
+        input.requestFocus()
+    }
+
+    private fun showVision() {
+        title.text = "Vision AI"
+        subtitle.text = "Consulta lo que aparece en pantalla: ropa, lugares, actores, productos y viajes"
+        appendSystem("Vision está integrado en la arquitectura. Para analizar contenido de otras apps se usará MediaProjection con permiso explícito del usuario y el backend multimodal; Android no permite capturar contenido protegido por DRM.")
+    }
+
+    private fun showHomeControls() {
+        title.text = "Casa"
+        subtitle.text = "Luces, persianas, climatización, escenas y sensores"
+        appendSystem("Conectores preparados para backend Jarvis: Homey / SmartThings / Home Assistant / IFTTT. Las credenciales se guardan en servidor, nunca dentro del APK.")
+    }
+
+    private fun showRoutines() {
+        title.text = "Rutinas"
+        subtitle.text = "Combina briefing, TV y domótica"
+        appendSystem("Ejemplo: 08:00 → subir persianas → encender luces → mostrar calendario, tiempo, correos y avisos. La ejecución remota se sincronizará con Jarvis Backend.")
+    }
+
+    private fun showNotifications() {
+        title.text = "Centro personal"
+        subtitle.text = "Llamadas, mensajes, correo y notificaciones del móvil compañero"
+        appendSystem("La app TV queda preparada para recibir el feed normalizado del móvil compañero y del backend. WhatsApp, Instagram, Facebook y TikTok se obtendrán mediante permisos/autorizaciones disponibles en el móvil o APIs oficiales.")
     }
 
     private fun sendMessage() {
         val text = input.text.toString().trim()
         if (text.isEmpty()) return
-        transcript.append("\n\nTú: $text")
-        transcript.append("\nJarvis: Mensaje recibido. Jarvis TV v0.2 está funcionando correctamente en modo local.")
+        appendUser(text)
         input.text.clear()
+        val backend = prefs.getString("backendUrl", "")?.trim().orEmpty().trimEnd('/')
+        if (backend.isBlank()) {
+            appendAssistant("Aún no hay un Jarvis Backend configurado. Abre Ajustes y escribe su URL. El APK no almacena claves privadas de OpenAI.")
+            return
+        }
+        status.text = "● Pensando…"
+        Thread {
+            try {
+                val reply = postChat("$backend/chat", text)
+                runOnUiThread {
+                    appendAssistant(reply)
+                    status.text = "● Listo · ${wakeWord()}"
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    appendAssistant("No he podido contactar con el backend: ${e.message ?: "error de conexión"}", false)
+                    status.text = "● Sin conexión"
+                }
+            }
+        }.start()
+    }
+
+    private fun postChat(endpoint: String, message: String): String {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10000
+            readTimeout = 45000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json")
+        }
+        val payload = JSONObject()
+            .put("message", message)
+            .put("conversationId", conversationId)
+            .put("client", "jarvis-tv")
+            .put("assistantName", assistantName())
+            .toString()
+        connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+        val code = connection.responseCode
+        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) throw IllegalStateException("HTTP $code ${body.take(160)}")
+        val json = JSONObject(body)
+        return json.optString("reply").ifBlank { json.optString("text") }.ifBlank { body }
     }
 
     private fun startVoiceInput() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 10)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
             return
         }
+        status.text = "● Escuchando…"
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Habla con Jarvis")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Habla con ${assistantName()}")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
-        try { startActivityForResult(intent, 20) }
-        catch (_: Exception) { transcript.append("\n\nJarvis: El reconocimiento de voz no está disponible en este televisor.") }
+        try { startActivityForResult(intent, REQ_VOICE) }
+        catch (_: Exception) {
+            status.text = "● Micrófono no disponible"
+            Toast.makeText(this, "El servicio de reconocimiento de voz no está disponible", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showSettings() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 16, 36, 8)
+        }
+        val name = edit("Nombre del asistente", assistantName())
+        val wake = edit("Palabra de activación", wakeWord())
+        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", "").orEmpty())
+        val micInfo = TextView(this).apply {
+            text = "\nEntradas de audio detectadas:\n${audioInputs()}\n\nSi el micrófono del mando LG/Google TV es expuesto por Android aparecerá aquí como entrada disponible."
+            textSize = 15f
+        }
+        box.addView(name); box.addView(wake); box.addView(backend); box.addView(micInfo)
+        AlertDialog.Builder(this)
+            .setTitle("Ajustes de Jarvis TV v0.3")
+            .setView(box)
+            .setPositiveButton("GUARDAR") { _, _ ->
+                prefs.edit()
+                    .putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" })
+                    .putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" })
+                    .putString("backendUrl", backend.text.toString().trim())
+                    .apply()
+                showHome()
+            }
+            .setNeutralButton("BORRAR HISTORIAL") { _, _ ->
+                prefs.edit().remove("history").apply(); transcript.text = ""; showHome()
+            }
+            .setNegativeButton("CANCELAR", null)
+            .show()
+    }
+
+    private fun edit(hint: String, value: String) = EditText(this).apply {
+        this.hint = hint
+        setText(value)
+        isSingleLine = true
+        setPadding(12, 14, 12, 14)
+    }
+
+    private fun audioInputs(): String {
+        val manager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return manager.getDevices(AudioManager.GET_DEVICES_INPUTS).joinToString("\n") { d ->
+            "• ${d.productName} · ${audioType(d.type)}"
+        }.ifBlank { "• Android no informa ninguna entrada externa" }
+    }
+
+    private fun audioType(type: Int): String = when (type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"
+        AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Micrófono integrado"
+        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Auriculares"
+        else -> "tipo $type"
+    }
+
+    private fun appendUser(text: String) {
+        appendLine("\nTÚ\n$text\n")
+    }
+
+    private fun appendAssistant(text: String, speak: Boolean = true) {
+        appendLine("\n${assistantName().uppercase()}\n$text\n")
+        if (speak && prefs.getBoolean("tts", true)) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis")
+    }
+
+    private fun appendSystem(text: String) = appendLine("\nSISTEMA\n$text\n")
+
+    private fun appendLine(text: String) {
+        transcript.append(text)
+        val saved = (prefs.getString("history", "").orEmpty() + text).takeLast(24000)
+        prefs.edit().putString("history", saved).apply()
+    }
+
+    private fun restoreHistory() {
+        transcript.text = prefs.getString("history", "").orEmpty()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_SEARCH || event.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)) {
+            startVoiceInput(); return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onInit(code: Int) {
+        if (code == TextToSpeech.SUCCESS) tts?.language = Locale("es", "ES")
     }
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 20 && resultCode == RESULT_OK) {
-            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            input.setText(results?.firstOrNull().orEmpty())
-            sendMessage()
+        if (requestCode == REQ_VOICE) {
+            status.text = "● Listo · ${wakeWord()}"
+            if (resultCode == RESULT_OK) {
+                val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+                if (text.isNotBlank()) { input.setText(text); sendMessage() }
+            }
         }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startVoiceInput()
+    }
+
+    override fun onDestroy() {
+        tts?.stop(); tts?.shutdown(); super.onDestroy()
+    }
+
+    companion object {
+        private const val REQ_AUDIO = 10
+        private const val REQ_VOICE = 20
     }
 }
