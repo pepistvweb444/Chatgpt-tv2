@@ -25,7 +25,7 @@ class WakeWordService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val open = PendingIntent.getActivity(this, 0, Intent(this, ChatActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         startForeground(
             71,
             NotificationCompat.Builder(this, CHANNEL)
@@ -60,7 +60,7 @@ class WakeWordService : Service() {
                 if (f.exists() && f.length() > 256) {
                     val text = transcribe(f).lowercase()
                     if (text.contains("hola jarvis") || text.contains("oye jarvis")) {
-                        val i = Intent(this, MainActivity::class.java).apply {
+                        val i = Intent(this, ChatActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                             putExtra("wake_word_triggered", true)
                         }
