@@ -65,19 +65,35 @@ jobs:
           git commit -m "ci: persist latest Android build failure [skip ci]" || true
           git push
 
+      - name: Rename APK
+        if: success()
+        run: cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.2-debug.apk
+
       - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-TV-v0.2-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: Jarvis-TV-v0.2-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v0.2 >/dev/null 2>&1; then
+            gh release upload v0.2 Jarvis-TV-v0.2-debug.apk --clobber
+          else
+            gh release create v0.2 Jarvis-TV-v0.2-debug.apk --title "Jarvis TV v0.2" --notes "Android TV debug APK generated automatically by GitHub Actions."
+          fi
 
       - name: Publish APK payload for ChatGPT
         if: success()
         shell: bash
         run: |
-          base64 -w 0 app/build/outputs/apk/debug/app-debug.apk > Jarvis-TV-v0.2-debug.apk.b64
+          base64 -w 0 Jarvis-TV-v0.2-debug.apk > Jarvis-TV-v0.2-debug.apk.b64
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Jarvis-TV-v0.2-debug.apk.b64
