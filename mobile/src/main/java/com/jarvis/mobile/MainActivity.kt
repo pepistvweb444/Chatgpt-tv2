@@ -2,6 +2,7 @@ package com.jarvis.mobile
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -9,8 +10,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -48,11 +51,16 @@ class MainActivity : AppCompatActivity() {
         conversationId = prefs.getString("currentConversation", null) ?: newConversation(false)
         loadConversation(conversationId)
         refreshRecentChats()
+
         findViewById<Button>(R.id.send).setOnClickListener { sendMessage() }
         findViewById<Button>(R.id.mic).setOnClickListener { startVoiceCapture() }
         findViewById<Button>(R.id.newChat).setOnClickListener { newConversation(true); refreshRecentChats() }
         findViewById<Button>(R.id.chats).setOnClickListener { showChats() }
         findViewById<Button>(R.id.connections).setOnClickListener { showConnections() }
+        findViewById<Button>(R.id.tools).setOnClickListener { showConnections() }
+        findViewById<Button>(R.id.voiceSettings).setOnClickListener { showVoiceSettings() }
+        findViewById<Button>(R.id.camera).setOnClickListener { openCamera() }
+        findViewById<Button>(R.id.files).setOnClickListener { openFiles() }
         recentChats.setOnClickListener { showChats() }
     }
 
@@ -63,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         val chats = chatIndex()
         chats.put(JSONObject().put("id", id).put("title", "Nuevo chat").put("updated", System.currentTimeMillis()))
         prefs.edit().putString("chatIndex", chats.toString()).putString("chat_$id", "[]").remove("response_$id").apply()
-        transcript.text = ""
+        if (::transcript.isInitialized) transcript.text = ""
         if (showToast) Toast.makeText(this, "Nuevo chat", Toast.LENGTH_SHORT).show()
         return id
     }
@@ -85,11 +93,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showChats() {
         val items = sortedChatObjects()
-        if (items.isEmpty()) {
-            Toast.makeText(this, "Todavía no hay chats guardados", Toast.LENGTH_SHORT).show(); return
-        }
+        if (items.isEmpty()) { Toast.makeText(this, "Todavía no hay chats guardados", Toast.LENGTH_SHORT).show(); return }
         val labels = items.map { it.optString("title").ifBlank { "Chat" } }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Tus chats de Jarvis").setItems(labels) { _, which ->
+        AlertDialog.Builder(this).setTitle("Tus chats").setItems(labels) { _, which ->
             val id = items[which].optString("id")
             if (id.isNotBlank()) {
                 conversationId = id
@@ -100,32 +106,87 @@ class MainActivity : AppCompatActivity() {
         }.setNegativeButton("Cerrar", null).show()
     }
 
+    private fun localMcps(): JSONArray = runCatching { JSONArray(prefs.getString("mcps", "[]")) }.getOrElse { JSONArray() }
+
     private fun showConnections() {
-        status.text = "Comprobando conexiones…"
+        status.text = "Comprobando complementos…"
         Thread {
+            var remoteInfo = "Búsqueda web: disponible"
             try {
                 val c = (URL("$BACKEND/api/capabilities").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"; connectTimeout = 10000; readTimeout = 20000
+                    requestMethod = "GET"; connectTimeout = 8000; readTimeout = 15000
                 }
-                val code = c.responseCode
-                val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (code !in 200..299) throw IllegalStateException("HTTP $code")
-                val json = JSONObject(body)
-                val mcps = json.optJSONArray("mcps") ?: JSONArray()
-                val lines = mutableListOf("Búsqueda web: ${if (json.optBoolean("webSearch")) "ACTIVA ✓" else "No disponible"}")
-                if (mcps.length() == 0) lines.add("MCP: ninguno configurado todavía")
-                else for (i in 0 until mcps.length()) {
-                    val m = mcps.optJSONObject(i) ?: continue
-                    lines.add("MCP · ${m.optString("label")} · aprobación ${m.optString("approval")}")
+                val body = (if (c.responseCode in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (c.responseCode in 200..299) {
+                    val json = JSONObject(body)
+                    val serverMcps = json.optJSONArray("mcps") ?: JSONArray()
+                    remoteInfo = "Búsqueda web: ${if (json.optBoolean("webSearch")) "ACTIVA ✓" else "no disponible"}\nMCP del backend: ${serverMcps.length()}"
                 }
-                runOnUiThread {
-                    status.text = "Conexiones comprobadas"
-                    AlertDialog.Builder(this).setTitle("Conexiones de Jarvis").setMessage(lines.joinToString("\n\n")).setPositiveButton("OK", null).show()
-                }
-            } catch (e: Exception) {
-                runOnUiThread { status.text = "Error de conexiones"; Toast.makeText(this, e.message, Toast.LENGTH_LONG).show() }
+            } catch (_: Exception) {}
+            val local = localMcps()
+            val lines = mutableListOf(remoteInfo, "", "Tus complementos MCP: ${local.length()}")
+            for (i in 0 until local.length()) {
+                val m = local.optJSONObject(i) ?: continue
+                lines.add("• ${m.optString("server_label")}\n  ${m.optString("server_url")}")
+            }
+            runOnUiThread {
+                status.text = "Complementos"
+                AlertDialog.Builder(this)
+                    .setTitle("Complementos y MCP")
+                    .setMessage(lines.joinToString("\n"))
+                    .setPositiveButton("AÑADIR MCP") { _, _ -> showAddMcp() }
+                    .setNeutralButton("BORRAR MCP") { _, _ -> prefs.edit().remove("mcps").apply(); Toast.makeText(this, "MCP locales borrados", Toast.LENGTH_SHORT).show() }
+                    .setNegativeButton("Cerrar", null)
+                    .show()
             }
         }.start()
+    }
+
+    private fun showAddMcp() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(42, 8, 42, 4) }
+        val label = EditText(this).apply { hint = "Nombre (ej. HomeAssistant)" }
+        val url = EditText(this).apply { hint = "https://servidor-mcp/..." }
+        val token = EditText(this).apply { hint = "Token/Bearer opcional" }
+        box.addView(label); box.addView(url); box.addView(token)
+        AlertDialog.Builder(this).setTitle("Conectar servidor MCP").setView(box)
+            .setPositiveButton("CONECTAR") { _, _ ->
+                val l = label.text.toString().trim()
+                val u = url.text.toString().trim()
+                if (l.isBlank() || !u.startsWith("https://")) {
+                    Toast.makeText(this, "Indica nombre y URL HTTPS", Toast.LENGTH_LONG).show()
+                } else {
+                    val arr = localMcps()
+                    val obj = JSONObject().put("server_label", l).put("server_url", u).put("require_approval", "always")
+                    val t = token.text.toString().trim()
+                    if (t.isNotBlank()) obj.put("authorization", if (t.startsWith("Bearer ")) t else "Bearer $t")
+                    arr.put(obj)
+                    prefs.edit().putString("mcps", arr.toString()).apply()
+                    Toast.makeText(this, "MCP conectado a Jarvis", Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun showVoiceSettings() {
+        val voices = arrayOf("alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse")
+        val current = prefs.getString("voice", "coral") ?: "coral"
+        val checked = voices.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Voz de Jarvis · OpenAI")
+            .setSingleChoiceItems(voices, checked) { dialog, which ->
+                prefs.edit().putString("voice", voices[which]).apply()
+                dialog.dismiss()
+                Toast.makeText(this, "Voz: ${voices[which]}", Toast.LENGTH_SHORT).show()
+                speak("Hola. Esta es mi nueva voz.")
+            }.setNegativeButton("Cerrar", null).show()
+    }
+
+    private fun openCamera() {
+        try { startActivityForResult(Intent(MediaStore.ACTION_IMAGE_CAPTURE), REQ_CAMERA) }
+        catch (e: Exception) { Toast.makeText(this, "No se pudo abrir la cámara: ${e.message}", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun openFiles() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "*/*" }
+        startActivityForResult(i, REQ_FILE)
     }
 
     private fun historyArray(): JSONArray = runCatching { JSONArray(prefs.getString("chat_$conversationId", "[]")) }.getOrElse { JSONArray() }
@@ -135,7 +196,7 @@ class MainActivity : AppCompatActivity() {
         val out = StringBuilder()
         for (i in 0 until arr.length()) {
             val item = arr.optJSONObject(i) ?: continue
-            out.append(if (item.optString("role") == "user") "\nTÚ\n" else "\nJARVIS\n")
+            out.append(if (item.optString("role") == "user") "\nTú\n" else "\nJarvis\n")
             out.append(item.optString("content")).append("\n")
         }
         transcript.text = out.toString()
@@ -146,7 +207,7 @@ class MainActivity : AppCompatActivity() {
         val arr = historyArray()
         arr.put(JSONObject().put("role", role).put("content", text))
         prefs.edit().putString("chat_$conversationId", arr.toString()).apply()
-        transcript.append(if (role == "user") "\nTÚ\n$text\n" else "\nJARVIS\n$text\n")
+        transcript.append(if (role == "user") "\nTú\n$text\n" else "\nJarvis\n$text\n")
         updateTitleAndTimestamp(text, role)
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
@@ -199,13 +260,9 @@ class MainActivity : AppCompatActivity() {
             if (i == history.length() - 1 && item.optString("role") == "user" && item.optString("content") == message) continue
             historyPayload.put(item)
         }
-        val body = JSONObject()
-            .put("message", message)
-            .put("conversationId", conversationId)
-            .put("client", "jarvis-mobile")
-            .put("history", historyPayload)
-            .apply { if (!previousResponseId.isNullOrBlank()) put("previousResponseId", previousResponseId) }
-            .toString()
+        val body = JSONObject().put("message", message).put("conversationId", conversationId).put("client", "jarvis-mobile")
+            .put("history", historyPayload).put("clientMcps", localMcps())
+            .apply { if (!previousResponseId.isNullOrBlank()) put("previousResponseId", previousResponseId) }.toString()
         c.outputStream.use { it.write(body.toByteArray()) }
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -224,14 +281,9 @@ class MainActivity : AppCompatActivity() {
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
         recorder = r
         try {
-            r.setAudioSource(MediaRecorder.AudioSource.MIC)
-            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            r.setAudioSamplingRate(16000)
-            r.setAudioEncodingBitRate(64000)
-            r.setOutputFile(file.absolutePath)
-            r.prepare(); r.start()
-            status.text = "Escuchando…"
+            r.setAudioSource(MediaRecorder.AudioSource.MIC); r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); r.setAudioSamplingRate(16000); r.setAudioEncodingBitRate(64000)
+            r.setOutputFile(file.absolutePath); r.prepare(); r.start(); status.text = "Escuchando…"
             handler.postDelayed({ stopRecorder(true) }, 7000)
         } catch (e: Exception) { stopRecorder(false); Toast.makeText(this, "Micrófono: ${e.message}", Toast.LENGTH_LONG).show() }
     }
@@ -264,27 +316,59 @@ class MainActivity : AppCompatActivity() {
         return JSONObject(body).optString("text")
     }
 
+    private fun splitForSpeech(text: String): List<String> {
+        val clean = text.replace(Regex("\\s+"), " ").trim()
+        if (clean.length <= 520) return listOf(clean)
+        val out = mutableListOf<String>()
+        var rest = clean
+        while (rest.isNotBlank()) {
+            if (rest.length <= 520) { out.add(rest); break }
+            val cut = rest.take(520).lastIndexOfAny(charArrayOf('.', '!', '?', ';', ',' )).let { if (it < 180) 500 else it + 1 }
+            out.add(rest.take(cut).trim()); rest = rest.drop(cut).trim()
+        }
+        return out
+    }
+
     private fun speak(text: String) {
+        val chunks = splitForSpeech(text)
+        if (chunks.isEmpty()) return
+        player?.release(); player = null
+        playSpeechChunk(chunks, 0)
+    }
+
+    private fun playSpeechChunk(chunks: List<String>, index: Int) {
+        if (index >= chunks.size) return
         Thread {
             try {
                 val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; doOutput = true; connectTimeout = 12000; readTimeout = 60000
+                    requestMethod = "POST"; doOutput = true; connectTimeout = 10000; readTimeout = 40000
                     setRequestProperty("Content-Type", "application/json")
                 }
-                c.outputStream.use { it.write(JSONObject().put("text", text).toString().toByteArray()) }
+                val voice = prefs.getString("voice", "coral") ?: "coral"
+                c.outputStream.use { it.write(JSONObject().put("text", chunks[index]).put("voice", voice).toString().toByteArray()) }
                 if (c.responseCode !in 200..299) return@Thread
-                val file = File(cacheDir, "reply-${System.currentTimeMillis()}.mp3")
+                val file = File(cacheDir, "reply-${System.currentTimeMillis()}-$index.mp3")
                 c.inputStream.use { inputStream -> file.outputStream().use { inputStream.copyTo(it) } }
                 runOnUiThread {
                     player?.release()
                     player = MediaPlayer().apply {
                         setDataSource(file.absolutePath)
-                        setOnCompletionListener { it.release(); file.delete() }
+                        setOnCompletionListener { p -> p.release(); file.delete(); if (player === p) player = null; playSpeechChunk(chunks, index + 1) }
                         prepare(); start()
                     }
                 }
             } catch (_: Exception) {}
         }.start()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQ_CAMERA -> { status.text = "Foto capturada"; Toast.makeText(this, "Foto capturada. Vision multimodal será el siguiente paso.", Toast.LENGTH_LONG).show() }
+            REQ_FILE -> { val uri = data?.data; status.text = "Archivo seleccionado"; Toast.makeText(this, "Archivo seleccionado: ${uri ?: ""}", Toast.LENGTH_LONG).show() }
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -299,5 +383,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val BACKEND = "https://chatgpt-tv2.vercel.app"
         private const val REQ_AUDIO = 20
+        private const val REQ_CAMERA = 21
+        private const val REQ_FILE = 22
     }
 }
