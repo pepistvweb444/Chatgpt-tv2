@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
     private var recorder: MediaRecorder? = null
     private var voiceFile: File? = null
+    private var voicePlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("jarvis", MODE_PRIVATE) }
     private var conversationId: String = ""
@@ -60,17 +62,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         conversationId = prefs.getString("conversationId", null) ?: UUID.randomUUID().toString().also {
             prefs.edit().putString("conversationId", it).apply()
         }
-        if (prefs.getString("backendUrl", "").isNullOrBlank()) {
-            prefs.edit().putString("backendUrl", DEFAULT_BACKEND).apply()
-        }
+        if (prefs.getString("backendUrl", "").isNullOrBlank()) prefs.edit().putString("backendUrl", DEFAULT_BACKEND).apply()
         restoreHistory()
         bindUi()
-        setupRecognizer()
+        if (!isFireTv()) setupRecognizer()
         showHome()
         ensureOverlayPermission(true)
         if (intent?.getBooleanExtra("start_voice", false) == true) {
             intent.removeExtra("start_voice")
-            handler.postDelayed({ startVoiceInput() }, 600)
+            handler.postDelayed({ startVoiceInput() }, 500)
         }
     }
 
@@ -79,7 +79,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setIntent(intent)
         if (intent.getBooleanExtra("start_voice", false)) {
             intent.removeExtra("start_voice")
-            handler.postDelayed({ startVoiceInput() }, 300)
+            handler.postDelayed({ startVoiceInput() }, 250)
         }
     }
 
@@ -104,12 +104,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun assistantName() = prefs.getString("assistantName", "Jarvis") ?: "Jarvis"
     private fun wakeWord() = prefs.getString("wakeWord", "Hola ChatGPT") ?: "Hola ChatGPT"
+    private fun isFireTv() = Build.MANUFACTURER.contains("Amazon", true) || Build.MODEL.contains("AFT", true)
 
     private fun showHome() {
         title.text = "${assistantName()} · Vision Home"
-        subtitle.text = "Información contextual, voz, casa y comunicaciones en un solo lugar"
+        subtitle.text = if (isFireTv()) "Fire TV · voz directa con OpenAI" else "Información contextual, voz, casa y comunicaciones"
         status.text = "● Listo · ${wakeWord()}"
-        if (transcript.text.isBlank()) appendAssistant("Hola. Soy ${assistantName()}. Pulsa el micrófono del mando o la burbuja AI para hablar conmigo.", false)
+        if (transcript.text.isBlank()) appendAssistant("Hola. Soy ${assistantName()}. Pulsa la burbuja o el botón de micrófono de Jarvis para hablar conmigo.", false)
     }
 
     private fun showChat() { title.text = "ChatGPT"; subtitle.text = "Conversación Jarvis sincronizable con TV y móvil"; input.requestFocus() }
@@ -127,7 +128,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         status.text = "● Conectando…"
         Thread {
             try {
-                val reply = postChat(resolveChatEndpoint(backend), text)
+                val reply = postChat(resolveEndpoint(backend, "chat"), text)
                 runOnUiThread { appendAssistant(reply); status.text = "● Conectado · ${wakeWord()}" }
             } catch (e: Exception) {
                 val detail = e.message ?: e.javaClass.simpleName
@@ -136,26 +137,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }.start()
     }
 
-    private fun resolveChatEndpoint(base: String): String {
-        val clean = base.trim().trimEnd('/')
-        return when { clean.endsWith("/api/chat") -> clean; clean.endsWith("/api") -> "$clean/chat"; else -> "$clean/api/chat" }
-    }
-
-    private fun resolveTranscribeEndpoint(base: String): String {
-        val clean = base.trim().trimEnd('/')
-        val root = when { clean.endsWith("/api/chat") -> clean.removeSuffix("/api/chat"); clean.endsWith("/api") -> clean.removeSuffix("/api"); else -> clean }
-        return "$root/api/transcribe"
+    private fun resolveEndpoint(base: String, endpoint: String): String {
+        val clean = base.trim().trimEnd('/').removeSuffix("/api/chat").removeSuffix("/api")
+        return "$clean/api/$endpoint"
     }
 
     private fun postChat(endpoint: String, message: String): String {
-        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12000; readTimeout = 60000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json"); setRequestProperty("User-Agent", "JarvisTV/0.4.2")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json"); setRequestProperty("User-Agent", "JarvisTV/0.5")
         }
         val payload = JSONObject().put("message", message).put("conversationId", conversationId).put("client", "jarvis-tv").put("assistantName", assistantName()).toString()
-        connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        c.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+        val code = c.responseCode
+        val stream = if (code in 200..299) c.inputStream else c.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) {
             val serverError = runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty()
@@ -166,25 +161,60 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun postAudio(endpoint: String, file: File): String {
-        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12000; readTimeout = 60000; doOutput = true
             setRequestProperty("Content-Type", "audio/mp4"); setRequestProperty("Accept", "application/json"); setRequestProperty("X-Filename", "jarvis-voice.m4a")
         }
-        connection.outputStream.use { out -> file.inputStream().use { input -> input.copyTo(out) } }
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
+        val code = c.responseCode
+        val stream = if (code in 200..299) c.inputStream else c.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) throw IllegalStateException("HTTP $code ${body.take(220)}")
-        val json = JSONObject(body)
-        return json.optString("text").trim().ifBlank { throw IllegalStateException("Transcripción vacía") }
+        return JSONObject(body).optString("text").trim().ifBlank { throw IllegalStateException("Transcripción vacía") }
+    }
+
+    private fun downloadSpeech(endpoint: String, text: String, outFile: File) {
+        val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 12000; readTimeout = 60000; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "audio/mpeg")
+        }
+        c.outputStream.use { it.write(JSONObject().put("text", text).put("voice", prefs.getString("voice", "alloy") ?: "alloy").toString().toByteArray()) }
+        val code = c.responseCode
+        if (code !in 200..299) {
+            val body = c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            throw IllegalStateException("TTS HTTP $code ${body.take(180)}")
+        }
+        c.inputStream.use { input -> outFile.outputStream().use { input.copyTo(it) } }
+    }
+
+    private fun speakWithOpenAI(text: String) {
+        val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
+        Thread {
+            val file = File(cacheDir, "jarvis-reply-${System.currentTimeMillis()}.mp3")
+            try {
+                downloadSpeech(resolveEndpoint(backend, "speech"), text, file)
+                runOnUiThread {
+                    voicePlayer?.release()
+                    voicePlayer = MediaPlayer().apply {
+                        setDataSource(file.absolutePath)
+                        setOnCompletionListener { p -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete() }
+                        setOnErrorListener { p, _, _ -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); true }
+                        prepare()
+                        start()
+                    }
+                }
+            } catch (_: Exception) {
+                file.delete()
+                runOnUiThread { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-fallback") }
+            }
+        }.start()
     }
 
     private fun testBackend(base: String) {
-        val clean = base.trim().ifBlank { DEFAULT_BACKEND }
         status.text = "● Probando backend…"
         Thread {
             try {
-                val reply = postChat(resolveChatEndpoint(clean), "Responde únicamente con: OK")
+                val reply = postChat(resolveEndpoint(base.ifBlank { DEFAULT_BACKEND }, "chat"), "Responde únicamente con: OK")
                 runOnUiThread { status.text = "● Backend OK"; Toast.makeText(this, "Backend y OpenAI OK: ${reply.take(80)}", Toast.LENGTH_LONG).show(); appendSystem("Diagnóstico: Vercel ✓ · OpenAI ✓ · respuesta ✓") }
             } catch (e: Exception) {
                 val detail = e.message ?: e.javaClass.simpleName
@@ -203,20 +233,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() { status.text = "● Procesando voz…" }
-                override fun onError(error: Int) {
-                    status.text = "● Voz local no disponible · usando OpenAI…"
-                    if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER || error == SpeechRecognizer.ERROR_AUDIO || error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) startServerVoiceCapture()
-                    else Toast.makeText(this@MainActivity, speechError(error), Toast.LENGTH_LONG).show()
-                }
+                override fun onError(error: Int) { startServerVoiceCapture() }
                 override fun onResults(results: Bundle?) {
-                    status.text = "● Listo · ${wakeWord()}"
                     val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    if (text.isNotBlank()) { input.setText(text); sendMessage() }
+                    if (text.isNotBlank()) { input.setText(text); sendMessage() } else startServerVoiceCapture()
                 }
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    if (text.isNotBlank()) status.text = "● $text"
-                }
+                override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
         }
@@ -226,11 +248,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO); return
         }
+        if (isFireTv()) { startServerVoiceCapture(); return }
         if (recognizer == null) setupRecognizer()
         val r = recognizer
         if (r == null) { startServerVoiceCapture(); return }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM); putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES"); putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true); putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
         }
         try { r.cancel(); r.startListening(intent) } catch (_: Exception) { startServerVoiceCapture() }
     }
@@ -242,23 +267,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stopRecorder(false)
         val file = File(cacheDir, "jarvis-voice-${System.currentTimeMillis()}.m4a")
         voiceFile = file
-        val mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
-        recorder = mediaRecorder
+        val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
+        recorder = mr
         try {
-            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-            mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            mediaRecorder.setAudioEncodingBitRate(64000)
-            mediaRecorder.setAudioSamplingRate(16000)
-            mediaRecorder.setOutputFile(file.absolutePath)
-            mediaRecorder.prepare(); mediaRecorder.start()
-            status.text = "● Escuchando 6 s · OpenAI…"
-            Toast.makeText(this, "Habla ahora", Toast.LENGTH_SHORT).show()
-            handler.postDelayed({ stopRecorder(true) }, 6000)
+            mr.setAudioSource(if (isFireTv()) MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            mr.setAudioEncodingBitRate(64000)
+            mr.setAudioSamplingRate(16000)
+            mr.setOutputFile(file.absolutePath)
+            mr.prepare(); mr.start()
+            status.text = "● Escuchando 7 s · OpenAI…"
+            Toast.makeText(this, "Habla con Jarvis ahora", Toast.LENGTH_SHORT).show()
+            handler.postDelayed({ stopRecorder(true) }, 7000)
         } catch (e: Exception) {
             stopRecorder(false)
             status.text = "● Micrófono no accesible"
-            Toast.makeText(this, "Android no entrega audio a Jarvis: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Fire TV no entrega audio a Jarvis: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -274,7 +299,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
             Thread {
                 try {
-                    val text = postAudio(resolveTranscribeEndpoint(backend), file)
+                    val text = postAudio(resolveEndpoint(backend, "transcribe"), file)
                     runOnUiThread { input.setText(text); status.text = "● $text"; sendMessage() }
                 } catch (e: Exception) {
                     val detail = e.message ?: e.javaClass.simpleName
@@ -284,34 +309,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         } else file?.delete()
     }
 
-    private fun speechError(code: Int): String = when (code) {
-        SpeechRecognizer.ERROR_AUDIO -> "Error al acceder al audio."
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Falta permiso de micrófono."
-        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "El reconocimiento local no ha podido conectar con la red."
-        SpeechRecognizer.ERROR_NO_MATCH -> "No he podido entender la voz."
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "El reconocedor está ocupado."
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No se ha detectado voz."
-        else -> "Error de reconocimiento de voz ($code)."
-    }
-
-    private fun overlayStatus(): String = when { Build.VERSION.SDK_INT < Build.VERSION_CODES.M -> "compatible"; Settings.canDrawOverlays(this) -> "PERMITIDO ✓"; else -> "NO PERMITIDO ✗" }
+    private fun overlayStatus(): String = when { Build.VERSION.SDK_INT < Build.VERSION_CODES.M -> "compatible"; Settings.canDrawOverlays(this) -> "PERMITIDO ✓"; else -> "NO PERMITIDO · usa Accesibilidad" }
 
     private fun ensureOverlayPermission(force: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) { startBubbleService(); return }
         if (!force) return
         val packageIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-        val genericIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
         try {
-            when { packageIntent.resolveActivity(packageManager) != null -> startActivityForResult(packageIntent, REQ_OVERLAY); genericIntent.resolveActivity(packageManager) != null -> startActivityForResult(genericIntent, REQ_OVERLAY); else -> throw IllegalStateException("El firmware no ofrece la pantalla de permiso overlay") }
-            Toast.makeText(this, "Activa 'Mostrar sobre otras apps' para Jarvis TV", Toast.LENGTH_LONG).show()
+            if (packageIntent.resolveActivity(packageManager) != null) startActivityForResult(packageIntent, REQ_OVERLAY)
+            else openAccessibilitySettings()
+        } catch (_: Exception) { openAccessibilitySettings() }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            Toast.makeText(this, "Activa el servicio 'Jarvis TV bubble' para mantener la burbuja siempre visible", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            AlertDialog.Builder(this).setTitle("Permiso de burbuja").setMessage("Ve a Ajustes → Apps → Acceso especial → Mostrar sobre otras apps → Jarvis TV.\n\n${e.message}").setPositiveButton("OK", null).show()
+            AlertDialog.Builder(this).setTitle("Burbuja persistente").setMessage("Activa Jarvis TV en Ajustes → Accesibilidad. ${e.message ?: ""}").setPositiveButton("OK", null).show()
         }
     }
 
     private fun startBubbleService() {
         try { ContextCompat.startForegroundService(this, Intent(this, OverlayService::class.java)) }
-        catch (e: Exception) { Toast.makeText(this, "No se pudo iniciar la burbuja: ${e.message}", Toast.LENGTH_LONG).show() }
+        catch (_: Exception) {}
     }
 
     private fun showSettings() {
@@ -319,15 +340,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val name = edit("Nombre del asistente", assistantName())
         val wake = edit("Palabra de activación", wakeWord())
         val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
-        val testBackendButton = Button(this).apply { text = "PROBAR BACKEND / OPENAI"; setOnClickListener { prefs.edit().putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).apply(); testBackend(backend.text.toString()) } }
-        val overlayButton = Button(this).apply { text = "ACTIVAR BURBUJA FLOTANTE"; setOnClickListener { ensureOverlayPermission(true) } }
-        val micTestButton = Button(this).apply { text = "PROBAR MICRÓFONO"; setOnClickListener { startVoiceInput() } }
+        val testBackendButton = Button(this).apply { text = "PROBAR BACKEND / OPENAI"; setOnClickListener { testBackend(backend.text.toString()) } }
+        val overlayButton = Button(this).apply { text = "PERMISO BURBUJA NORMAL"; setOnClickListener { ensureOverlayPermission(true) } }
+        val accessibilityButton = Button(this).apply { text = "BURBUJA SIEMPRE VISIBLE · ACCESIBILIDAD"; setOnClickListener { openAccessibilitySettings() } }
+        val micTestButton = Button(this).apply { text = "PROBAR MICRÓFONO DIRECTO"; setOnClickListener { startServerVoiceCapture() } }
+        val voiceTestButton = Button(this).apply { text = "PROBAR VOZ OPENAI"; setOnClickListener { speakWithOpenAI("Hola. Esta es la voz de Jarvis usando OpenAI.") } }
         val diagnostics = TextView(this).apply {
-            text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nOverlay: ${overlayStatus()}\nReconocedor Android: ${if (SpeechRecognizer.isRecognitionAvailable(this@MainActivity)) "disponible" else "NO disponible · se usará OpenAI"}\n\nEntradas de audio:\n${audioInputs()}"
+            text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nDispositivo: ${Build.MANUFACTURER} ${Build.MODEL}\nModo Fire TV: ${if (isFireTv()) "SÍ · micrófono directo" else "NO"}\nOverlay normal: ${overlayStatus()}\n\nEntradas de audio:\n${audioInputs()}"
             textSize = 15f
         }
-        box.addView(name); box.addView(wake); box.addView(backend); box.addView(testBackendButton); box.addView(overlayButton); box.addView(micTestButton); box.addView(diagnostics)
-        AlertDialog.Builder(this).setTitle("Ajustes de Jarvis TV v0.4.2").setView(box)
+        box.addView(name); box.addView(wake); box.addView(backend); box.addView(testBackendButton); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(diagnostics)
+        AlertDialog.Builder(this).setTitle("Ajustes de Jarvis TV v0.5").setView(box)
             .setPositiveButton("GUARDAR") { _, _ -> prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).apply(); showHome() }
             .setNeutralButton("BORRAR HISTORIAL") { _, _ -> prefs.edit().remove("history").apply(); transcript.text = ""; showHome() }
             .setNegativeButton("CERRAR", null).show()
@@ -340,15 +363,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return manager.getDevices(AudioManager.GET_DEVICES_INPUTS).joinToString("\n") { d -> "• ${d.productName} · ${audioType(d.type)} · id ${d.id}" }.ifBlank { "• Android no informa ninguna entrada de audio" }
     }
 
-    private fun audioType(type: Int): String = when (type) { AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"; AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Micrófono integrado"; AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"; AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Auriculares"; else -> "tipo $type" }
+    private fun audioType(type: Int): String = when (type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"
+        AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Micrófono integrado"
+        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Auriculares"
+        else -> "tipo $type"
+    }
+
     private fun appendUser(text: String) { appendLine("\nTÚ\n$text\n") }
-    private fun appendAssistant(text: String, speak: Boolean = true) { appendLine("\n${assistantName().uppercase()}\n$text\n"); if (speak && prefs.getBoolean("tts", true)) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis") }
+    private fun appendAssistant(text: String, speak: Boolean = true) { appendLine("\n${assistantName().uppercase()}\n$text\n"); if (speak) speakWithOpenAI(text) }
     private fun appendSystem(text: String) = appendLine("\nSISTEMA\n$text\n")
     private fun appendLine(text: String) { transcript.append(text); prefs.edit().putString("history", (prefs.getString("history", "").orEmpty() + text).takeLast(24000)).apply() }
     private fun restoreHistory() { transcript.text = prefs.getString("history", "").orEmpty() }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_SEARCH || event.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)) { startVoiceInput(); return true }
+        if (!isFireTv() && event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_SEARCH || event.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)) { startVoiceInput(); return true }
         return super.dispatchKeyEvent(event)
     }
 
@@ -358,8 +388,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_OVERLAY) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) { startBubbleService(); Toast.makeText(this, "Permiso concedido. Burbuja iniciada.", Toast.LENGTH_LONG).show() }
-            else Toast.makeText(this, "El permiso de superposición sigue desactivado", Toast.LENGTH_LONG).show()
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) startBubbleService()
+            else openAccessibilitySettings()
         }
     }
 
@@ -369,7 +399,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null); stopRecorder(false); recognizer?.destroy(); tts?.stop(); tts?.shutdown(); super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        stopRecorder(false)
+        recognizer?.destroy()
+        voicePlayer?.release(); voicePlayer = null
+        tts?.stop(); tts?.shutdown()
+        super.onDestroy()
     }
 
     companion object {
