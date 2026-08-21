@@ -3,6 +3,8 @@ name: Build Jarvis TV APK
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'Jarvis-TV-v0.2-debug.apk.b64'
   workflow_dispatch:
 
 permissions:
@@ -40,12 +42,6 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify environment
-        run: |
-          java -version
-          gradle --version
-          sdkmanager --list_installed
-
       - name: Build debug APK and capture log
         id: build_apk
         shell: bash
@@ -69,10 +65,21 @@ jobs:
           git commit -m "ci: persist latest Android build failure [skip ci]" || true
           git push
 
-      - name: Upload APK
+      - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-TV-v0.2-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK payload for ChatGPT
+        if: success()
+        shell: bash
+        run: |
+          base64 -w 0 app/build/outputs/apk/debug/app-debug.apk > Jarvis-TV-v0.2-debug.apk.b64
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Jarvis-TV-v0.2-debug.apk.b64
+          git commit -m "build: publish Jarvis TV v0.2 APK payload [skip ci]" || true
+          git push
