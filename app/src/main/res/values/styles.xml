@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.JarvisTV" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorAccent">#72E6D1</item>
+        <item name="android:navigationBarColor">#090B10</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
