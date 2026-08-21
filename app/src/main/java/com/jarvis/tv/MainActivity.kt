@@ -53,11 +53,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         conversationId = prefs.getString("conversationId", null) ?: UUID.randomUUID().toString().also {
             prefs.edit().putString("conversationId", it).apply()
         }
+        if (prefs.getString("backendUrl", "").isNullOrBlank()) {
+            prefs.edit().putString("backendUrl", DEFAULT_BACKEND).apply()
+        }
         restoreHistory()
         bindUi()
         setupRecognizer()
         showHome()
-        ensureOverlayPermission()
+        ensureOverlayPermission(false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            startBubbleService()
+        }
     }
 
     private fun bindUi() {
@@ -86,20 +96,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun showChat() {
         title.text = "ChatGPT"
-        subtitle.text = "La conversación se conserva con un identificador para sincronizarla con Jarvis móvil"
+        subtitle.text = "Conversación Jarvis sincronizable con TV y móvil"
         input.requestFocus()
     }
 
     private fun showVision() {
         title.text = "Vision AI"
         subtitle.text = "Consulta lo que aparece en pantalla: ropa, lugares, actores, productos y viajes"
-        appendSystem("Vision está integrado en la arquitectura. Para analizar contenido de otras apps se usará MediaProjection con permiso explícito del usuario y el backend multimodal; Android no permite capturar contenido protegido por DRM.")
+        appendSystem("Vision está integrado en la arquitectura. Para analizar contenido de otras apps se usará MediaProjection con permiso explícito del usuario y backend multimodal; Android no permite capturar contenido protegido por DRM.")
     }
 
     private fun showHomeControls() {
         title.text = "Casa"
         subtitle.text = "Luces, persianas, climatización, escenas y sensores"
-        appendSystem("Conectores preparados para backend Jarvis: Homey / SmartThings / Home Assistant / IFTTT. Las credenciales se guardan en servidor, nunca dentro del APK.")
+        appendSystem("Conectores preparados para backend Jarvis: Homey / SmartThings / Home Assistant / IFTTT.")
     }
 
     private fun showRoutines() {
@@ -119,30 +129,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (text.isEmpty()) return
         appendUser(text)
         input.text.clear()
-        val backend = prefs.getString("backendUrl", "")?.trim().orEmpty().trimEnd('/')
-        if (backend.isBlank()) {
-            appendAssistant("Aún no hay un Jarvis Backend configurado. Abre Ajustes y escribe su URL.")
-            return
-        }
-        status.text = "● Pensando…"
+        val backend = prefs.getString("backendUrl", DEFAULT_BACKEND)?.trim().orEmpty().ifBlank { DEFAULT_BACKEND }.trimEnd('/')
+        status.text = "● Conectando…"
         Thread {
             try {
-                val reply = postChat(resolveChatEndpoint(backend), text)
+                val endpoint = resolveChatEndpoint(backend)
+                val reply = postChat(endpoint, text)
                 runOnUiThread {
                     appendAssistant(reply)
-                    status.text = "● Listo · ${wakeWord()}"
+                    status.text = "● Conectado · ${wakeWord()}"
                 }
             } catch (e: Exception) {
+                val detail = e.message ?: e.javaClass.simpleName
                 runOnUiThread {
-                    appendAssistant("No he podido contactar con el backend: ${e.message ?: "error de conexión"}", false)
-                    status.text = "● Sin conexión"
+                    appendAssistant("Error de backend: $detail", false)
+                    status.text = "● Error · ${detail.take(70)}"
                 }
             }
         }.start()
     }
 
     private fun resolveChatEndpoint(base: String): String {
-        val clean = base.trimEnd('/')
+        val clean = base.trim().trimEnd('/')
         return when {
             clean.endsWith("/api/chat") -> clean
             clean.endsWith("/api") -> "$clean/chat"
@@ -153,11 +161,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun postChat(endpoint: String, message: String): String {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 10000
-            readTimeout = 45000
+            connectTimeout = 12000
+            readTimeout = 60000
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "JarvisTV/0.4.1")
         }
         val payload = JSONObject()
             .put("message", message)
@@ -169,9 +178,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val code = connection.responseCode
         val stream = if (code in 200..299) connection.inputStream else connection.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) throw IllegalStateException("HTTP $code ${body.take(160)}")
+        if (code !in 200..299) {
+            val serverError = runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty()
+            throw IllegalStateException("HTTP $code ${serverError.ifBlank { body.take(220) }}")
+        }
         val json = JSONObject(body)
         return json.optString("reply").ifBlank { json.optString("text") }.ifBlank { body }
+    }
+
+    private fun testBackend(base: String) {
+        val clean = base.trim().ifBlank { DEFAULT_BACKEND }
+        status.text = "● Probando backend…"
+        Thread {
+            try {
+                val reply = postChat(resolveChatEndpoint(clean), "Responde únicamente con: OK")
+                runOnUiThread {
+                    status.text = "● Backend OK"
+                    Toast.makeText(this, "Backend y OpenAI OK: ${reply.take(80)}", Toast.LENGTH_LONG).show()
+                    appendSystem("Diagnóstico: Vercel ✓ · OpenAI ✓ · respuesta recibida ✓")
+                }
+            } catch (e: Exception) {
+                val detail = e.message ?: e.javaClass.simpleName
+                runOnUiThread {
+                    status.text = "● Backend ERROR"
+                    Toast.makeText(this, "Fallo backend: $detail", Toast.LENGTH_LONG).show()
+                    appendSystem("Diagnóstico backend: $detail")
+                }
+            }
+        }.start()
     }
 
     private fun setupRecognizer() {
@@ -211,6 +245,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val r = recognizer
         if (r == null) {
             Toast.makeText(this, "Android no ofrece reconocimiento de voz en este dispositivo", Toast.LENGTH_LONG).show()
+            status.text = "● Voz no disponible"
             return
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -224,6 +259,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             r.startListening(intent)
         } catch (e: Exception) {
             Toast.makeText(this, "No se ha podido abrir el micrófono: ${e.message}", Toast.LENGTH_LONG).show()
+            status.text = "● Error micrófono"
         }
     }
 
@@ -237,16 +273,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         else -> "Error de reconocimiento de voz ($code)."
     }
 
-    private fun ensureOverlayPermission() {
+    private fun overlayStatus(): String = when {
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.M -> "compatible sin permiso especial"
+        Settings.canDrawOverlays(this) -> "PERMITIDO ✓"
+        else -> "NO PERMITIDO ✗"
+    }
+
+    private fun ensureOverlayPermission(force: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
             startBubbleService()
+            if (force) Toast.makeText(this, "Burbuja flotante activada", Toast.LENGTH_LONG).show()
             return
         }
+        if (!force) return
+        val packageIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+        val genericIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
         try {
-            startActivityForResult(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")), REQ_OVERLAY)
-            Toast.makeText(this, "Activa Mostrar sobre otras apps para mantener la burbuja fuera de Jarvis", Toast.LENGTH_LONG).show()
-        } catch (_: Exception) {
-            Toast.makeText(this, "Este Android TV no ofrece permiso de superposición", Toast.LENGTH_LONG).show()
+            when {
+                packageIntent.resolveActivity(packageManager) != null -> startActivityForResult(packageIntent, REQ_OVERLAY)
+                genericIntent.resolveActivity(packageManager) != null -> startActivityForResult(genericIntent, REQ_OVERLAY)
+                else -> throw IllegalStateException("El firmware no ofrece la pantalla de permiso overlay")
+            }
+            Toast.makeText(this, "Activa 'Mostrar sobre otras apps' para Jarvis TV", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Permiso de burbuja")
+                .setMessage("Android TV no ha abierto el permiso automáticamente. Ve a Ajustes del sistema → Apps → Acceso especial → Mostrar sobre otras apps → Jarvis TV.\n\nDetalle: ${e.message}")
+                .setPositiveButton("OK", null)
+                .show()
         }
     }
 
@@ -265,28 +319,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val name = edit("Nombre del asistente", assistantName())
         val wake = edit("Palabra de activación", wakeWord())
-        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", "").orEmpty())
-        val micInfo = TextView(this).apply {
-            text = "\nEntradas de audio detectadas:\n${audioInputs()}\n\nLa v0.4 usa SpeechRecognizer dentro de Jarvis. Si el micrófono del mando LG no aparece aquí, webOS no lo está exponiendo a Android."
+        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
+        val testBackendButton = Button(this).apply {
+            text = "PROBAR BACKEND / OPENAI"
+            setOnClickListener {
+                prefs.edit().putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).apply()
+                testBackend(backend.text.toString())
+            }
+        }
+        val overlayButton = Button(this).apply {
+            text = "ACTIVAR BURBUJA FLOTANTE"
+            setOnClickListener { ensureOverlayPermission(true) }
+        }
+        val micTestButton = Button(this).apply {
+            text = "PROBAR MICRÓFONO"
+            setOnClickListener { startVoiceInput() }
+        }
+        val diagnostics = TextView(this).apply {
+            text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nOverlay: ${overlayStatus()}\n\nEntradas de audio detectadas:\n${audioInputs()}\n\nSi el micrófono del mando LG no aparece aquí, webOS no lo está exponiendo a Android."
             textSize = 15f
         }
-        box.addView(name); box.addView(wake); box.addView(backend); box.addView(micInfo)
+        box.addView(name)
+        box.addView(wake)
+        box.addView(backend)
+        box.addView(testBackendButton)
+        box.addView(overlayButton)
+        box.addView(micTestButton)
+        box.addView(diagnostics)
         AlertDialog.Builder(this)
-            .setTitle("Ajustes de Jarvis TV v0.4")
+            .setTitle("Ajustes de Jarvis TV v0.4.1")
             .setView(box)
             .setPositiveButton("GUARDAR") { _, _ ->
                 prefs.edit()
                     .putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" })
                     .putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" })
-                    .putString("backendUrl", backend.text.toString().trim())
+                    .putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND })
                     .apply()
                 showHome()
-                ensureOverlayPermission()
             }
             .setNeutralButton("BORRAR HISTORIAL") { _, _ ->
                 prefs.edit().remove("history").apply(); transcript.text = ""; showHome()
             }
-            .setNegativeButton("CANCELAR", null)
+            .setNegativeButton("CERRAR", null)
             .show()
     }
 
@@ -343,7 +417,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_OVERLAY && Settings.canDrawOverlays(this)) startBubbleService()
+        if (requestCode == REQ_OVERLAY) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                startBubbleService()
+                Toast.makeText(this, "Permiso concedido. Burbuja iniciada.", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "El permiso de superposición sigue desactivado", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -353,11 +434,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         recognizer?.destroy()
-        tts?.stop(); tts?.shutdown(); super.onDestroy()
+        tts?.stop()
+        tts?.shutdown()
+        super.onDestroy()
     }
 
     companion object {
         private const val REQ_AUDIO = 10
         private const val REQ_OVERLAY = 30
+        private const val DEFAULT_BACKEND = "https://chatgpt-tv2.vercel.app"
     }
 }
