@@ -4,7 +4,11 @@ export default async function handler(req, res) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return res.status(503).json({ error: 'OPENAI_API_KEY_not_configured' });
 
-  const { text, voice = process.env.OPENAI_TTS_VOICE || 'alloy' } = req.body || {};
+  const {
+    text,
+    voice = process.env.OPENAI_TTS_VOICE || 'coral',
+    instructions = 'Habla en español natural, con ritmo ágil y conversacional, aproximadamente un 20 por ciento más rápido de lo normal. Evita pausas largas y mantén una entonación cálida y clara.'
+  } = req.body || {};
   if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text_required' });
 
   try {
@@ -17,7 +21,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
         voice,
-        input: text.slice(0, 4000),
+        input: text.slice(0, 1800),
+        instructions,
         response_format: 'mp3'
       })
     });
@@ -27,9 +32,10 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: body || 'openai_tts_error' });
     }
 
-    const audio = Buffer.from(await response.arrayBuffer());
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Jarvis-Voice-Mode', 'low-latency-fast');
+    const audio = Buffer.from(await response.arrayBuffer());
     return res.status(200).send(audio);
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'speech_backend_error' });
