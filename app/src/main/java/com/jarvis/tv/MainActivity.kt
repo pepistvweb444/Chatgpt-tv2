@@ -7,8 +7,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.KeyEvent
 import android.widget.Button
@@ -32,6 +37,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var subtitle: TextView
     private lateinit var status: TextView
     private var tts: TextToSpeech? = null
+    private var recognizer: SpeechRecognizer? = null
     private val prefs by lazy { getSharedPreferences("jarvis", MODE_PRIVATE) }
     private var conversationId: String = ""
 
@@ -49,7 +55,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         restoreHistory()
         bindUi()
+        setupRecognizer()
         showHome()
+        ensureOverlayPermission()
     }
 
     private fun bindUi() {
@@ -97,13 +105,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun showRoutines() {
         title.text = "Rutinas"
         subtitle.text = "Combina briefing, TV y domótica"
-        appendSystem("Ejemplo: 08:00 → subir persianas → encender luces → mostrar calendario, tiempo, correos y avisos. La ejecución remota se sincronizará con Jarvis Backend.")
+        appendSystem("Ejemplo: 08:00 → subir persianas → encender luces → mostrar calendario, tiempo, correos y avisos.")
     }
 
     private fun showNotifications() {
         title.text = "Centro personal"
         subtitle.text = "Llamadas, mensajes, correo y notificaciones del móvil compañero"
-        appendSystem("La app TV queda preparada para recibir el feed normalizado del móvil compañero y del backend. WhatsApp, Instagram, Facebook y TikTok se obtendrán mediante permisos/autorizaciones disponibles en el móvil o APIs oficiales.")
+        appendSystem("La app TV queda preparada para recibir el feed normalizado del móvil compañero y del backend.")
     }
 
     private fun sendMessage() {
@@ -113,13 +121,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         input.text.clear()
         val backend = prefs.getString("backendUrl", "")?.trim().orEmpty().trimEnd('/')
         if (backend.isBlank()) {
-            appendAssistant("Aún no hay un Jarvis Backend configurado. Abre Ajustes y escribe su URL. El APK no almacena claves privadas de OpenAI.")
+            appendAssistant("Aún no hay un Jarvis Backend configurado. Abre Ajustes y escribe su URL.")
             return
         }
         status.text = "● Pensando…"
         Thread {
             try {
-                val reply = postChat("$backend/chat", text)
+                val reply = postChat(resolveChatEndpoint(backend), text)
                 runOnUiThread {
                     appendAssistant(reply)
                     status.text = "● Listo · ${wakeWord()}"
@@ -131,6 +139,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
         }.start()
+    }
+
+    private fun resolveChatEndpoint(base: String): String {
+        val clean = base.trimEnd('/')
+        return when {
+            clean.endsWith("/api/chat") -> clean
+            clean.endsWith("/api") -> "$clean/chat"
+            else -> "$clean/api/chat"
+        }
     }
 
     private fun postChat(endpoint: String, message: String): String {
@@ -157,22 +174,87 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return json.optString("reply").ifBlank { json.optString("text") }.ifBlank { body }
     }
 
+    private fun setupRecognizer() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return
+        recognizer?.destroy()
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) { status.text = "● Escuchando…" }
+                override fun onBeginningOfSpeech() { status.text = "● Te escucho…" }
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { status.text = "● Procesando voz…" }
+                override fun onError(error: Int) {
+                    status.text = "● Error de voz $error"
+                    Toast.makeText(this@MainActivity, speechError(error), Toast.LENGTH_LONG).show()
+                }
+                override fun onResults(results: Bundle?) {
+                    status.text = "● Listo · ${wakeWord()}"
+                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    if (text.isNotBlank()) { input.setText(text); sendMessage() }
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    if (text.isNotBlank()) status.text = "● $text"
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+    }
+
     private fun startVoiceInput() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
             return
         }
-        status.text = "● Escuchando…"
+        if (recognizer == null) setupRecognizer()
+        val r = recognizer
+        if (r == null) {
+            Toast.makeText(this, "Android no ofrece reconocimiento de voz en este dispositivo", Toast.LENGTH_LONG).show()
+            return
+        }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Habla con ${assistantName()}")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         }
-        try { startActivityForResult(intent, REQ_VOICE) }
-        catch (_: Exception) {
-            status.text = "● Micrófono no disponible"
-            Toast.makeText(this, "El servicio de reconocimiento de voz no está disponible", Toast.LENGTH_LONG).show()
+        try {
+            r.cancel()
+            r.startListening(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se ha podido abrir el micrófono: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun speechError(code: Int): String = when (code) {
+        SpeechRecognizer.ERROR_AUDIO -> "Error al acceder al audio. Revisa qué micrófono expone Android."
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Falta permiso de micrófono."
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "El reconocimiento no ha podido conectar con la red."
+        SpeechRecognizer.ERROR_NO_MATCH -> "No he podido entender la voz."
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "El reconocedor está ocupado."
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No se ha detectado voz."
+        else -> "Error de reconocimiento de voz ($code)."
+    }
+
+    private fun ensureOverlayPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            startBubbleService()
+            return
+        }
+        try {
+            startActivityForResult(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")), REQ_OVERLAY)
+            Toast.makeText(this, "Activa Mostrar sobre otras apps para mantener la burbuja fuera de Jarvis", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Este Android TV no ofrece permiso de superposición", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun startBubbleService() {
+        try {
+            ContextCompat.startForegroundService(this, Intent(this, OverlayService::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se pudo iniciar la burbuja: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -185,12 +267,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val wake = edit("Palabra de activación", wakeWord())
         val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", "").orEmpty())
         val micInfo = TextView(this).apply {
-            text = "\nEntradas de audio detectadas:\n${audioInputs()}\n\nSi el micrófono del mando LG/Google TV es expuesto por Android aparecerá aquí como entrada disponible."
+            text = "\nEntradas de audio detectadas:\n${audioInputs()}\n\nLa v0.4 usa SpeechRecognizer dentro de Jarvis. Si el micrófono del mando LG no aparece aquí, webOS no lo está exponiendo a Android."
             textSize = 15f
         }
         box.addView(name); box.addView(wake); box.addView(backend); box.addView(micInfo)
         AlertDialog.Builder(this)
-            .setTitle("Ajustes de Jarvis TV v0.3")
+            .setTitle("Ajustes de Jarvis TV v0.4")
             .setView(box)
             .setPositiveButton("GUARDAR") { _, _ ->
                 prefs.edit()
@@ -199,6 +281,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     .putString("backendUrl", backend.text.toString().trim())
                     .apply()
                 showHome()
+                ensureOverlayPermission()
             }
             .setNeutralButton("BORRAR HISTORIAL") { _, _ ->
                 prefs.edit().remove("history").apply(); transcript.text = ""; showHome()
@@ -217,8 +300,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun audioInputs(): String {
         val manager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return manager.getDevices(AudioManager.GET_DEVICES_INPUTS).joinToString("\n") { d ->
-            "• ${d.productName} · ${audioType(d.type)}"
-        }.ifBlank { "• Android no informa ninguna entrada externa" }
+            "• ${d.productName} · ${audioType(d.type)} · id ${d.id}"
+        }.ifBlank { "• Android no informa ninguna entrada de audio" }
     }
 
     private fun audioType(type: Int): String = when (type) {
@@ -229,9 +312,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         else -> "tipo $type"
     }
 
-    private fun appendUser(text: String) {
-        appendLine("\nTÚ\n$text\n")
-    }
+    private fun appendUser(text: String) { appendLine("\nTÚ\n$text\n") }
 
     private fun appendAssistant(text: String, speak: Boolean = true) {
         appendLine("\n${assistantName().uppercase()}\n$text\n")
@@ -246,9 +327,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         prefs.edit().putString("history", saved).apply()
     }
 
-    private fun restoreHistory() {
-        transcript.text = prefs.getString("history", "").orEmpty()
-    }
+    private fun restoreHistory() { transcript.text = prefs.getString("history", "").orEmpty() }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_SEARCH || event.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)) {
@@ -264,13 +343,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_VOICE) {
-            status.text = "● Listo · ${wakeWord()}"
-            if (resultCode == RESULT_OK) {
-                val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-                if (text.isNotBlank()) { input.setText(text); sendMessage() }
-            }
-        }
+        if (requestCode == REQ_OVERLAY && Settings.canDrawOverlays(this)) startBubbleService()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -279,11 +352,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        recognizer?.destroy()
         tts?.stop(); tts?.shutdown(); super.onDestroy()
     }
 
     companion object {
         private const val REQ_AUDIO = 10
-        private const val REQ_VOICE = 20
+        private const val REQ_OVERLAY = 30
     }
 }
