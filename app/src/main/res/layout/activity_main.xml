@@ -1,42 +1,125 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="48dp"
-    android:background="#090B10">
+    android:background="#07101C">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="JARVIS TV" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="v0.2 • Android TV" android:textColor="#72E6D1" android:textSize="16sp" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/transcript"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="30dp"
-        android:padding="28dp"
-        android:background="#151922"
-        android:text="Jarvis: Hola. Soy Jarvis TV v0.2. Puedes escribir con el mando o usar el micrófono."
-        android:textColor="#F5F7FA"
-        android:textSize="21sp" />
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:padding="24dp">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:gravity="center_vertical">
-        <EditText
-            android:id="@+id/messageInput"
+        <LinearLayout
+            android:layout_width="220dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:background="#101C2B">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="JARVIS TV"
+                android:textColor="#FFFFFF"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:padding="12dp" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="● Listo · v0.3"
+                android:textColor="#72E6D1"
+                android:textSize="14sp"
+                android:padding="12dp" />
+
+            <Button android:id="@+id/homeButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="INICIO" />
+            <Button android:id="@+id/chatButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="CHATGPT" />
+            <Button android:id="@+id/visionButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="VISION" />
+            <Button android:id="@+id/homeControlButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="CASA" />
+            <Button android:id="@+id/routinesButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="RUTINAS" />
+            <Button android:id="@+id/notificationsButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="AVISOS" />
+            <Space android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+            <Button android:id="@+id/settingsButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="AJUSTES" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="64dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:hint="Escribe un mensaje..."
-            android:textColor="#FFFFFF"
-            android:textColorHint="#8A94A6"
-            android:background="#202631"
-            android:paddingHorizontal="20dp"
-            android:singleLine="true" />
-        <Button android:id="@+id/micButton" android:layout_width="wrap_content" android:layout_height="64dp" android:layout_marginStart="12dp" android:text="MIC" />
-        <Button android:id="@+id/sendButton" android:layout_width="wrap_content" android:layout_height="64dp" android:layout_marginStart="12dp" android:text="ENVIAR" />
-        <Button android:id="@+id/settingsButton" android:layout_width="wrap_content" android:layout_height="64dp" android:layout_marginStart="12dp" android:text="AJUSTES" />
+            android:orientation="vertical"
+            android:layout_marginStart="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:id="@+id/pageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Buenos días" android:textColor="#FFFFFF" android:textSize="32sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/pageSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tu resumen inteligente en la televisión" android:textColor="#9BB0C9" android:textSize="17sp" />
+                </LinearLayout>
+                <Button android:id="@+id/micButton" android:layout_width="150dp" android:layout_height="60dp" android:text="🎙 HABLAR" />
+            </LinearLayout>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="145dp"
+                android:layout_marginTop="18dp"
+                android:fillViewport="true">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal">
+                    <TextView android:id="@+id/cardNow" android:layout_width="250dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="18dp" android:background="#14243A" android:text="AHORA\nJarvis preparado\nDi ‘Hola ChatGPT’" android:textColor="#FFFFFF" android:textSize="18sp" />
+                    <TextView android:id="@+id/cardHome" android:layout_width="250dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="18dp" android:background="#14243A" android:text="CASA\nPanel domótico\nListo para conectar" android:textColor="#FFFFFF" android:textSize="18sp" />
+                    <TextView android:id="@+id/cardMessages" android:layout_width="250dp" android:layout_height="match_parent" android:layout_marginEnd="12dp" android:padding="18dp" android:background="#14243A" android:text="COMUNICACIONES\nMóvil compañero\nSincronización preparada" android:textColor="#FFFFFF" android:textSize="18sp" />
+                    <TextView android:id="@+id/cardRoutine" android:layout_width="250dp" android:layout_height="match_parent" android:padding="18dp" android:background="#14243A" android:text="RUTINAS\nBriefing + hogar\nAutomatizaciones" android:textColor="#FFFFFF" android:textSize="18sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="16dp"
+                android:background="#0D1827"
+                android:padding="22dp">
+                <TextView
+                    android:id="@+id/transcript"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#EDF4FF"
+                    android:textSize="19sp"
+                    android:lineSpacingExtra="6dp" />
+            </ScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical">
+                <EditText
+                    android:id="@+id/messageInput"
+                    android:layout_width="0dp"
+                    android:layout_height="62dp"
+                    android:layout_weight="1"
+                    android:hint="Pregunta a Jarvis…"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#7D90A8"
+                    android:background="#17263A"
+                    android:paddingHorizontal="20dp"
+                    android:singleLine="true" />
+                <Button android:id="@+id/sendButton" android:layout_width="130dp" android:layout_height="62dp" android:layout_marginStart="12dp" android:text="ENVIAR" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+
+    <Button
+        android:id="@+id/assistantBubble"
+        android:layout_width="82dp"
+        android:layout_height="82dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="28dp"
+        android:text="AI"
+        android:textSize="22sp"
+        android:contentDescription="Abrir asistente" />
+</FrameLayout>
