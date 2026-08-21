@@ -1,83 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#0F1115"
-    android:padding="16dp">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Jarvis"
-            android:textColor="#FFFFFF"
-            android:textSize="24sp"
-            android:textStyle="bold" />
-        <Button
-            android:id="@+id/newChat"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Nuevo chat" />
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#0F1115" android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Jarvis" android:textColor="#FFFFFF" android:textSize="24sp" android:textStyle="bold" />
+        <Button android:id="@+id/chats" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chats" />
+        <Button android:id="@+id/newChat" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Nuevo" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Listo"
-        android:textColor="#9AA4B2"
-        android:paddingTop="6dp"
-        android:paddingBottom="8dp" />
-
-    <ScrollView
-        android:id="@+id/scroll"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
-        <TextView
-            android:id="@+id/transcript"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#F5F7FA"
-            android:textSize="17sp"
-            android:lineSpacingExtra="6dp"
-            android:padding="8dp" />
+    <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Listo" android:textColor="#9AA4B2" android:paddingTop="6dp" android:paddingBottom="8dp" />
+    <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#F5F7FA" android:textSize="17sp" android:lineSpacingExtra="6dp" android:padding="8dp" />
     </ScrollView>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="8dp">
-        <Button
-            android:id="@+id/mic"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🎤" />
-        <EditText
-            android:id="@+id/input"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Pregunta a Jarvis…"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#7E8793"
-            android:background="#1A1F27"
-            android:padding="14dp"
-            android:maxLines="4" />
-        <Button
-            android:id="@+id/send"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Enviar" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="8dp">
+        <Button android:id="@+id/mic" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🎤" />
+        <EditText android:id="@+id/input" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Pregunta a Jarvis…" android:textColor="#FFFFFF" android:textColorHint="#7E8793" android:background="#1A1F27" android:padding="14dp" android:maxLines="4" />
+        <Button android:id="@+id/send" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Enviar" />
     </LinearLayout>
 </LinearLayout>
