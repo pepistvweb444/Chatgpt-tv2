@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#101010">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="10dp">
+        <Button android:id="@+id/menu" android:layout_width="46dp" android:layout_height="46dp" android:text="☰" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Jarvis" android:textSize="20sp" android:textStyle="bold" android:textColor="#FFFFFF" android:paddingStart="10dp" />
+        <Button android:id="@+id/plugins" android:layout_width="52dp" android:layout_height="46dp" android:text="⊕" />
+        <Button android:id="@+id/newChat" android:layout_width="52dp" android:layout_height="46dp" android:text="✎" />
+    </LinearLayout>
+
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="92dp" android:scrollbars="none" android:paddingHorizontal="10dp">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal">
+            <TextView android:id="@+id/nowBrief" android:layout_width="210dp" android:layout_height="82dp" android:layout_marginEnd="8dp" android:padding="14dp" android:background="#1E1E1E" android:text="NOW BRIEF\nPulsa para actualizar" android:textColor="#FFFFFF" android:textSize="14sp" />
+            <TextView android:id="@+id/phoneCard" android:layout_width="185dp" android:layout_height="82dp" android:layout_marginEnd="8dp" android:padding="14dp" android:background="#1E1E1E" android:text="TELÉFONO\nLlamadas · SMS · apps" android:textColor="#FFFFFF" android:textSize="14sp" />
+            <TextView android:id="@+id/visionCard" android:layout_width="185dp" android:layout_height="82dp" android:padding="14dp" android:background="#1E1E1E" android:text="VISION\nCámara · archivos" android:textColor="#FFFFFF" android:textSize="14sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="● Listo" android:textColor="#9AA0A6" android:textSize="12sp" android:paddingHorizontal="16dp" android:paddingVertical="6dp" />
+
+    <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:paddingHorizontal="16dp">
+        <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#F7F7F7" android:textSize="17sp" android:lineSpacingExtra="9dp" android:paddingVertical="12dp" />
+    </ScrollView>
+
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="48dp" android:scrollbars="none" android:paddingHorizontal="10dp">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="48dp" android:orientation="horizontal">
+            <Button android:id="@+id/camera" android:layout_width="90dp" android:layout_height="44dp" android:text="📷" />
+            <Button android:id="@+id/files" android:layout_width="90dp" android:layout_height="44dp" android:text="＋" />
+            <Button android:id="@+id/voice" android:layout_width="90dp" android:layout_height="44dp" android:text="Voz" />
+            <Button android:id="@+id/wake" android:layout_width="120dp" android:layout_height="44dp" android:text="Hola Jarvis" />
+            <Button android:id="@+id/device" android:layout_width="120dp" android:layout_height="44dp" android:text="Teléfono" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="10dp" android:paddingBottom="8dp">
+        <Button android:id="@+id/mic" android:layout_width="54dp" android:layout_height="56dp" android:text="🎤" />
+        <EditText android:id="@+id/input" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:layout_marginHorizontal="8dp" android:hint="Mensaje a Jarvis" android:textColor="#FFFFFF" android:textColorHint="#8A8A8A" android:background="#242424" android:paddingHorizontal="16dp" android:maxLines="3" />
+        <Button android:id="@+id/send" android:layout_width="56dp" android:layout_height="56dp" android:text="↑" android:textSize="20sp" />
+    </LinearLayout>
+</LinearLayout>
