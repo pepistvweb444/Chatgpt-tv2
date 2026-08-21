@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var status: TextView
     private lateinit var scroll: ScrollView
+    private lateinit var recentChats: TextView
     private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
     private var conversationId = ""
@@ -43,12 +44,16 @@ class MainActivity : AppCompatActivity() {
         input = findViewById(R.id.input)
         status = findViewById(R.id.status)
         scroll = findViewById(R.id.scroll)
+        recentChats = findViewById(R.id.recentChats)
         conversationId = prefs.getString("currentConversation", null) ?: newConversation(false)
         loadConversation(conversationId)
+        refreshRecentChats()
         findViewById<Button>(R.id.send).setOnClickListener { sendMessage() }
         findViewById<Button>(R.id.mic).setOnClickListener { startVoiceCapture() }
-        findViewById<Button>(R.id.newChat).setOnClickListener { newConversation(true) }
+        findViewById<Button>(R.id.newChat).setOnClickListener { newConversation(true); refreshRecentChats() }
         findViewById<Button>(R.id.chats).setOnClickListener { showChats() }
+        findViewById<Button>(R.id.connections).setOnClickListener { showConnections() }
+        recentChats.setOnClickListener { showChats() }
     }
 
     private fun newConversation(showToast: Boolean): String {
@@ -57,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString("currentConversation", id).apply()
         val chats = chatIndex()
         chats.put(JSONObject().put("id", id).put("title", "Nuevo chat").put("updated", System.currentTimeMillis()))
-        prefs.edit().putString("chatIndex", chats.toString()).putString("chat_$id", "[]").apply()
+        prefs.edit().putString("chatIndex", chats.toString()).putString("chat_$id", "[]").remove("response_$id").apply()
         transcript.text = ""
         if (showToast) Toast.makeText(this, "Nuevo chat", Toast.LENGTH_SHORT).show()
         return id
@@ -65,18 +70,62 @@ class MainActivity : AppCompatActivity() {
 
     private fun chatIndex(): JSONArray = runCatching { JSONArray(prefs.getString("chatIndex", "[]")) }.getOrElse { JSONArray() }
 
+    private fun sortedChatObjects(): List<JSONObject> {
+        val arr = chatIndex()
+        val list = mutableListOf<JSONObject>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { list.add(it) }
+        return list.sortedByDescending { it.optLong("updated") }
+    }
+
+    private fun refreshRecentChats() {
+        val chats = sortedChatObjects().take(3)
+        recentChats.text = if (chats.isEmpty()) "Chats recientes · todavía no hay conversaciones" else
+            "Chats recientes\n" + chats.joinToString("  •  ") { it.optString("title").ifBlank { "Chat" }.take(28) }
+    }
+
     private fun showChats() {
-        val index = chatIndex()
-        if (index.length() == 0) return
-        val labels = Array(index.length()) { i -> index.optJSONObject(i)?.optString("title")?.ifBlank { "Chat" } ?: "Chat" }
+        val items = sortedChatObjects()
+        if (items.isEmpty()) {
+            Toast.makeText(this, "Todavía no hay chats guardados", Toast.LENGTH_SHORT).show(); return
+        }
+        val labels = items.map { it.optString("title").ifBlank { "Chat" } }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Tus chats de Jarvis").setItems(labels) { _, which ->
-            val id = index.optJSONObject(which)?.optString("id").orEmpty()
+            val id = items[which].optString("id")
             if (id.isNotBlank()) {
                 conversationId = id
                 prefs.edit().putString("currentConversation", id).apply()
                 loadConversation(id)
+                status.text = "Chat cargado · memoria activa"
             }
-        }.show()
+        }.setNegativeButton("Cerrar", null).show()
+    }
+
+    private fun showConnections() {
+        status.text = "Comprobando conexiones…"
+        Thread {
+            try {
+                val c = (URL("$BACKEND/api/capabilities").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"; connectTimeout = 10000; readTimeout = 20000
+                }
+                val code = c.responseCode
+                val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw IllegalStateException("HTTP $code")
+                val json = JSONObject(body)
+                val mcps = json.optJSONArray("mcps") ?: JSONArray()
+                val lines = mutableListOf("Búsqueda web: ${if (json.optBoolean("webSearch")) "ACTIVA ✓" else "No disponible"}")
+                if (mcps.length() == 0) lines.add("MCP: ninguno configurado todavía")
+                else for (i in 0 until mcps.length()) {
+                    val m = mcps.optJSONObject(i) ?: continue
+                    lines.add("MCP · ${m.optString("label")} · aprobación ${m.optString("approval")}")
+                }
+                runOnUiThread {
+                    status.text = "Conexiones comprobadas"
+                    AlertDialog.Builder(this).setTitle("Conexiones de Jarvis").setMessage(lines.joinToString("\n\n")).setPositiveButton("OK", null).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread { status.text = "Error de conexiones"; Toast.makeText(this, e.message, Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     private fun historyArray(): JSONArray = runCatching { JSONArray(prefs.getString("chat_$conversationId", "[]")) }.getOrElse { JSONArray() }
@@ -98,21 +147,22 @@ class MainActivity : AppCompatActivity() {
         arr.put(JSONObject().put("role", role).put("content", text))
         prefs.edit().putString("chat_$conversationId", arr.toString()).apply()
         transcript.append(if (role == "user") "\nTÚ\n$text\n" else "\nJARVIS\n$text\n")
-        updateTitleIfNeeded(text, role)
+        updateTitleAndTimestamp(text, role)
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
-    private fun updateTitleIfNeeded(text: String, role: String) {
-        if (role != "user") return
+    private fun updateTitleAndTimestamp(text: String, role: String) {
         val index = chatIndex()
         for (i in 0 until index.length()) {
             val item = index.optJSONObject(i) ?: continue
-            if (item.optString("id") == conversationId && item.optString("title") == "Nuevo chat") {
-                item.put("title", text.take(42)).put("updated", System.currentTimeMillis())
+            if (item.optString("id") == conversationId) {
+                if (role == "user" && item.optString("title") == "Nuevo chat") item.put("title", text.take(42))
+                item.put("updated", System.currentTimeMillis())
                 prefs.edit().putString("chatIndex", index.toString()).apply()
                 break
             }
         }
+        refreshRecentChats()
     }
 
     private fun sendMessage() {
@@ -120,15 +170,17 @@ class MainActivity : AppCompatActivity() {
         if (message.isBlank()) return
         input.text.clear()
         append("user", message)
-        status.text = "Pensando…"
+        status.text = "Pensando · memoria activa…"
         val history = historyArray()
+        val previous = prefs.getString("response_$conversationId", null)
         Thread {
             try {
-                val reply = postChat(message, history)
+                val result = postChat(message, history, previous)
+                if (!result.second.isNullOrBlank()) prefs.edit().putString("response_$conversationId", result.second).apply()
                 runOnUiThread {
-                    append("assistant", reply)
-                    status.text = "Listo"
-                    speak(reply)
+                    append("assistant", result.first)
+                    status.text = "Listo · contexto guardado"
+                    speak(result.first)
                 }
             } catch (e: Exception) {
                 runOnUiThread { status.text = "Error: ${e.message}"; Toast.makeText(this, e.message, Toast.LENGTH_LONG).show() }
@@ -136,7 +188,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun postChat(message: String, history: JSONArray): String {
+    private fun postChat(message: String, history: JSONArray, previousResponseId: String?): Pair<String, String?> {
         val c = (URL("$BACKEND/api/chat").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; doOutput = true; connectTimeout = 12000; readTimeout = 60000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -147,18 +199,24 @@ class MainActivity : AppCompatActivity() {
             if (i == history.length() - 1 && item.optString("role") == "user" && item.optString("content") == message) continue
             historyPayload.put(item)
         }
-        val body = JSONObject().put("message", message).put("conversationId", conversationId).put("client", "jarvis-mobile").put("history", historyPayload).toString()
+        val body = JSONObject()
+            .put("message", message)
+            .put("conversationId", conversationId)
+            .put("client", "jarvis-mobile")
+            .put("history", historyPayload)
+            .apply { if (!previousResponseId.isNullOrBlank()) put("previousResponseId", previousResponseId) }
+            .toString()
         c.outputStream.use { it.write(body.toByteArray()) }
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) throw IllegalStateException("HTTP $code $text")
-        return JSONObject(text).optString("reply").ifBlank { text }
+        val json = JSONObject(text)
+        return Pair(json.optString("reply").ifBlank { text }, json.optString("responseId").ifBlank { null })
     }
 
     private fun startVoiceCapture() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
-            return
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO); return
         }
         stopRecorder(false)
         val file = File(cacheDir, "voice-${System.currentTimeMillis()}.m4a")
@@ -175,10 +233,7 @@ class MainActivity : AppCompatActivity() {
             r.prepare(); r.start()
             status.text = "Escuchando…"
             handler.postDelayed({ stopRecorder(true) }, 7000)
-        } catch (e: Exception) {
-            stopRecorder(false)
-            Toast.makeText(this, "Micrófono: ${e.message}", Toast.LENGTH_LONG).show()
-        }
+        } catch (e: Exception) { stopRecorder(false); Toast.makeText(this, "Micrófono: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
     private fun stopRecorder(upload: Boolean) {
