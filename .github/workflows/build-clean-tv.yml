@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -159,6 +159,22 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Apply synced MCP bridge to TV
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
+          s = p.read_text()
+          marker = '    private fun showConnections() {'
+          helper = '''    private fun localMcps(): JSONArray = runCatching { JSONArray(prefs.getString("mcps", "[]")) }.getOrElse { JSONArray() }\n\n'''
+          if 'private fun localMcps()' not in s:
+              s = s.replace(marker, helper + marker)
+          s = s.replace('.put("history", historyPayload)\n            .apply { if (!previousResponseId.isNullOrBlank())', '.put("history", historyPayload)\n            .put("clientMcps", localMcps())\n            .apply { if (!previousResponseId.isNullOrBlank())')
+          s = s.replace('val lines = mutableListOf("Búsqueda web:', 'val localCount = localMcps().length()\n                val lines = mutableListOf("MCP sincronizados desde móvil: $localCount", "Búsqueda web:')
+          p.write_text(s)
+          PY
+
       - name: Clean and build TV only
         shell: bash
         run: |
@@ -176,3 +192,14 @@ jobs:
           name: Jarvis-TV-v0.6.5-debug
           path: Jarvis-TV-v0.6.5-debug.apk
           if-no-files-found: error
+
+      - name: Publish TV APK payload
+        if: success()
+        shell: bash
+        run: |
+          base64 -w 0 Jarvis-TV-v0.6.5-debug.apk > Jarvis-TV-v0.6.5-debug.apk.b64
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Jarvis-TV-v0.6.5-debug.apk.b64
+          git commit -m "build: publish Jarvis TV 0.6.5 APK [skip ci]" || true
+          git push
