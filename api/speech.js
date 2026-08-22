@@ -5,21 +5,24 @@ export default async function handler(req, res) {
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
 
   const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://165.22.83.150:8000').replace(/\/$/, '');
-  const preferOpenVoice = ['openvoice', 'my_voice', 'mi_voz'].includes(String(body.provider || body.voice || '').toLowerCase()) || process.env.JARVIS_TTS_PROVIDER === 'openvoice';
-  const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.2);
+  const requestedProvider = String(body.provider || '').toLowerCase();
+  const requestedVoice = String(body.voice || '').toLowerCase();
+  const forceOpenAI = requestedProvider === 'openai';
+  const preferOpenVoice = !forceOpenAI && Boolean(openVoiceUrl);
+  const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.15);
 
-  if (openVoiceUrl && preferOpenVoice) {
+  if (preferOpenVoice) {
     try {
       const ov = await fetch(`${openVoiceUrl}/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: body.text.slice(0, 1800),
-          profile: process.env.OPENVOICE_PROFILE || 'jarvis',
+          profile: process.env.OPENVOICE_PROFILE || 'Jarvis',
           language: process.env.OPENVOICE_LANGUAGE || 'ES',
           speed
         }),
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(60000)
       });
       if (ov.ok) {
         const audio = Buffer.from(await ov.arrayBuffer());
@@ -28,21 +31,22 @@ export default async function handler(req, res) {
         res.setHeader('X-Jarvis-Voice-Mode', 'openvoice-digitalocean');
         return res.status(200).send(audio);
       }
-    } catch (_) {
-      // Fall back quickly to OpenAI so Jarvis keeps speaking while OpenVoice is offline or warming up.
+      console.warn('OpenVoice synthesize failed', ov.status, await ov.text());
+    } catch (error) {
+      console.warn('OpenVoice unavailable; falling back to OpenAI', error?.message || error);
     }
   }
 
   const key = process.env.OPENAI_API_KEY;
   if (!key) return res.status(503).json({ error: 'No TTS provider available. Configure OPENVOICE_URL or OPENAI_API_KEY.' });
 
-  const requestedVoice = body.voice || process.env.OPENAI_TTS_VOICE || 'coral';
+  const openAiRequestedVoice = body.voice || process.env.OPENAI_TTS_VOICE || 'coral';
   const customVoiceId = process.env.JARVIS_CUSTOM_VOICE_ID || '';
   const voice = (requestedVoice === 'my_voice' || requestedVoice === 'mi_voz') && customVoiceId
     ? { id: customVoiceId }
-    : (requestedVoice === 'openvoice' ? (process.env.OPENAI_TTS_VOICE || 'coral') : requestedVoice);
+    : (requestedVoice === 'openvoice' ? (process.env.OPENAI_TTS_VOICE || 'coral') : openAiRequestedVoice);
   const instructions = body.instructions ||
-    'Habla en español natural, ágil y conversacional, aproximadamente un 20 por ciento más rápido de lo normal. Evita pausas largas, responde con energía moderada y pronunciación clara.';
+    'Habla en español natural, ágil y conversacional, aproximadamente un 15 por ciento más rápido de lo normal. Evita pausas largas, responde con energía moderada y pronunciación clara.';
 
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
