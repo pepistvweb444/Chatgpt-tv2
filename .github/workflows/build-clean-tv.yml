@@ -3,6 +3,13 @@ name: Build Clean Jarvis TV APK
 on:
   push:
     branches: [ jarvis-tv-clean-v064 ]
+    paths:
+      - 'app/**'
+      - 'api/**'
+      - '.github/workflows/build-clean-tv.yml'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +51,6 @@ jobs:
             'android.enableJetifier=true' \
             'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
             'kotlin.code.style=official' > gradle.properties
-          cat gradle.properties
 
       - name: Clean and build TV only
         shell: bash
@@ -54,12 +60,12 @@ jobs:
       - name: Copy APK
         shell: bash
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.6.4-clean-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.4-clean-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.6.5-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.5-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-TV-v0.6.4-clean-debug
-          path: Jarvis-TV-v0.6.4-clean-debug.apk
+          name: Jarvis-TV-v0.6.5-debug
+          path: Jarvis-TV-v0.6.5-debug.apk
           if-no-files-found: error
