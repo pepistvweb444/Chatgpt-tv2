@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.widget.Button
 import android.widget.EditText
 import org.json.JSONObject
@@ -24,10 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object FastVoice {
     private const val BACKEND = "https://chatgpt-tv2.vercel.app"
-    private val pool = Executors.newFixedThreadPool(3)
+    private val pool = Executors.newFixedThreadPool(4)
     private val generation = AtomicInteger(0)
     @Volatile private var player: MediaPlayer? = null
-    @Volatile private var localTts: TextToSpeech? = null
     @Volatile private var bargeRecognizer: SpeechRecognizer? = null
     @Volatile private var interrupted = false
 
@@ -37,7 +35,6 @@ object FastVoice {
         runCatching { player?.stop() }
         runCatching { player?.release() }
         player = null
-        runCatching { localTts?.stop() }
         runCatching { bargeRecognizer?.cancel() }
         runCatching { bargeRecognizer?.destroy() }
         bargeRecognizer = null
@@ -58,46 +55,28 @@ object FastVoice {
             return
         }
 
+        // Always use the cloned Jarvis/Ale voice for conversation mode.
+        // Persist it so later launches do not fall back to a stock/system voice.
+        prefs.edit().putString("voice", "mi_voz").apply()
+
         val chunks = chunk(text)
         val files = ConcurrentHashMap<Int, File>()
         val started = AtomicBoolean(false)
         val failed = AtomicBoolean(false)
 
-        fun fallback() {
-            if (generation.get() != myGeneration || !started.compareAndSet(false, true)) return
-            failed.set(true)
+        fun failCleanly() {
+            if (generation.get() != myGeneration || !failed.compareAndSet(false, true)) return
             activity.runOnUiThread {
                 onStart?.invoke()
-                startBargeIn(activity, text, myGeneration)
-                if (localTts == null) {
-                    localTts = TextToSpeech(activity.applicationContext) { status ->
-                        if (status == TextToSpeech.SUCCESS && generation.get() == myGeneration) {
-                            localTts?.language = Locale("es", "ES")
-                            localTts?.setSpeechRate(1.08f)
-                            localTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-fast-fallback")
-                            activity.window.decorView.postDelayed({
-                                if (generation.get() == myGeneration && !interrupted) relisten(activity)
-                            }, estimateSpeechMs(text))
-                        }
-                    }
-                } else {
-                    localTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-fast-fallback")
-                    activity.window.decorView.postDelayed({
-                        if (generation.get() == myGeneration && !interrupted) relisten(activity)
-                    }, estimateSpeechMs(text))
-                }
+                relisten(activity)
             }
         }
-
-        activity.window.decorView.postDelayed({
-            if (generation.get() == myGeneration && !started.get()) fallback()
-        }, 4500L)
 
         chunks.forEachIndexed { index, part ->
             pool.execute {
                 if (failed.get() || generation.get() != myGeneration) return@execute
                 try {
-                    files[index] = download(activity, prefs, part, index)
+                    files[index] = downloadClone(activity, part, index)
                     if (index == 0 && started.compareAndSet(false, true) && generation.get() == myGeneration) {
                         activity.runOnUiThread {
                             onStart?.invoke()
@@ -106,7 +85,21 @@ object FastVoice {
                         }
                     }
                 } catch (_: Exception) {
-                    if (index == 0) fallback()
+                    if (index == 0) {
+                        // One immediate retry for transient network/provider delays.
+                        try {
+                            files[index] = downloadClone(activity, part, index)
+                            if (started.compareAndSet(false, true) && generation.get() == myGeneration) {
+                                activity.runOnUiThread {
+                                    onStart?.invoke()
+                                    startBargeIn(activity, text, myGeneration)
+                                    play(activity, files, chunks.size, 0, myGeneration)
+                                }
+                            }
+                        } catch (_: Exception) {
+                            failCleanly()
+                        }
+                    }
                 }
             }
         }
@@ -115,12 +108,12 @@ object FastVoice {
     private fun chunk(text: String): List<String> {
         val out = mutableListOf<String>()
         var rest = text
-        val max = 140
+        val max = 92
         while (rest.isNotBlank()) {
             if (rest.length <= max) { out += rest; break }
             val w = rest.take(max + 1)
             var cut = listOf(w.lastIndexOf('.'), w.lastIndexOf('?'), w.lastIndexOf('!'), w.lastIndexOf(','), w.lastIndexOf(' ')).maxOrNull() ?: max
-            if (cut < 55) cut = max
+            if (cut < 38) cut = max
             val take = (cut + if (w.getOrNull(cut) in listOf('.', '?', '!', ',')) 1 else 0).coerceAtMost(rest.length)
             out += rest.take(take).trim()
             rest = rest.drop(take).trim()
@@ -128,22 +121,29 @@ object FastVoice {
         return out.filter { it.isNotBlank() }
     }
 
-    private fun download(activity: Activity, prefs: SharedPreferences, text: String, index: Int): File {
+    private fun downloadClone(activity: Activity, text: String, index: Int): File {
         val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
-            connectTimeout = 3500
-            readTimeout = 12000
+            connectTimeout = 2500
+            readTimeout = 15000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "audio/mpeg")
+            setRequestProperty("Connection", "keep-alive")
         }
-        val voice = prefs.getString("voice", "openvoice") ?: "openvoice"
-        val provider = if (voice == "openvoice") "openvoice" else "noiz"
         c.outputStream.use {
-            it.write(JSONObject().put("text", text).put("voice", voice).put("provider", provider).put("speed", 1.18).toString().toByteArray())
+            it.write(
+                JSONObject()
+                    .put("text", text)
+                    .put("voice", "mi_voz")
+                    .put("provider", "noiz")
+                    .put("speed", 1.18)
+                    .toString()
+                    .toByteArray()
+            )
         }
         if (c.responseCode !in 200..299) throw IllegalStateException("TTS ${c.responseCode}")
-        return File(activity.cacheDir, "jarvis-fast-${System.currentTimeMillis()}-$index.mp3").also { f ->
+        return File(activity.cacheDir, "jarvis-clone-${System.currentTimeMillis()}-$index.mp3").also { f ->
             c.inputStream.use { input -> f.outputStream().use { input.copyTo(it) } }
         }
     }
@@ -154,12 +154,12 @@ object FastVoice {
             stopBargeRecognizer()
             activity.window.decorView.postDelayed({
                 if (generation.get() == myGeneration && !interrupted) relisten(activity)
-            }, 180L)
+            }, 120L)
             return
         }
         val file = files[index]
         if (file == null) {
-            activity.window.decorView.postDelayed({ play(activity, files, total, index, myGeneration) }, 80L)
+            activity.window.decorView.postDelayed({ play(activity, files, total, index, myGeneration) }, 45L)
             return
         }
         runCatching { player?.release() }
@@ -212,7 +212,7 @@ object FastVoice {
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 300L)
             }
             runCatching { recognizer.startListening(intent) }
-        }, 350L)
+        }, 280L)
     }
 
     private fun maybeInterrupt(activity: Activity, heardRaw: String, assistantNorm: String, myGeneration: Int, final: Boolean) {
@@ -220,14 +220,12 @@ object FastVoice {
         val heard = heardRaw.trim()
         val heardNorm = normalize(heard)
         if (heardNorm.length < 3) return
-        // Ignore probable echo of Jarvis' own speech. Anything materially different is treated as barge-in.
         val looksLikeEcho = assistantNorm.contains(heardNorm) || heardNorm.split(' ').filter { it.length > 2 }.all { assistantNorm.contains(it) }
         if (looksLikeEcho && !final) return
         if (looksLikeEcho) return
 
         interrupted = true
         runCatching { player?.stop() }; runCatching { player?.release() }; player = null
-        runCatching { localTts?.stop() }
         stopBargeRecognizer()
         activity.runOnUiThread {
             val input = activity.findViewById<EditText>(R.id.input)
@@ -255,6 +253,4 @@ object FastVoice {
         .replace(Regex("[^a-z0-9 ]+"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
-
-    private fun estimateSpeechMs(text: String): Long = ((text.length / 12.0) * 1000.0).toLong().coerceIn(1200L, 45000L)
 }
