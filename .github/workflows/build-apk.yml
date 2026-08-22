@@ -71,19 +71,14 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
-
           p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
           s = p.read_text()
-
-          # Faster recognition / network timeouts.
           s = s.replace('connectTimeout = 12000; readTimeout = 60000', 'connectTimeout = 8000; readTimeout = 45000')
           s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)', '''putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)''')
           s = s.replace('● Escuchando 7 s · OpenAI…', '● Escuchando 4 s · Jarvis…')
           s = s.replace('handler.postDelayed({ stopRecorder(true) }, 7000)', 'handler.postDelayed({ stopRecorder(true) }, 4000)')
-
           old_append = '''    private fun append(role: String, text: String, speak: Boolean = false) {
         val arr = historyArray(); arr.put(JSONObject().put("role", role).put("content", text))
         prefs.edit().putString("chat_$conversationId", arr.toString()).apply()
@@ -91,23 +86,18 @@ jobs:
         updateChatMeta(text, role)
         if (role == "assistant" && speak) speakWithOpenAI(text)
     }'''
-
           new_append = '''    private fun append(role: String, text: String, speak: Boolean = false) {
         val arr = historyArray(); arr.put(JSONObject().put("role", role).put("content", text))
         prefs.edit().putString("chat_$conversationId", arr.toString()).apply()
         updateChatMeta(text, role)
         if (role == "assistant" && speak) {
-            // Do not reveal the whole answer several seconds before the cloned voice.
-            // Each block is displayed exactly when its audio begins.
             speakWithOpenAI(text, true)
         } else {
             transcript.append(if (role == "user") "\\nTÚ\\n$text\\n" else "\\n${assistantName().uppercase()}\\n$text\\n")
         }
     }'''
-          if old_append not in s:
-              raise SystemExit('append block not found')
-          s = s.replace(old_append, new_append)
-
+          if old_append in s:
+              s = s.replace(old_append, new_append)
           start = s.index('    private fun downloadSpeech(')
           end = s.index('    private fun testBackend(', start)
           replacement = r'''    private fun downloadSpeech(endpoint: String, text: String, outFile: File) {
@@ -115,11 +105,7 @@ jobs:
             requestMethod = "POST"; connectTimeout = 8000; readTimeout = 45000; doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "audio/mpeg")
         }
-        val payload = JSONObject()
-            .put("text", text)
-            .put("voice", prefs.getString("voice", "coral") ?: "coral")
-            .put("speed", 1.08)
-            .toString()
+        val payload = JSONObject().put("text", text).put("voice", prefs.getString("voice", "coral") ?: "coral").put("speed", 1.08).toString()
         c.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
         val code = c.responseCode
         if (code !in 200..299) throw IllegalStateException("TTS HTTP $code")
@@ -127,26 +113,16 @@ jobs:
     }
 
     private fun splitForSpeech(text: String): List<String> {
-        // Split only for transport/latency. Punctuation, markdown dashes and paragraph breaks
-        // never terminate playback: every block is queued until the complete answer is read.
-        val clean = text
-            .replace(Regex("(?m)^\\s*[-•*]+\\s*"), "")
-            .replace(Regex("[\\r\\n]+"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+        val clean = text.replace(Regex("(?m)^\\s*[-•*]+\\s*"), "").replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
         if (clean.isBlank()) return emptyList()
         val max = 650
         val out = mutableListOf<String>()
         var rest = clean
         while (rest.isNotBlank()) {
-            if (rest.length <= max) {
-                out.add(rest)
-                break
-            }
+            if (rest.length <= max) { out.add(rest); break }
             var cut = rest.take(max + 1).lastIndexOf(' ')
             if (cut < 320) cut = max
-            out.add(rest.take(cut).trim())
-            rest = rest.drop(cut).trim()
+            out.add(rest.take(cut).trim()); rest = rest.drop(cut).trim()
         }
         return out
     }
@@ -155,17 +131,13 @@ jobs:
         val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
         val chunks = splitForSpeech(text)
         if (chunks.isEmpty()) return
-        voicePlayer?.release()
-        voicePlayer = null
+        voicePlayer?.release(); voicePlayer = null
         status.text = "● Preparando voz…"
         playSpeechChunk(resolveEndpoint(backend, "speech"), chunks, 0, revealWithAudio)
     }
 
     private fun playSpeechChunk(endpoint: String, chunks: List<String>, index: Int, revealWithAudio: Boolean) {
-        if (index >= chunks.size) {
-            runOnUiThread { status.text = "● Listo · respuesta completa" }
-            return
-        }
+        if (index >= chunks.size) { runOnUiThread { status.text = "● Listo · respuesta completa" }; return }
         Thread {
             val file = File(cacheDir, "jarvis-reply-${System.currentTimeMillis()}-$index.mp3")
             try {
@@ -176,27 +148,13 @@ jobs:
                         setDataSource(file.absolutePath)
                         setOnPreparedListener { p ->
                             if (revealWithAudio) {
-                                if (index == 0) transcript.append("\\n${assistantName().uppercase()}\\n${chunks[index]}")
-                                else transcript.append(" ${chunks[index]}")
+                                if (index == 0) transcript.append("\\n${assistantName().uppercase()}\\n${chunks[index]}") else transcript.append(" ${chunks[index]}")
                                 if (index == chunks.lastIndex) transcript.append("\\n")
                             }
-                            status.text = "● Hablando · ${index + 1}/${chunks.size}"
-                            p.start()
+                            status.text = "● Hablando · ${index + 1}/${chunks.size}"; p.start()
                         }
-                        setOnCompletionListener { p ->
-                            p.release()
-                            if (voicePlayer === p) voicePlayer = null
-                            file.delete()
-                            playSpeechChunk(endpoint, chunks, index + 1, revealWithAudio)
-                        }
-                        setOnErrorListener { p, _, _ ->
-                            p.release()
-                            if (voicePlayer === p) voicePlayer = null
-                            file.delete()
-                            // Continue with the next block instead of stopping the whole answer.
-                            playSpeechChunk(endpoint, chunks, index + 1, revealWithAudio)
-                            true
-                        }
+                        setOnCompletionListener { p -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1, revealWithAudio) }
+                        setOnErrorListener { p, _, _ -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1, revealWithAudio); true }
                         prepareAsync()
                     }
                 }
@@ -204,8 +162,7 @@ jobs:
                 file.delete()
                 runOnUiThread {
                     if (revealWithAudio) {
-                        if (index == 0) transcript.append("\\n${assistantName().uppercase()}\\n${chunks[index]}")
-                        else transcript.append(" ${chunks[index]}")
+                        if (index == 0) transcript.append("\\n${assistantName().uppercase()}\\n${chunks[index]}") else transcript.append(" ${chunks[index]}")
                         if (index == chunks.lastIndex) transcript.append("\\n")
                     }
                     tts?.speak(chunks[index], TextToSpeech.QUEUE_ADD, null, "jarvis-fallback-$index")
