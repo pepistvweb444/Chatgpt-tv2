@@ -78,5 +78,9 @@ object JarvisSync {
         } finally { applyingRemote = false }
     }
 
-    private fun shouldSync(k: String): Boolean = k == "chatIndex" || k == "currentConversation" || k == "mcps" || k == "voice" || k == "assistantName" || k == "wakeWord" || k.startsWith("chat_") || k.startsWith("response_") || k.startsWith("phone_") || k.startsWith("reminder_")
+    private fun shouldSync(k: String): Boolean =
+        k == "chatIndex" || k == "currentConversation" || k == "mcps" || k == "voice" || k == "assistantName" ||
+        k == "wakeWord" || k == "notification_feed" || k == "call_feed" || k == "last_incoming_call" ||
+        k == "notification_listener_connected" || k.startsWith("chat_") || k.startsWith("response_") ||
+        k.startsWith("phone_") || k.startsWith("reminder_")
 }
