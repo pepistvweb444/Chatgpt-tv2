@@ -7,22 +7,23 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaRecorder
-import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.Normalizer
 import java.util.Locale
 
 class WakeWordService : Service() {
     @Volatile private var running = false
-    private var recorder: MediaRecorder? = null
-    private val backend = "https://chatgpt-tv2.vercel.app"
+    @Volatile private var triggered = false
+    private var recognizer: SpeechRecognizer? = null
+    private val main = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
 
     override fun onCreate() {
@@ -33,61 +34,86 @@ class WakeWordService : Service() {
             71,
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentTitle("Ale / Jarvis escuchando")
-                .setContentText("Di “Hola Ale” o “Hola Jarvis” para abrir el asistente")
+                .setContentTitle("Leo / Jarvis escuchando")
+                .setContentText("Di “Hola Leo” o “Hola Jarvis”")
                 .setOngoing(true)
                 .setContentIntent(open)
                 .build()
         )
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            running = true
-            Thread { loop() }.start()
-        } else stopSelf()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            stopSelf(); return
+        }
+        running = true
+        main.post { startRecognizer() }
     }
 
-    private fun loop() {
-        while (running) {
-            val f = File(cacheDir, "wake-${System.currentTimeMillis()}.m4a")
-            try {
-                val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
-                recorder = r
-                r.setAudioSource(MediaRecorder.AudioSource.MIC)
-                r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                r.setAudioSamplingRate(16000)
-                r.setAudioEncodingBitRate(32000)
-                r.setOutputFile(f.absolutePath)
-                r.prepare(); r.start()
-                Thread.sleep(2200)
-                runCatching { r.stop() }; runCatching { r.release() }; recorder = null
-                if (f.exists() && f.length() > 256) {
-                    val text = normalize(transcribe(f))
-                    if (matchesWakeWord(text)) {
-                        val i = Intent(this, ChatActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            putExtra("wake_word_triggered", true)
-                            putExtra("continuous_voice", true)
-                        }
-                        startActivity(i)
-                        Thread.sleep(1800)
-                    }
-                }
-            } catch (_: Exception) {
-                runCatching { recorder?.release() }; recorder = null
-                try { Thread.sleep(1200) } catch (_: Exception) {}
-            } finally { f.delete() }
+    private fun startRecognizer() {
+        if (!running || triggered) return
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            main.postDelayed({ startRecognizer() }, 1500L)
+            return
         }
+        runCatching { recognizer?.destroy() }
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val candidates = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                    candidates.firstOrNull { matchesWakeWord(normalize(it)) }?.let { trigger() }
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                    if (candidates.any { matchesWakeWord(normalize(it)) }) trigger() else restartSoon(120L)
+                }
+
+                override fun onError(error: Int) {
+                    if (running && !triggered) restartSoon(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 450L else 180L)
+                }
+            })
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 300L)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        }
+        runCatching { recognizer?.startListening(intent) }.onFailure { restartSoon(500L) }
+    }
+
+    private fun restartSoon(delay: Long) {
+        main.postDelayed({ if (running && !triggered) startRecognizer() }, delay)
+    }
+
+    private fun trigger() {
+        if (!running || triggered) return
+        triggered = true
+        runCatching { recognizer?.cancel() }
+        val i = Intent(this, ChatActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra("wake_word_triggered", true)
+            putExtra("continuous_voice", true)
+        }
+        runCatching { startActivity(i) }
+        main.postDelayed({ triggered = false; if (running) startRecognizer() }, 3000L)
     }
 
     private fun matchesWakeWord(text: String): Boolean {
         if (text.isBlank()) return false
-        val configured = prefs.getString("wake_names", "ale,jarvis").orEmpty()
-            .split(',')
-            .map { normalize(it) }
-            .filter { it.isNotBlank() }
-            .ifEmpty { listOf("ale", "jarvis") }
+        val configured = prefs.getString("wake_names", "leo,jarvis,ale").orEmpty()
+            .split(',').map { normalize(it) }.filter { it.isNotBlank() }
+            .ifEmpty { listOf("leo", "jarvis", "ale") }
         return configured.any { name ->
-            text.contains("hola $name") || text.contains("oye $name") || text.contains("hey $name") || text.contains("eh $name")
+            text == name || text.contains("hola $name") || text.contains("oye $name") || text.contains("hey $name") || text.contains("eh $name")
         }
     }
 
@@ -97,30 +123,22 @@ class WakeWordService : Service() {
         .replace(Regex("\\s+"), " ")
         .trim()
 
-    private fun transcribe(file: File): String {
-        val c = (URL("$backend/api/transcribe").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 6000; readTimeout = 14000
-            setRequestProperty("Content-Type", "audio/mp4"); setRequestProperty("X-Filename", "wake.m4a")
-        }
-        c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
-        val code = c.responseCode
-        val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) return ""
-        return runCatching { JSONObject(body).optString("text") }.getOrDefault("")
-    }
-
     override fun onDestroy() {
         running = false
-        runCatching { recorder?.stop() }; runCatching { recorder?.release() }; recorder = null
+        main.removeCallbacksAndMessages(null)
+        runCatching { recognizer?.cancel() }
+        runCatching { recognizer?.destroy() }
+        recognizer = null
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Ale / Jarvis wake word", NotificationManager.IMPORTANCE_LOW))
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL, "Leo / Jarvis wake word", NotificationManager.IMPORTANCE_LOW)
+            )
         }
     }
 
