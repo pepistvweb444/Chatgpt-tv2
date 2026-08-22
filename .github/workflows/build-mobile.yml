@@ -6,9 +6,6 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/build-mobile.yml'
-      - 'gradle.properties'
-      - 'settings.gradle.kts'
-      - 'build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -21,114 +18,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Force AndroidX
-        shell: bash
-        run: |
-          cat > gradle.properties <<'EOF'
-          android.useAndroidX=true
-          android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
-          kotlin.code.style=official
-          EOF
-
-      - name: Apply mobile low-latency voice fixes
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
-          s = p.read_text()
-          s = s.replace('connectTimeout = 12000; readTimeout = 60000', 'connectTimeout = 8000; readTimeout = 45000')
-          s = s.replace('handler.postDelayed({ stopRecorder(true) }, 7000)', 'handler.postDelayed({ stopRecorder(true) }, 4000)')
-          s = s.replace('''                runOnUiThread {
-                    append("assistant", result.first)
-                    status.text = "Listo · contexto guardado"
-                    speak(result.first)
-                }''', '''                runOnUiThread {
-                    status.text = "Preparando voz…"
-                    speakAndReveal(result.first)
-                }''')
-          start = s.index('    private fun splitForSpeech(')
-          end = s.index('    @Deprecated("Deprecated in Java")', start)
-          replacement = r'''    private fun splitForSpeech(text: String): List<String> {
-        val clean = text.replace(Regex("(?m)^\\s*[-•*]+\\s*"), "").replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
-        if (clean.isBlank()) return emptyList()
-        val max = 320
-        val out = mutableListOf<String>()
-        var rest = clean
-        while (rest.isNotBlank()) {
-            if (rest.length <= max) { out.add(rest); break }
-            var cut = rest.take(max + 1).lastIndexOf(' ')
-            if (cut < 180) cut = max
-            out.add(rest.take(cut).trim()); rest = rest.drop(cut).trim()
-        }
-        return out
-    }
-
-    private fun downloadSpeechChunk(chunk: String, index: Int): File {
-        val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 7000; readTimeout = 35000
-            setRequestProperty("Content-Type", "application/json")
-        }
-        val voice = prefs.getString("voice", "noiz") ?: "noiz"
-        c.outputStream.use { it.write(JSONObject().put("text", chunk).put("voice", voice).put("provider", if (voice == "noiz" || voice == "openvoice") voice else "noiz").put("speed", 1.18).toString().toByteArray()) }
-        if (c.responseCode !in 200..299) throw IllegalStateException("TTS HTTP ${c.responseCode}")
-        val file = File(cacheDir, "reply-${System.currentTimeMillis()}-$index.mp3")
-        c.inputStream.use { inputStream -> file.outputStream().use { inputStream.copyTo(it) } }
-        return file
-    }
-
-    private fun speakAndReveal(text: String) {
-        val chunks = splitForSpeech(text)
-        if (chunks.isEmpty()) { append("assistant", text); return }
-        player?.release(); player = null
-        Thread {
-            try {
-                val first = downloadSpeechChunk(chunks[0], 0)
-                runOnUiThread {
-                    append("assistant", text)
-                    status.text = "Hablando · 1/${chunks.size}"
-                    playPreparedChunk(chunks, 0, first)
-                }
-            } catch (_: Exception) {
-                runOnUiThread { append("assistant", text); status.text = "Listo · contexto guardado" }
-            }
-        }.start()
-    }
-
-    private fun speak(text: String) {
-        val chunks = splitForSpeech(text)
-        if (chunks.isEmpty()) return
-        player?.release(); player = null
-        playSpeechChunk(chunks, 0)
-    }
-
-    private fun playPreparedChunk(chunks: List<String>, index: Int, file: File) {
-        player?.release()
-        player = MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            setOnPreparedListener { p -> status.text = "Hablando · ${index + 1}/${chunks.size}"; p.start() }
-            setOnCompletionListener { p -> p.release(); file.delete(); if (player === p) player = null; playSpeechChunk(chunks, index + 1) }
-            setOnErrorListener { p, _, _ -> p.release(); file.delete(); if (player === p) player = null; playSpeechChunk(chunks, index + 1); true }
-            prepareAsync()
-        }
-    }
-
-    private fun playSpeechChunk(chunks: List<String>, index: Int) {
-        if (index >= chunks.size) { status.text = "Listo · respuesta completa"; return }
-        Thread {
-            try {
-                val file = downloadSpeechChunk(chunks[index], index)
-                runOnUiThread { playPreparedChunk(chunks, index, file) }
-            } catch (_: Exception) { runOnUiThread { playSpeechChunk(chunks, index + 1) } }
-        }.start()
-    }
-
-'''
-          s = s[:start] + replacement + s[end:]
-          p.write_text(s)
-          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -150,18 +39,26 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Clean and build mobile only
+      - name: Configure AndroidX
         shell: bash
         run: |
-          gradle --no-daemon --stacktrace -Dandroid.useAndroidX=true -Dandroid.enableJetifier=true -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true clean :mobile:assembleDebug
+          printf '%s\n' \
+            'android.useAndroidX=true' \
+            'android.enableJetifier=true' \
+            'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
+            'kotlin.code.style=official' > gradle.properties
 
-      - name: Copy and verify APK
+      - name: Build Mobile APK
+        shell: bash
+        run: gradle --no-daemon --stacktrace clean :mobile:assembleDebug
+
+      - name: Verify Mobile APK
         shell: bash
         run: |
           cp mobile/build/outputs/apk/debug/mobile-debug.apk Jarvis-Mobile-v0.6.5-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.6.5-debug.apk
 
-      - name: Upload mobile APK
+      - name: Upload Mobile APK
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-Mobile-v0.6.5-debug
