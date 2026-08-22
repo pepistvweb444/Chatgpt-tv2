@@ -1,0 +1,13 @@
+services:
+  jarvis-openvoice:
+    build:
+      context: ..
+      dockerfile: openvoice-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - jarvis_voice_data:/data
+
+volumes:
+  jarvis_voice_data:
