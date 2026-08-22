@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jarvis-mobile-${{ github.ref }}
+  group: jarvis-mobile-v065
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +22,61 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Apply mobile runtime fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('mobile/src/main/java/com/jarvis/mobile/ChatActivity.kt')
+          s = p.read_text()
+          s = s.replace('runOnUiThread { append("assistant", result.first); status.text = "● Listo · memoria activa"; speak(result.first) }',
+                        'runOnUiThread { status.text = "Preparando voz…"; FastVoice.speak(this, prefs, result.first) { append("assistant", result.first); status.text = "● Hablando · memoria activa" } }')
+          s = s.replace('if (local.handled) { append("assistant", local.message); status.text = "Acción del teléfono"; speak(local.message); return }',
+                        'if (local.handled) { status.text = "Preparando voz…"; FastVoice.speak(this, prefs, local.message) { append("assistant", local.message); status.text = "Acción del teléfono" }; return }')
+          p.write_text(s)
+
+          p = Path('mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt')
+          s = p.read_text()
+          old = '''    private fun findPhone(query: String): Pair<String, String>? {
+        val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
+        activity.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?", arrayOf("%$query%"), "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC")?.use { c -> if (c.moveToFirst()) return c.getString(0) to c.getString(1) }
+        return null
+    }'''
+          new = '''    private fun normalizeContact(value: String): String = java.text.Normalizer.normalize(value.lowercase(java.util.Locale.getDefault()), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    private fun findPhone(query: String): Pair<String, String>? {
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return null
+        val q = normalizeContact(query).removePrefix("a ").removePrefix("al ").trim()
+        if (q.isBlank()) return null
+        val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
+        var best: Pair<String, String>? = null
+        var bestScore = -1
+        activity.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, null, null, null)?.use { c ->
+            val ni = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val pi = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (c.moveToNext()) {
+                val name = if (ni >= 0) c.getString(ni).orEmpty() else ""
+                val phone = if (pi >= 0) c.getString(pi).orEmpty() else ""
+                if (name.isBlank() || phone.isBlank()) continue
+                val n = normalizeContact(name)
+                val score = when {
+                    n == q -> 100
+                    n.startsWith(q) -> 90
+                    n.split(' ').any { it == q } -> 85
+                    n.contains(q) -> 75
+                    q.split(' ').all { token -> token.length < 2 || n.contains(token) } -> 65
+                    else -> 0
+                }
+                if (score > bestScore) { bestScore = score; best = name to phone }
+            }
+        }
+        return if (bestScore >= 60) best else null
+    }'''
+          if old in s: s = s.replace(old, new)
+          p.write_text(s)
+          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
