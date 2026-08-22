@@ -10,14 +10,30 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:name=".JarvisApplication"
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"
         android:icon="@drawable/app_icon"
         android:label="Jarvis TV"
         android:theme="@style/Theme.JarvisTV">
 
+        <activity android:name=".BriefingActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".SyncSettingsActivity" android:exported="true" android:screenOrientation="landscape" android:label="Jarvis Sync">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".AlarmSettingsActivity" android:exported="true" android:screenOrientation="landscape" android:label="Jarvis Alarmas">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -52,6 +68,7 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <receiver android:name=".AlarmReceiver" android:enabled="true" android:exported="false" />
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
