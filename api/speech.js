@@ -18,8 +18,6 @@ export default async function handler(req, res) {
   const body = req.body || {};
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
 
-  // Noiz can pause or stop on Markdown list markers/new lines. Convert the
-  // assistant answer to continuous spoken punctuation before sending it to any TTS.
   const speechText = normalizeSpeechText(body.text);
   if (!speechText) return res.status(400).json({ error: 'text_required' });
 
@@ -27,17 +25,16 @@ export default async function handler(req, res) {
   const requestedVoice = String(body.voice || '').toLowerCase();
   const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.15);
 
-  // 1) NOIZ AI — preferred when configured. It can clone directly from a short
-  // reference sample, so Jarvis does not need to persist a separate local model.
+  // 1) NOIZ cloned voice — primary path for Jarvis/Ale.
   const noizKey = process.env.NOIZ_API_KEY || '';
   const noizVoiceId = process.env.NOIZ_VOICE_ID || '';
   const noizRefUrl = process.env.NOIZ_REFERENCE_AUDIO_URL || '';
-  const preferNoiz = requestedProvider === 'noiz' || process.env.JARVIS_TTS_PROVIDER === 'noiz';
+  const preferNoiz = requestedProvider === 'noiz' || requestedVoice === 'my_voice' || requestedVoice === 'mi_voz' || process.env.JARVIS_TTS_PROVIDER === 'noiz';
 
-  if (noizKey && (preferNoiz || requestedVoice === 'noiz' || requestedVoice === 'my_voice' || requestedVoice === 'mi_voz')) {
+  if (noizKey && preferNoiz) {
     try {
       const form = new FormData();
-      form.append('text', speechText.slice(0, 1800));
+      form.append('text', speechText.slice(0, 1000));
       form.append('output_format', 'mp3');
       form.append('speed', String(speed));
       form.append('target_lang', process.env.NOIZ_TARGET_LANG || 'es');
@@ -46,7 +43,7 @@ export default async function handler(req, res) {
       if (noizVoiceId) {
         form.append('voice_id', noizVoiceId);
       } else if (noizRefUrl) {
-        const ref = await fetch(noizRefUrl, { signal: AbortSignal.timeout(15000) });
+        const ref = await fetch(noizRefUrl, { signal: AbortSignal.timeout(5000) });
         if (!ref.ok) throw new Error(`Noiz reference audio HTTP ${ref.status}`);
         const refBytes = await ref.arrayBuffer();
         const refType = ref.headers.get('content-type') || 'audio/mp4';
@@ -59,7 +56,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { Authorization: noizKey },
         body: form,
-        signal: AbortSignal.timeout(90000)
+        signal: AbortSignal.timeout(7000)
       });
 
       if (noiz.ok) {
@@ -71,11 +68,11 @@ export default async function handler(req, res) {
       }
       console.warn('Noiz synthesize failed', noiz.status, await noiz.text());
     } catch (error) {
-      console.warn('Noiz unavailable; falling back', error?.message || error);
+      console.warn('Noiz unavailable; falling back to cloned OpenVoice', error?.message || error);
     }
   }
 
-  // 2) Self-hosted OpenVoice fallback on DigitalOcean.
+  // 2) Self-hosted OpenVoice cloned profile — fast cloned fallback.
   const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://165.22.83.150:8000').replace(/\/$/, '');
   const forceOpenAI = requestedProvider === 'openai';
   const preferOpenVoice = !forceOpenAI && Boolean(openVoiceUrl);
@@ -86,35 +83,36 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: speechText.slice(0, 1800),
+          text: speechText.slice(0, 1000),
           profile: process.env.OPENVOICE_PROFILE || 'Jarvis',
           language: process.env.OPENVOICE_LANGUAGE || 'ES',
           speed
         }),
-        signal: AbortSignal.timeout(60000)
+        signal: AbortSignal.timeout(9000)
       });
       if (ov.ok) {
         const audio = Buffer.from(await ov.arrayBuffer());
         res.setHeader('Content-Type', ov.headers.get('content-type') || 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('X-Jarvis-Voice-Mode', 'openvoice-digitalocean');
+        res.setHeader('X-Jarvis-Voice-Mode', 'openvoice-clone');
         return res.status(200).send(audio);
       }
       console.warn('OpenVoice synthesize failed', ov.status, await ov.text());
     } catch (error) {
-      console.warn('OpenVoice unavailable; falling back to OpenAI', error?.message || error);
+      console.warn('OpenVoice unavailable', error?.message || error);
     }
   }
 
-  // 3) OpenAI final fallback so Jarvis never loses speech entirely.
+  // Do not silently switch Jarvis/Ale to an unrelated stock voice when clone mode is requested.
+  if (preferNoiz || requestedVoice === 'my_voice' || requestedVoice === 'mi_voz') {
+    return res.status(503).json({ error: 'cloned_voice_temporarily_unavailable' });
+  }
+
+  // 3) OpenAI only for explicitly selected stock voices.
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return res.status(503).json({ error: 'No TTS provider available. Configure NOIZ_API_KEY, OPENVOICE_URL or OPENAI_API_KEY.' });
+  if (!key) return res.status(503).json({ error: 'No TTS provider available.' });
 
   const openAiRequestedVoice = body.voice || process.env.OPENAI_TTS_VOICE || 'coral';
-  const customVoiceId = process.env.JARVIS_CUSTOM_VOICE_ID || '';
-  const voice = (requestedVoice === 'my_voice' || requestedVoice === 'mi_voz') && customVoiceId
-    ? { id: customVoiceId }
-    : ((requestedVoice === 'openvoice' || requestedVoice === 'noiz') ? (process.env.OPENAI_TTS_VOICE || 'coral') : openAiRequestedVoice);
   const instructions = body.instructions ||
     'Habla en español natural, ágil y conversacional, aproximadamente un 15 por ciento más rápido de lo normal. Evita pausas largas, responde con energía moderada y pronunciación clara.';
 
@@ -127,12 +125,13 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
-        voice,
-        input: speechText.slice(0, 1400),
+        voice: openAiRequestedVoice,
+        input: speechText.slice(0, 1000),
         instructions,
         speed,
         response_format: 'mp3'
-      })
+      }),
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!response.ok) {
@@ -142,7 +141,7 @@ export default async function handler(req, res) {
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Jarvis-Voice-Mode', customVoiceId ? 'custom-fast' : 'fast');
+    res.setHeader('X-Jarvis-Voice-Mode', 'stock');
     const audio = Buffer.from(await response.arrayBuffer());
     return res.status(200).send(audio);
   } catch (error) {
