@@ -23,10 +23,12 @@ class LocalActionRouter(private val activity: Activity) {
         val lower = text.lowercase()
         when {
             lower.startsWith("llama a ") || lower.startsWith("llamar a ") -> return callContact(text.substringAfter(" ").substringAfter("a ").trim())
+            lower.startsWith("llama al ") || lower.startsWith("llamar al ") -> return callContact(text.substringAfter("al ").trim())
+            lower.matches(Regex("^(llama|llamar)\\s+[+0-9][0-9 .-]{5,}$")) -> return callNumber(text.substringAfter(" ").trim())
             lower.contains("tienes acceso a mis mensajes") || lower.contains("tiene acceso a mis mensajes") || lower.contains("puedes leer mis mensajes") || lower.contains("puede leer mis mensajes") || lower.contains("acceso a los mensajes") || lower.contains("acceso a mis sms") -> return messageAccessStatus()
-            lower.contains("whatsapp") && (lower.contains("lee") || lower.contains("léeme") || lower.contains("mensajes") || lower.contains("escrito")) -> return readNotificationMessages("whatsapp", 10)
-            lower.contains("rcs") && (lower.contains("lee") || lower.contains("léeme") || lower.contains("mensajes")) -> return readNotificationMessages("messages", 10)
-            lower.contains("últimos mensajes") || lower.contains("ultimos mensajes") || lower.contains("últimos sms") || lower.contains("ultimos sms") || lower == "lee mis mensajes" || lower == "léeme mis mensajes" || lower == "leeme mis mensajes" || lower == "lee los mensajes" || lower == "léeme los mensajes" || lower == "leeme los mensajes" || lower == "mis mensajes" || lower == "mensajes" -> return readRecentSms(8)
+            lower.contains("whatsapp") && (lower.contains("lee") || lower.contains("léeme") || lower.contains("leeme") || lower.contains("mensajes") || lower.contains("escrito")) -> return readNotificationMessages("whatsapp", 12)
+            lower.contains("rcs") && (lower.contains("lee") || lower.contains("léeme") || lower.contains("leeme") || lower.contains("mensajes")) -> return readNotificationMessages("messages", 12)
+            lower.contains("últimos mensajes") || lower.contains("ultimos mensajes") || lower.contains("últimos sms") || lower.contains("ultimos sms") || lower == "lee mis mensajes" || lower == "léeme mis mensajes" || lower == "leeme mis mensajes" || lower == "lee los mensajes" || lower == "léeme los mensajes" || lower == "leeme los mensajes" || lower == "mis mensajes" || lower == "mensajes" -> return readRecentSms(10)
             lower.startsWith("qué me ha escrito ") || lower.startsWith("que me ha escrito ") || lower.startsWith("qué dice ") || lower.startsWith("que dice ") -> {
                 val name = text.substringAfter("escrito ", text.substringAfter("dice ")).trim()
                 return readSmsFrom(name)
@@ -53,21 +55,20 @@ class LocalActionRouter(private val activity: Activity) {
         val read = ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
         val receive = ContextCompat.checkSelfPermission(activity, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
         val send = ContextCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        val prefs = activity.getSharedPreferences("jarvis_mobile", Activity.MODE_PRIVATE)
+        val listener = prefs.getBoolean("notification_listener_connected", false)
         val feed = notificationFeed()
-        var whatsapp = 0
-        var messages = 0
+        var whatsapp = 0; var messages = 0
         for (i in 0 until feed.length()) {
             val pkg = feed.optJSONObject(i)?.optString("package").orEmpty()
             if (pkg.contains("whatsapp", true)) whatsapp++
             if (pkg.contains("messag", true) || pkg.contains("sms", true)) messages++
         }
         if (!read) ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS), 72)
-        return Result(true, "SMS lectura: ${if (read) "sí" else "no"} · recepción: ${if (receive) "sí" else "no"} · envío: ${if (send) "sí" else "no"}. Notificaciones capturadas: WhatsApp $whatsapp · Mensajes/RCS $messages. Para WhatsApp y RCS activa también Acceso a notificaciones de Jarvis.")
+        return Result(true, "SMS lectura: ${if (read) "sí" else "no"} · recepción: ${if (receive) "sí" else "no"} · envío: ${if (send) "sí" else "no"}. Acceso a notificaciones: ${if (listener) "conectado" else "no conectado"}. Capturados: WhatsApp $whatsapp · Mensajes/RCS $messages.")
     }
 
-    private fun notificationFeed(): JSONArray = runCatching {
-        JSONArray(activity.getSharedPreferences("jarvis_mobile", Activity.MODE_PRIVATE).getString("notification_feed", "[]"))
-    }.getOrElse { JSONArray() }
+    private fun notificationFeed(): JSONArray = runCatching { JSONArray(activity.getSharedPreferences("jarvis_mobile", Activity.MODE_PRIVATE).getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
 
     private fun readNotificationMessages(filter: String, limit: Int): Result {
         val feed = notificationFeed(); val out = mutableListOf<String>(); val q = filter.lowercase()
@@ -82,9 +83,10 @@ class LocalActionRouter(private val activity: Activity) {
                 "messages" -> pkg.contains("messag", true) || pkg.contains("sms", true)
                 else -> "$pkg $who $body".contains(q, true)
             }
-            if (match && body.isNotBlank()) out += "${who.ifBlank { pkg }}: ${body.take(400)}"
+            if (match && body.isNotBlank()) out += "${who.ifBlank { pkg }}: ${body.take(700)}"
         }
-        return Result(true, if (out.isEmpty()) "No encuentro mensajes de $filter en las notificaciones guardadas. Activa Acceso a notificaciones y deja que llegue al menos una notificación nueva." else "Mensajes recientes:\n\n" + out.joinToString("\n\n"))
+        val connected = activity.getSharedPreferences("jarvis_mobile", Activity.MODE_PRIVATE).getBoolean("notification_listener_connected", false)
+        return Result(true, if (out.isEmpty()) "No encuentro mensajes de $filter. Acceso a notificaciones: ${if (connected) "conectado" else "NO conectado"}. Activa Jarvis en Acceso a notificaciones y haz que llegue una notificación nueva para probar." else "Mensajes recientes:\n\n" + out.joinToString("\n\n"))
     }
 
     private fun ensureSmsPermission(): Boolean {
@@ -104,13 +106,13 @@ class LocalActionRouter(private val activity: Activity) {
                     val body = if (bi >= 0) c.getString(bi).orEmpty() else ""
                     val date = if (di >= 0) c.getLong(di) else 0L
                     val who = contactNameForNumber(address) ?: address.ifBlank { "Desconocido" }
-                    out += "$who · ${if (date > 0) sdf.format(Date(date)) else ""}\n${body.take(260)}"
+                    out += "$who · ${if (date > 0) sdf.format(Date(date)) else ""}\n${body.take(500)}"
                 }
             }
         }.exceptionOrNull()
         if (out.isNotEmpty()) return Result(true, "Últimos SMS:\n\n" + out.joinToString("\n\n"))
         val fallback = readNotificationMessages("messages", limit)
-        return if (!fallback.message.startsWith("No encuentro")) fallback else Result(true, if (error != null) "READ_SMS está concedido, pero Android bloqueó el proveedor de SMS (${error.javaClass.simpleName}). Para SMS/RCS activa Acceso a notificaciones." else "No encuentro SMS en la bandeja. Si usas RCS/Google Messages, activa Acceso a notificaciones.")
+        return if (!fallback.message.startsWith("No encuentro")) fallback else Result(true, if (error != null) "READ_SMS figura concedido, pero Android bloqueó el proveedor de SMS (${error.javaClass.simpleName}). Usaré notificaciones para SMS/RCS cuando estén activadas." else "No encuentro SMS en la bandeja. Si usas RCS/Google Messages, activa Acceso a notificaciones.")
     }
 
     private fun readSmsFrom(name: String): Result {
@@ -125,7 +127,7 @@ class LocalActionRouter(private val activity: Activity) {
                 val ai = c.getColumnIndex("address"); val bi = c.getColumnIndex("body")
                 while (c.moveToNext() && items.size < 5) {
                     val address = if (ai >= 0) c.getString(ai).orEmpty().replace(" ", "").replace("-", "") else ""
-                    if (suffix.isNotBlank() && address.takeLast(8) == suffix) items += if (bi >= 0) c.getString(bi).orEmpty().take(500) else ""
+                    if (suffix.isNotBlank() && address.takeLast(8) == suffix) items += if (bi >= 0) c.getString(bi).orEmpty().take(700) else ""
                 }
             }
         }
@@ -139,13 +141,42 @@ class LocalActionRouter(private val activity: Activity) {
         return null
     }
 
+    private fun callNumber(number: String): Result {
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.CALL_PHONE), 70)
+            return Result(true, "Necesito permiso de Teléfono. Concédelo y repite la orden.")
+        }
+        val clean = number.filter { it.isDigit() || it == '+' }
+        return try {
+            activity.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}")))
+            Result(true, "Iniciando llamada a $clean.")
+        } catch (e: Exception) {
+            runCatching { activity.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(clean)}"))) }
+            Result(true, "Android no permitió iniciar la llamada directamente (${e.javaClass.simpleName}). He abierto el marcador con el número preparado.")
+        }
+    }
+
     private fun callContact(name: String): Result {
         if (name.isBlank()) return Result(true, "Dime a quién quieres llamar.")
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(activity, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), 70); return Result(true, "Necesito permiso de Contactos y Teléfono. Concédelo y repite la orden.")
+        val needContacts = ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        val needPhone = ContextCompat.checkSelfPermission(activity, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED
+        if (needContacts || needPhone) {
+            val perms = mutableListOf<String>(); if (needContacts) perms += Manifest.permission.READ_CONTACTS; if (needPhone) perms += Manifest.permission.CALL_PHONE
+            ActivityCompat.requestPermissions(activity, perms.toTypedArray(), 70)
+            return Result(true, "Necesito ${if (needContacts) "Contactos" else ""}${if (needContacts && needPhone) " y " else ""}${if (needPhone) "Teléfono" else ""}. Concédelo y repite la orden.")
         }
         val match = findPhone(name) ?: return Result(true, "No encuentro un contacto llamado $name.")
-        AlertDialog.Builder(activity).setTitle("Llamar a ${match.first}").setMessage(match.second).setPositiveButton("LLAMAR") { _, _ -> activity.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(match.second)}"))) }.setNegativeButton("Cancelar", null).show()
+        AlertDialog.Builder(activity)
+            .setTitle("Llamar a ${match.first}")
+            .setMessage(match.second)
+            .setPositiveButton("LLAMAR") { _, _ ->
+                try {
+                    activity.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(match.second)}")))
+                } catch (_: Exception) {
+                    activity.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(match.second)}")))
+                }
+            }
+            .setNegativeButton("Cancelar", null).show()
         return Result(true, "He encontrado a ${match.first}. Confirma la llamada en pantalla.")
     }
 
