@@ -16,11 +16,14 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.Normalizer
+import java.util.Locale
 
 class WakeWordService : Service() {
     @Volatile private var running = false
     private var recorder: MediaRecorder? = null
     private val backend = "https://chatgpt-tv2.vercel.app"
+    private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
 
     override fun onCreate() {
         super.onCreate()
@@ -30,8 +33,8 @@ class WakeWordService : Service() {
             71,
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentTitle("Jarvis escuchando")
-                .setContentText("Di “Hola Jarvis” para abrir el asistente")
+                .setContentTitle("Ale / Jarvis escuchando")
+                .setContentText("Di “Hola Ale” o “Hola Jarvis” para abrir el asistente")
                 .setOngoing(true)
                 .setContentIntent(open)
                 .build()
@@ -55,29 +58,48 @@ class WakeWordService : Service() {
                 r.setAudioEncodingBitRate(32000)
                 r.setOutputFile(f.absolutePath)
                 r.prepare(); r.start()
-                Thread.sleep(2600)
+                Thread.sleep(2200)
                 runCatching { r.stop() }; runCatching { r.release() }; recorder = null
                 if (f.exists() && f.length() > 256) {
-                    val text = transcribe(f).lowercase()
-                    if (text.contains("hola jarvis") || text.contains("oye jarvis")) {
+                    val text = normalize(transcribe(f))
+                    if (matchesWakeWord(text)) {
                         val i = Intent(this, ChatActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                             putExtra("wake_word_triggered", true)
+                            putExtra("continuous_voice", true)
                         }
                         startActivity(i)
-                        Thread.sleep(2500)
+                        Thread.sleep(1800)
                     }
                 }
             } catch (_: Exception) {
                 runCatching { recorder?.release() }; recorder = null
-                try { Thread.sleep(1800) } catch (_: Exception) {}
+                try { Thread.sleep(1200) } catch (_: Exception) {}
             } finally { f.delete() }
         }
     }
 
+    private fun matchesWakeWord(text: String): Boolean {
+        if (text.isBlank()) return false
+        val configured = prefs.getString("wake_names", "ale,jarvis").orEmpty()
+            .split(',')
+            .map { normalize(it) }
+            .filter { it.isNotBlank() }
+            .ifEmpty { listOf("ale", "jarvis") }
+        return configured.any { name ->
+            text.contains("hola $name") || text.contains("oye $name") || text.contains("hey $name") || text.contains("eh $name")
+        }
+    }
+
+    private fun normalize(value: String): String = Normalizer.normalize(value.lowercase(Locale.getDefault()), Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .replace(Regex("[^a-z0-9 ]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
     private fun transcribe(file: File): String {
         val c = (URL("$backend/api/transcribe").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 20000
+            requestMethod = "POST"; doOutput = true; connectTimeout = 6000; readTimeout = 14000
             setRequestProperty("Content-Type", "audio/mp4"); setRequestProperty("X-Filename", "wake.m4a")
         }
         c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
@@ -98,7 +120,7 @@ class WakeWordService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Jarvis wake word", NotificationManager.IMPORTANCE_LOW))
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Ale / Jarvis wake word", NotificationManager.IMPORTANCE_LOW))
         }
     }
 
