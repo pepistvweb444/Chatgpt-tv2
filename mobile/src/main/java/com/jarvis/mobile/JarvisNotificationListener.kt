@@ -1,6 +1,7 @@
 package com.jarvis.mobile
 
 import android.app.Notification
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import org.json.JSONArray
@@ -16,7 +17,21 @@ class JarvisNotificationListener : NotificationListenerService() {
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
         val conversation = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString().orEmpty()
         val packageName = sbn.packageName.orEmpty()
-        val body = listOf(bigText, text).firstOrNull { it.isNotBlank() }.orEmpty()
+
+        val messagingLines = mutableListOf<String>()
+        runCatching {
+            extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.forEach { p ->
+                val b = p as? Bundle ?: return@forEach
+                val msg = b.getCharSequence("text")?.toString().orEmpty()
+                val sender = b.getCharSequence("sender")?.toString().orEmpty()
+                if (msg.isNotBlank()) messagingLines += if (sender.isBlank()) msg else "$sender: $msg"
+            }
+        }
+        val body = when {
+            messagingLines.isNotEmpty() -> messagingLines.takeLast(8).joinToString("\n")
+            bigText.isNotBlank() -> bigText
+            else -> text
+        }
         if (title.isBlank() && body.isBlank()) return
 
         val item = JSONObject()
@@ -31,8 +46,23 @@ class JarvisNotificationListener : NotificationListenerService() {
         val arr = runCatching { JSONArray(prefs.getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
         arr.put(item)
         val trimmed = JSONArray()
-        val start = (arr.length() - 150).coerceAtLeast(0)
+        val start = (arr.length() - 250).coerceAtLeast(0)
         for (i in start until arr.length()) trimmed.put(arr.opt(i))
         prefs.edit().putString("notification_feed", trimmed.toString()).apply()
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
+            .putBoolean("notification_listener_connected", true)
+            .putLong("notification_listener_connected_at", System.currentTimeMillis())
+            .apply()
+    }
+
+    override fun onListenerDisconnected() {
+        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
+            .putBoolean("notification_listener_connected", false)
+            .apply()
+        super.onListenerDisconnected()
     }
 }
