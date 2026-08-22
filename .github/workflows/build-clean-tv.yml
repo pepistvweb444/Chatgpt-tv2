@@ -5,7 +5,6 @@ on:
     branches: [ jarvis-tv-clean-v064 ]
     paths:
       - 'app/**'
-      - 'api/**'
       - '.github/workflows/build-clean-tv.yml'
       - 'gradle.properties'
       - 'settings.gradle.kts'
@@ -52,22 +51,33 @@ jobs:
             'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
             'kotlin.code.style=official' > gradle.properties
 
-      - name: Apply TV low-latency voice fixes
+      - name: Apply TV low-latency voice and MCP fixes
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
           s = p.read_text()
+          nl = chr(10)
           s = s.replace('connectTimeout = 12000; readTimeout = 60000', 'connectTimeout = 8000; readTimeout = 45000')
-          s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)', 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)\\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)\\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)')
+          old = 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)'
+          new = old.replace('false', 'true') + nl + '            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)' + nl + '            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)'
+          s = s.replace(old, new)
           s = s.replace('status.text = "● Escuchando 7 s · OpenAI…"', 'status.text = "● Escuchando 4 s · Jarvis…"')
           s = s.replace('handler.postDelayed({ stopRecorder(true) }, 7000)', 'handler.postDelayed({ stopRecorder(true) }, 4000)')
           s = s.replace('runOnUiThread { append("assistant", result.first, true); status.text = "● Conectado · contexto guardado" }', 'runOnUiThread { status.text = "● Preparando voz…"; speakAndReveal(result.first) }')
 
+          marker = '    private fun showConnections() {'
+          if 'private fun localMcps()' not in s:
+              helper = '    private fun localMcps(): JSONArray = runCatching { JSONArray(prefs.getString("mcps", "[]")) }.getOrElse { JSONArray() }' + nl + nl
+              s = s.replace(marker, helper + marker)
+          hist = '.put("history", historyPayload)' + nl + '            .apply { if (!previousResponseId.isNullOrBlank())'
+          hist2 = '.put("history", historyPayload)' + nl + '            .put("clientMcps", localMcps())' + nl + '            .apply { if (!previousResponseId.isNullOrBlank())'
+          s = s.replace(hist, hist2)
+
           start = s.index('    private fun downloadSpeech(')
           end = s.index('    private fun testBackend(', start)
-          replacement = r'''    private fun splitForSpeech(text: String): List<String> {
+          replacement = '''    private fun splitForSpeech(text: String): List<String> {
         val clean = text.replace(Regex("(?m)^\\s*[-•*]+\\s*"), "").replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
         if (clean.isBlank()) return emptyList()
         val max = 320
@@ -159,22 +169,6 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Apply synced MCP bridge to TV
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
-          s = p.read_text()
-          marker = '    private fun showConnections() {'
-          helper = '''    private fun localMcps(): JSONArray = runCatching { JSONArray(prefs.getString("mcps", "[]")) }.getOrElse { JSONArray() }\n\n'''
-          if 'private fun localMcps()' not in s:
-              s = s.replace(marker, helper + marker)
-          s = s.replace('.put("history", historyPayload)\n            .apply { if (!previousResponseId.isNullOrBlank())', '.put("history", historyPayload)\n            .put("clientMcps", localMcps())\n            .apply { if (!previousResponseId.isNullOrBlank())')
-          s = s.replace('val lines = mutableListOf("Búsqueda web:', 'val localCount = localMcps().length()\n                val lines = mutableListOf("MCP sincronizados desde móvil: $localCount", "Búsqueda web:')
-          p.write_text(s)
-          PY
-
       - name: Clean and build TV only
         shell: bash
         run: |
@@ -192,14 +186,3 @@ jobs:
           name: Jarvis-TV-v0.6.5-debug
           path: Jarvis-TV-v0.6.5-debug.apk
           if-no-files-found: error
-
-      - name: Publish TV APK payload
-        if: success()
-        shell: bash
-        run: |
-          base64 -w 0 Jarvis-TV-v0.6.5-debug.apk > Jarvis-TV-v0.6.5-debug.apk.b64
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Jarvis-TV-v0.6.5-debug.apk.b64
-          git commit -m "build: publish Jarvis TV 0.6.5 APK [skip ci]" || true
-          git push
