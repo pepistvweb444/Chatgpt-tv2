@@ -28,8 +28,11 @@ class BriefingActivity : AppCompatActivity() {
             try {
                 val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
                 val synced = JSONObject()
-                for ((k, v) in prefs.all) if (k.startsWith("phone_") || k.startsWith("reminder_")) synced.put(k, v?.toString() ?: "")
-                val prompt = "Prepara un briefing matinal breve en español para leer en voz alta. Incluye el tiempo de hoy, las noticias más relevantes de esta mañana y, si existen en los datos sincronizados, llamadas, mensajes y recordatorios pendientes. No uses Markdown ni listas con guiones. Datos sincronizados: ${synced}."
+                val important = setOf("notification_feed", "call_feed", "last_incoming_call", "notification_listener_connected")
+                for ((k, v) in prefs.all) {
+                    if (k in important || k.startsWith("phone_") || k.startsWith("reminder_")) synced.put(k, v?.toString() ?: "")
+                }
+                val prompt = "Prepara un briefing matinal breve en español para leer en voz alta. Incluye el tiempo de hoy, las noticias más relevantes de esta mañana y, si existen en los datos sincronizados, llamadas, mensajes y recordatorios pendientes. Resume las notificaciones, no leas datos técnicos ni repitas mensajes duplicados. No uses Markdown ni listas con guiones. Datos sincronizados: ${synced}."
                 val c = (URL("$backend/api/chat").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 45000
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
