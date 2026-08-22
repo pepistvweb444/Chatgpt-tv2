@@ -45,32 +45,51 @@ export default async function handler(req, res) {
 
   const developer = {
     role: 'developer',
-    content: `Eres ${assistantName}, el asistente personal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta con lo hablado antes. Usa búsqueda web para información actual. Si hay herramientas MCP disponibles, úsalas cuando ayuden y respeta las aprobaciones. Cliente: ${client}. Conversación: ${conversationId}.`
+    content: `Eres ${assistantName}, el asistente personal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta con lo hablado antes. Usa búsqueda web para información actual. Si hay herramientas MCP disponibles, úsalas solo cuando ayuden a la petición; si un MCP falla, continúa sin él en lugar de bloquear la conversación. Respeta las aprobaciones. Cliente: ${client}. Conversación: ${conversationId}.`
   };
 
-  const payload = {
+  const basePayload = {
     model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-    tools,
     tool_choice: 'auto'
   };
 
   if (previousResponseId && typeof previousResponseId === 'string') {
-    payload.previous_response_id = previousResponseId;
-    payload.input = [developer, { role: 'user', content: message }];
+    basePayload.previous_response_id = previousResponseId;
+    basePayload.input = [developer, { role: 'user', content: message }];
   } else {
-    payload.input = [developer, ...trimmedHistory, { role: 'user', content: message }];
+    basePayload.input = [developer, ...trimmedHistory, { role: 'user', content: message }];
   }
 
-  try {
+  const callOpenAI = async (selectedTools) => {
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...basePayload, tools: selectedTools })
     });
     const data = await response.json();
+    return { response, data };
+  };
+
+  try {
+    let { response, data } = await callOpenAI(tools);
+    let mcpFallback = false;
+
+    // A dead/expired MCP must never make the whole assistant unusable. Retry the
+    // same request with web search only if the first tool-enabled request fails.
+    if (!response.ok && mcpLabels.length > 0) {
+      console.warn('Jarvis MCP request failed; retrying without MCP', data?.error?.message || response.status);
+      ({ response, data } = await callOpenAI([{ type: 'web_search' }]));
+      mcpFallback = true;
+    }
+
     if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || 'openai_error', details: data?.error || null });
     const reply = data.output_text || (data.output || []).flatMap(item => item.content || []).map(part => part.text || '').join('').trim();
-    return res.status(200).json({ reply, conversationId, responseId: data.id || null, tools: { webSearch: true, mcp: mcpLabels } });
+    return res.status(200).json({
+      reply,
+      conversationId,
+      responseId: data.id || null,
+      tools: { webSearch: true, mcp: mcpFallback ? [] : mcpLabels, mcpFallback }
+    });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'backend_error' });
   }
