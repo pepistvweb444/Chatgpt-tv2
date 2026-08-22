@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths-ignore:
       - 'Jarvis-TV-v0.6.2-debug.apk.b64'
+      - 'Jarvis-Mobile-v0.2.3-debug.apk.b64'
       - 'Jarvis-Mobile-v0.2.2-debug.apk.b64'
       - 'Jarvis-TV-v0.6-debug.apk.b64'
       - 'Jarvis-Mobile-v0.2.1-debug.apk.b64'
@@ -87,9 +88,9 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.2-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.3-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.2-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.2-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.3-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.2-debug.apk
 
       - name: Persist failure log
@@ -115,8 +116,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.2-debug
-          path: Jarvis-Mobile-v0.2.2-debug.apk
+          name: Jarvis-Mobile-v0.2.3-debug
+          path: Jarvis-Mobile-v0.2.3-debug.apk
           if-no-files-found: error
 
       - name: Record successful run ID
@@ -135,9 +136,9 @@ jobs:
         shell: bash
         run: |
           base64 -w 0 Jarvis-TV-v0.6.2-debug.apk > Jarvis-TV-v0.6.2-debug.apk.b64
-          base64 -w 0 Jarvis-Mobile-v0.2.2-debug.apk > Jarvis-Mobile-v0.2.2-debug.apk.b64
+          base64 -w 0 Jarvis-Mobile-v0.2.3-debug.apk > Jarvis-Mobile-v0.2.3-debug.apk.b64
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Jarvis-TV-v0.6.2-debug.apk.b64 Jarvis-Mobile-v0.2.2-debug.apk.b64
+          git add Jarvis-TV-v0.6.2-debug.apk.b64 Jarvis-Mobile-v0.2.3-debug.apk.b64
           git commit -m "build: publish signed Jarvis APK payloads [skip ci]" || true
           git push
