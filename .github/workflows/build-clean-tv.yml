@@ -6,16 +6,13 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/build-clean-tv.yml'
-      - 'gradle.properties'
-      - 'settings.gradle.kts'
-      - 'build.gradle.kts'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  build-tv:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -42,7 +39,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Force AndroidX
+      - name: Configure AndroidX
         shell: bash
         run: |
           printf '%s\n' \
@@ -51,136 +48,17 @@ jobs:
             'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
             'kotlin.code.style=official' > gradle.properties
 
-      - name: Apply TV low-latency voice and MCP fixes
+      - name: Build TV APK
         shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
-          s = p.read_text()
-          nl = chr(10)
-          s = s.replace('connectTimeout = 12000; readTimeout = 60000', 'connectTimeout = 8000; readTimeout = 45000')
-          old = 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)'
-          new = old.replace('false', 'true') + nl + '            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)' + nl + '            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)'
-          s = s.replace(old, new)
-          s = s.replace('status.text = "● Escuchando 7 s · OpenAI…"', 'status.text = "● Escuchando 4 s · Jarvis…"')
-          s = s.replace('handler.postDelayed({ stopRecorder(true) }, 7000)', 'handler.postDelayed({ stopRecorder(true) }, 4000)')
-          s = s.replace('runOnUiThread { append("assistant", result.first, true); status.text = "● Conectado · contexto guardado" }', 'runOnUiThread { status.text = "● Preparando voz…"; speakAndReveal(result.first) }')
+        run: gradle --no-daemon --stacktrace clean :app:assembleDebug
 
-          marker = '    private fun showConnections() {'
-          if 'private fun localMcps()' not in s:
-              helper = '    private fun localMcps(): JSONArray = runCatching { JSONArray(prefs.getString("mcps", "[]")) }.getOrElse { JSONArray() }' + nl + nl
-              s = s.replace(marker, helper + marker)
-          hist = '.put("history", historyPayload)' + nl + '            .apply { if (!previousResponseId.isNullOrBlank())'
-          hist2 = '.put("history", historyPayload)' + nl + '            .put("clientMcps", localMcps())' + nl + '            .apply { if (!previousResponseId.isNullOrBlank())'
-          s = s.replace(hist, hist2)
-
-          start = s.index('    private fun downloadSpeech(')
-          end = s.index('    private fun testBackend(', start)
-          replacement = '''    private fun splitForSpeech(text: String): List<String> {
-        val clean = text.replace(Regex("(?m)^\\s*[-•*]+\\s*"), "").replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
-        if (clean.isBlank()) return emptyList()
-        val max = 320
-        val out = mutableListOf<String>()
-        var rest = clean
-        while (rest.isNotBlank()) {
-            if (rest.length <= max) { out.add(rest); break }
-            var cut = rest.take(max + 1).lastIndexOf(' ')
-            if (cut < 180) cut = max
-            out.add(rest.take(cut).trim()); rest = rest.drop(cut).trim()
-        }
-        return out
-    }
-
-    private fun downloadSpeech(endpoint: String, text: String, outFile: File) {
-        val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 7000; readTimeout = 35000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "audio/mpeg")
-        }
-        val selected = prefs.getString("voice", "noiz") ?: "noiz"
-        val provider = if (selected == "openvoice") "openvoice" else "noiz"
-        val payload = JSONObject().put("text", text).put("voice", selected).put("provider", provider).put("speed", 1.18).toString()
-        c.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-        val code = c.responseCode
-        if (code !in 200..299) throw IllegalStateException("TTS HTTP $code")
-        c.inputStream.use { inputStream -> outFile.outputStream().use { inputStream.copyTo(it) } }
-    }
-
-    private fun speakAndReveal(text: String) {
-        val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
-        val chunks = splitForSpeech(text)
-        if (chunks.isEmpty()) { append("assistant", text, false); return }
-        voicePlayer?.release(); voicePlayer = null
-        Thread {
-            val first = File(cacheDir, "jarvis-reply-${System.currentTimeMillis()}-0.mp3")
-            try {
-                downloadSpeech(resolveEndpoint(backend, "speech"), chunks[0], first)
-                runOnUiThread {
-                    append("assistant", text, false)
-                    status.text = "● Hablando · 1/${chunks.size}"
-                    playPreparedSpeech(resolveEndpoint(backend, "speech"), chunks, 0, first)
-                }
-            } catch (_: Exception) {
-                first.delete()
-                runOnUiThread {
-                    append("assistant", text, false)
-                    status.text = "● Voz local"
-                    tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-fallback")
-                }
-            }
-        }.start()
-    }
-
-    private fun speakWithOpenAI(text: String) {
-        val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
-        val chunks = splitForSpeech(text)
-        if (chunks.isEmpty()) return
-        voicePlayer?.release(); voicePlayer = null
-        playSpeechChunk(resolveEndpoint(backend, "speech"), chunks, 0)
-    }
-
-    private fun playPreparedSpeech(endpoint: String, chunks: List<String>, index: Int, file: File) {
-        voicePlayer?.release()
-        voicePlayer = MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            setOnPreparedListener { p -> status.text = "● Hablando · ${index + 1}/${chunks.size}"; p.start() }
-            setOnCompletionListener { p -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1) }
-            setOnErrorListener { p, _, _ -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1); true }
-            prepareAsync()
-        }
-    }
-
-    private fun playSpeechChunk(endpoint: String, chunks: List<String>, index: Int) {
-        if (index >= chunks.size) { status.text = "● Listo · respuesta completa"; return }
-        Thread {
-            val file = File(cacheDir, "jarvis-reply-${System.currentTimeMillis()}-$index.mp3")
-            try {
-                downloadSpeech(endpoint, chunks[index], file)
-                runOnUiThread { playPreparedSpeech(endpoint, chunks, index, file) }
-            } catch (_: Exception) {
-                file.delete()
-                runOnUiThread { playSpeechChunk(endpoint, chunks, index + 1) }
-            }
-        }.start()
-    }
-
-'''
-          s = s[:start] + replacement + s[end:]
-          p.write_text(s)
-          PY
-
-      - name: Clean and build TV only
-        shell: bash
-        run: |
-          gradle --no-daemon --stacktrace -Dandroid.useAndroidX=true -Dandroid.enableJetifier=true -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true clean :app:assembleDebug
-
-      - name: Copy APK
+      - name: Verify TV APK
         shell: bash
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk Jarvis-TV-v0.6.5-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.5-debug.apk
 
-      - name: Upload APK
+      - name: Upload TV APK
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-TV-v0.6.5-debug
