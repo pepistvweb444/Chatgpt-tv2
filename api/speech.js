@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
 
-  const openVoiceUrl = (process.env.OPENVOICE_URL || '').replace(/\/$/, '');
+  const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://68.183.214.174:8000').replace(/\/$/, '');
   const preferOpenVoice = ['openvoice', 'my_voice', 'mi_voz'].includes(String(body.provider || body.voice || '').toLowerCase()) || process.env.JARVIS_TTS_PROVIDER === 'openvoice';
   const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.2);
 
@@ -18,17 +18,18 @@ export default async function handler(req, res) {
           profile: process.env.OPENVOICE_PROFILE || 'jarvis',
           language: process.env.OPENVOICE_LANGUAGE || 'ES',
           speed
-        })
+        }),
+        signal: AbortSignal.timeout(3500)
       });
       if (ov.ok) {
         const audio = Buffer.from(await ov.arrayBuffer());
         res.setHeader('Content-Type', ov.headers.get('content-type') || 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('X-Jarvis-Voice-Mode', 'openvoice-local');
+        res.setHeader('X-Jarvis-Voice-Mode', 'openvoice-digitalocean');
         return res.status(200).send(audio);
       }
     } catch (_) {
-      // Fall back to OpenAI below so Jarvis can still speak if the local service is offline.
+      // Fall back quickly to OpenAI so Jarvis keeps speaking while OpenVoice is offline or warming up.
     }
   }
 
