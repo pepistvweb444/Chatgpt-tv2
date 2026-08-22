@@ -36,17 +36,20 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify AndroidX
+      - name: Force AndroidX
         shell: bash
         run: |
+          printf '%s\n' \
+            'android.useAndroidX=true' \
+            'android.enableJetifier=true' \
+            'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
+            'kotlin.code.style=official' > gradle.properties
           cat gradle.properties
-          grep -q '^android.useAndroidX=true' gradle.properties
-          grep -q '^android.enableJetifier=true' gradle.properties
 
       - name: Clean and build TV only
         shell: bash
         run: |
-          gradle --no-daemon --stacktrace -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true clean :app:assembleDebug
+          gradle --no-daemon --stacktrace -Dandroid.useAndroidX=true -Dandroid.enableJetifier=true -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true clean :app:assembleDebug
 
       - name: Copy APK
         shell: bash
