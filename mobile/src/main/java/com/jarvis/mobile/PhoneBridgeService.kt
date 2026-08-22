@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
@@ -33,7 +35,7 @@ class PhoneBridgeService : Service() {
         startForeground(93, NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("Jarvis · puente con TV")
-            .setContentText("Permite a Jarvis TV solicitar llamadas desde este teléfono")
+            .setContentText("Llamadas, SMS y notificaciones para Jarvis TV")
             .setOngoing(true).setContentIntent(open).build())
         running = true
         Thread { serve() }.start()
@@ -54,7 +56,7 @@ class PhoneBridgeService : Service() {
                         val body = response.second
                         val code = response.first
                         val out = s.getOutputStream()
-                        out.write("HTTP/1.1 $code ${if (code==200) "OK" else "ERROR"}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body".toByteArray())
+                        out.write("HTTP/1.1 $code ${if (code==200) "OK" else "ERROR"}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body".toByteArray())
                         out.flush()
                     }
                 }.start()
@@ -63,16 +65,68 @@ class PhoneBridgeService : Service() {
     }
 
     private fun handle(path: String): Pair<Int,String> {
-        if (path.startsWith("/ping")) return 200 to "jarvis-phone-ok"
-        if (!path.startsWith("/call?")) return 404 to "not-found"
-        val raw = path.substringAfter("number=", "").substringBefore("&")
-        val number = URLDecoder.decode(raw, StandardCharsets.UTF_8.name()).trim()
-        if (number.isBlank()) return 400 to "number-required"
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return 403 to "call-permission-required"
-        return try {
-            startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            200 to "calling"
-        } catch (e: Exception) { 500 to (e.message ?: "call-failed") }
+        if (path.startsWith("/ping")) return 200 to JSONObject().put("ok", true).put("device", "jarvis-phone").toString()
+        if (path.startsWith("/permissions")) return 200 to permissionStatus().toString()
+        if (path.startsWith("/messages")) {
+            val source = URLDecoder.decode(path.substringAfter("source=", "all").substringBefore("&"), StandardCharsets.UTF_8.name())
+            return 200 to recentMessages(source).toString()
+        }
+        if (path.startsWith("/call?")) {
+            val raw = path.substringAfter("number=", "").substringBefore("&")
+            val number = URLDecoder.decode(raw, StandardCharsets.UTF_8.name()).trim()
+            if (number.isBlank()) return 400 to JSONObject().put("error", "number-required").toString()
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "call-permission-required").toString()
+            return try {
+                startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                200 to JSONObject().put("ok", true).put("status", "calling").toString()
+            } catch (e: Exception) { 500 to JSONObject().put("error", e.message ?: "call-failed").toString() }
+        }
+        return 404 to JSONObject().put("error", "not-found").toString()
+    }
+
+    private fun permissionStatus(): JSONObject = JSONObject()
+        .put("readSms", ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED)
+        .put("receiveSms", ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED)
+        .put("sendSms", ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED)
+        .put("contacts", ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED)
+        .put("callPhone", ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED)
+
+    private fun recentMessages(source: String): JSONObject {
+        val out = JSONArray()
+        val normalized = source.lowercase()
+
+        if (normalized == "all" || normalized == "sms") {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
+                runCatching {
+                    contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("address","body","date"), null, null, "date DESC")?.use { c ->
+                        val ai = c.getColumnIndex("address"); val bi = c.getColumnIndex("body"); val di = c.getColumnIndex("date")
+                        while (c.moveToNext() && out.length() < 15) {
+                            out.put(JSONObject().put("source","sms").put("from", if (ai >= 0) c.getString(ai).orEmpty() else "")
+                                .put("text", if (bi >= 0) c.getString(bi).orEmpty() else "")
+                                .put("time", if (di >= 0) c.getLong(di) else 0L))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
+            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+            val feed = runCatching { JSONArray(prefs.getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
+            for (i in feed.length() - 1 downTo 0) {
+                if (out.length() >= 30) break
+                val n = feed.optJSONObject(i) ?: continue
+                val pkg = n.optString("package")
+                val isWhatsApp = pkg.contains("whatsapp", true)
+                if (normalized == "whatsapp" && !isWhatsApp) continue
+                if (normalized == "all" && !isWhatsApp && !pkg.contains("messag", true)) continue
+                out.put(JSONObject().put("source", if (isWhatsApp) "whatsapp" else "notification")
+                    .put("from", n.optString("conversation").ifBlank { n.optString("title") })
+                    .put("text", n.optString("text"))
+                    .put("time", n.optLong("time")))
+            }
+        }
+        return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
 
     override fun onDestroy() {
