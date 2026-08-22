@@ -60,6 +60,16 @@ jobs:
               -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
           fi
 
+      - name: Optimize TV voice latency
+        shell: bash
+        run: |
+          FILE="app/src/main/java/com/jarvis/tv/MainActivity.kt"
+          sed -i 's/connectTimeout = 12000; readTimeout = 60000/connectTimeout = 8000; readTimeout = 45000/g' "$FILE"
+          sed -i 's/putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)/putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)/g' "$FILE"
+          sed -i 's/Escuchando 7 s · OpenAI/Escuchando 4 s · Jarvis/g' "$FILE"
+          sed -i 's/stopRecorder(true) }, 7000/stopRecorder(true) }, 4000/g' "$FILE"
+          sed -i 's/JSONObject().put("text", text).put("voice", prefs.getString("voice", "alloy") ?: "alloy")/JSONObject().put("text", text.take(420)).put("voice", prefs.getString("voice", "coral") ?: "coral").put("speed", 1.2)/g' "$FILE"
+
       - name: Build TV and mobile APKs
         id: build_apk
         shell: bash
