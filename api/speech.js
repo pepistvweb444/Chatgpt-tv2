@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
 
-  const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://68.183.214.174:8000').replace(/\/$/, '');
+  const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://165.22.83.150:8000').replace(/\/$/, '');
   const preferOpenVoice = ['openvoice', 'my_voice', 'mi_voz'].includes(String(body.provider || body.voice || '').toLowerCase()) || process.env.JARVIS_TTS_PROVIDER === 'openvoice';
   const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.2);
 
