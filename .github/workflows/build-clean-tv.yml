@@ -39,13 +39,14 @@ jobs:
       - name: Verify AndroidX
         shell: bash
         run: |
+          cat gradle.properties
           grep -q '^android.useAndroidX=true' gradle.properties
           grep -q '^android.enableJetifier=true' gradle.properties
 
       - name: Clean and build TV only
         shell: bash
         run: |
-          gradle --no-daemon --stacktrace clean :app:assembleDebug
+          gradle --no-daemon --stacktrace -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true clean :app:assembleDebug
 
       - name: Copy APK
         shell: bash
