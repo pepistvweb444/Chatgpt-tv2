@@ -1,8 +1,27 @@
+function normalizeSpeechText(input) {
+  return String(input || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/^\s*[-*•]\s+/gm, '. ')
+    .replace(/^\s*\d+[.)]\s+/gm, '. ')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/\n+/g, '. ')
+    .replace(/\s*[–—]\s*/g, ', ')
+    .replace(/\s+-\s+/g, ', ')
+    .replace(/(?:\.\s*){2,}/g, '. ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const body = req.body || {};
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
+
+  // Noiz can pause or stop on Markdown list markers/new lines. Convert the
+  // assistant answer to continuous spoken punctuation before sending it to any TTS.
+  const speechText = normalizeSpeechText(body.text);
+  if (!speechText) return res.status(400).json({ error: 'text_required' });
 
   const requestedProvider = String(body.provider || '').toLowerCase();
   const requestedVoice = String(body.voice || '').toLowerCase();
@@ -18,7 +37,7 @@ export default async function handler(req, res) {
   if (noizKey && (preferNoiz || requestedVoice === 'noiz' || requestedVoice === 'my_voice' || requestedVoice === 'mi_voz')) {
     try {
       const form = new FormData();
-      form.append('text', body.text.slice(0, 1800));
+      form.append('text', speechText.slice(0, 1800));
       form.append('output_format', 'mp3');
       form.append('speed', String(speed));
       form.append('target_lang', process.env.NOIZ_TARGET_LANG || 'es');
@@ -67,7 +86,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: body.text.slice(0, 1800),
+          text: speechText.slice(0, 1800),
           profile: process.env.OPENVOICE_PROFILE || 'Jarvis',
           language: process.env.OPENVOICE_LANGUAGE || 'ES',
           speed
@@ -109,7 +128,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
         voice,
-        input: body.text.slice(0, 1400),
+        input: speechText.slice(0, 1400),
         instructions,
         speed,
         response_format: 'mp3'
