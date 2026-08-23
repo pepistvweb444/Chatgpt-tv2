@@ -58,8 +58,8 @@ class LocalActionRouter(private val activity: Activity) {
         val tadoConnected=prefs.getString("domotics_tado_status","")=="connected" || TadoClient.isConnected(activity)
         val wantsClimate=listOf("aire acondicionado","clima","tado","termostato").any{lower.contains(it)}
         if(wantsClimate && tadoConnected){
-            val target=Regex("(?:a|en|temperatura|ajusta(?:do)? a)\s*(\d{1,2}(?:[.,]\d)?)\s*(?:grados|°)?").find(lower)?.groupValues?.getOrNull(1)?.replace(',','.')?.toDoubleOrNull()
-                ?: Regex("\b(1[6-9]|2[0-9]|30)\s*(?:grados|°)").find(lower)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            val target=Regex("""(?:a|en|temperatura|ajusta(?:do)? a)\s*(\d{1,2}(?:[.,]\d)?)\s*(?:grados|°)?""").find(lower)?.groupValues?.getOrNull(1)?.replace(',','.')?.toDoubleOrNull()
+                ?: Regex("""\b(1[6-9]|2[0-9]|30)\s*(?:grados|°)""").find(lower)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
             val requestedMode=when{
                 lower.contains("modo frio")||lower.contains("modo frío")||lower.contains("refriger") -> "COOL"
                 lower.contains("modo calor")||lower.contains("calefaccion")||lower.contains("calefacción") -> "HEAT"
