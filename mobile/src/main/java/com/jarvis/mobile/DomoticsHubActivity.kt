@@ -9,12 +9,17 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.UUID
 
 class DomoticsHubActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
     private lateinit var list: LinearLayout
     private val backend = "https://chatgpt-tv2.vercel.app"
+    @Volatile private var tadoPolling = false
 
     data class Provider(val id:String,val name:String,val desc:String,val loginLabel:String)
     private val providers = listOf(
@@ -30,7 +35,7 @@ class DomoticsHubActivity : Activity() {
         super.onCreate(savedInstanceState)
         val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(28,28,28,28)}
         root.addView(TextView(this).apply{text="Domótica y cuentas";textSize=26f})
-        root.addView(TextView(this).apply{text="No necesitas buscar API keys. Pulsa en cada marca y Jarvis abrirá el inicio de sesión oficial o el método de vinculación disponible.";textSize=14f;setPadding(0,8,0,18)})
+        root.addView(TextView(this).apply{text="No necesitas API keys. En Tado Jarvis usa el acceso oficial por código de dispositivo; en las demás marcas abrirá el flujo de autorización disponible.";textSize=14f;setPadding(0,8,0,18)})
         list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         root.addView(ScrollView(this).apply{addView(list)},LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f))
         root.addView(Button(this).apply{text="Volver";setOnClickListener{finish()}})
@@ -55,7 +60,7 @@ class DomoticsHubActivity : Activity() {
             val connected=status=="connected"
             val row=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(22,18,22,18)}
             row.addView(TextView(this).apply{text="${p.name}  ${if(connected)"✓" else "○"}";textSize=18f})
-            row.addView(TextView(this).apply{text="${p.desc} · ${if(connected)"conectado" else if(status=="pending")"pendiente de completar acceso" else "sin conectar"}";textSize=13f})
+            row.addView(TextView(this).apply{text="${p.desc} · ${if(connected)"conectado" else if(status=="pending")"esperando autorización" else "sin conectar"}";textSize=13f})
             row.addView(Button(this).apply{text=if(connected)"Volver a autorizar" else p.loginLabel;setOnClickListener{startLogin(p)}})
             if(connected) row.addView(Button(this).apply{text="Desconectar";setOnClickListener{disconnect(p)}})
             list.addView(row)
@@ -63,18 +68,80 @@ class DomoticsHubActivity : Activity() {
     }
 
     private fun startLogin(p:Provider){
+        if(p.id=="tado") { startTadoDeviceFlow(); return }
         val installId=prefs.getString("domotics_install_id",null) ?: UUID.randomUUID().toString().also{prefs.edit().putString("domotics_install_id",it).apply()}
         prefs.edit().putString("domotics_${p.id}_status","pending").apply()
         val returnUri="jarvis://domotics/callback"
         val url="$backend/api/domotics/connect?provider=${Uri.encode(p.id)}&installId=${Uri.encode(installId)}&returnUri=${Uri.encode(returnUri)}"
         val ok=runCatching{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)));true}.getOrDefault(false)
         if(!ok) Toast.makeText(this,"No se pudo abrir el inicio de sesión.",Toast.LENGTH_LONG).show()
+        refresh()
     }
 
+    private fun startTadoDeviceFlow(){
+        if(tadoPolling) return
+        tadoPolling=true
+        prefs.edit().putString("domotics_tado_status","pending").apply();refresh()
+        Toast.makeText(this,"Preparando acceso seguro a Tado…",Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val clientId="1bb50063-6b0c-4d11-bd99-387f4a91cc46"
+                val startUrl="https://login.tado.com/oauth2/device_authorize?client_id=${enc(clientId)}&scope=${enc("offline_access")}" 
+                val start=postForm(startUrl,"")
+                val data=JSONObject(start)
+                val deviceCode=data.getString("device_code")
+                val verification=data.optString("verification_uri_complete",data.optString("verification_uri"))
+                val expires=data.optInt("expires_in",300)
+                var interval=data.optInt("interval",5).coerceAtLeast(3)
+                runOnUiThread {
+                    val opened=runCatching{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(verification)));true}.getOrDefault(false)
+                    if(opened) Toast.makeText(this,"Inicia sesión en Tado y autoriza Jarvis. Volverá a comprobarlo automáticamente.",Toast.LENGTH_LONG).show()
+                }
+                val deadline=System.currentTimeMillis()+expires*1000L
+                var connected=false
+                while(System.currentTimeMillis()<deadline && !connected){
+                    Thread.sleep(interval*1000L)
+                    val tokenBody="client_id=${enc(clientId)}&device_code=${enc(deviceCode)}&grant_type=${enc("urn:ietf:params:oauth:grant-type:device_code")}" 
+                    val response=postFormWithStatus("https://login.tado.com/oauth2/token",tokenBody)
+                    if(response.first in 200..299){
+                        val tok=JSONObject(response.second)
+                        val access=tok.optString("access_token")
+                        val refreshToken=tok.optString("refresh_token")
+                        if(access.isNotBlank()){
+                            val e=prefs.edit().putString("domotics_tado_status","connected").putString("domotics_tado_access_token",access).putLong("domotics_tado_access_expires_at",System.currentTimeMillis()+tok.optLong("expires_in",600)*1000L)
+                            if(refreshToken.isNotBlank())e.putString("domotics_tado_refresh_token",refreshToken)
+                            val userId=tok.optString("userId");if(userId.isNotBlank())e.putString("domotics_tado_account",userId)
+                            e.apply();connected=true
+                            runOnUiThread{Toast.makeText(this,"Tado conectado correctamente ✓",Toast.LENGTH_LONG).show();refresh()}
+                        }
+                    } else {
+                        val err=runCatching{JSONObject(response.second).optString("error")}.getOrDefault("")
+                        if(err=="slow_down") interval+=5
+                        if(err!="authorization_pending" && err!="slow_down" && err.isNotBlank()) throw IllegalStateException(err)
+                    }
+                }
+                if(!connected){prefs.edit().putString("domotics_tado_status","not_connected").apply();runOnUiThread{Toast.makeText(this,"La autorización de Tado ha caducado. Pulsa de nuevo para intentarlo.",Toast.LENGTH_LONG).show();refresh()}}
+            } catch(e:Exception){
+                prefs.edit().putString("domotics_tado_status","not_connected").apply()
+                runOnUiThread{Toast.makeText(this,"No se pudo conectar Tado: ${e.message ?: "error de conexión"}",Toast.LENGTH_LONG).show();refresh()}
+            } finally { tadoPolling=false }
+        }.start()
+    }
+
+    private fun postForm(url:String,body:String):String{
+        val r=postFormWithStatus(url,body);if(r.first !in 200..299)throw IllegalStateException("HTTP ${r.first}: ${r.second}");return r.second
+    }
+    private fun postFormWithStatus(url:String,body:String):Pair<Int,String>{
+        val c=(URL(url).openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=12000;setRequestProperty("Content-Type","application/x-www-form-urlencoded");setRequestProperty("Accept","application/json")}
+        if(body.isNotEmpty())c.outputStream.use{it.write(body.toByteArray())} else c.outputStream.use{it.write(ByteArray(0))}
+        val code=c.responseCode;val text=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();c.disconnect();return code to text
+    }
+    private fun enc(v:String)=URLEncoder.encode(v,"UTF-8")
+
     private fun disconnect(p:Provider){
-        prefs.edit().remove("domotics_${p.id}_status").remove("domotics_${p.id}_account").apply()
-        refresh()
-        Toast.makeText(this,"${p.name} desconectado de este dispositivo.",Toast.LENGTH_SHORT).show()
+        val e=prefs.edit().remove("domotics_${p.id}_status").remove("domotics_${p.id}_account")
+        if(p.id=="tado")e.remove("domotics_tado_access_token").remove("domotics_tado_refresh_token").remove("domotics_tado_access_expires_at")
+        e.apply();refresh();Toast.makeText(this,"${p.name} desconectado de este dispositivo.",Toast.LENGTH_SHORT).show()
     }
 
     private fun handleCallback(i:Intent){
