@@ -85,28 +85,54 @@ object TadoClient {
             JSONObject(get("$API/homes/${zone.homeId}/zones/${zone.id}/capabilities", token))
         }.getOrElse { JSONObject() }
 
-        val setting = if (type == "AIR_CONDITIONING") {
-            buildAcSetting(current, capabilities, on, target ?: zone.target ?: zone.temperature, requestedMode)
-        } else {
-            JSONObject().apply {
-                put("type", type)
-                put("power", if (on) "ON" else "OFF")
-                if (on && target != null && type != "HOT_WATER") {
-                    val tempCaps = capabilities.optJSONObject("temperatures")?.optJSONObject("celsius")
-                    val min = tempCaps?.optDouble("min", 5.0) ?: 5.0
-                    val max = tempCaps?.optDouble("max", 30.0) ?: 30.0
-                    put("temperature", JSONObject().put("celsius", target.coerceIn(min, max)))
-                }
-            }
+        if (type == "AIR_CONDITIONING") {
+            val primary = buildAcSetting(current, capabilities, on, target ?: zone.target ?: zone.temperature, requestedMode, includeOptional = true)
+            val minimal = buildAcSetting(current, capabilities, on, target ?: zone.target ?: zone.temperature, requestedMode, includeOptional = false)
+            val powerOnly = JSONObject().put("type", "AIR_CONDITIONING").put("power", if (on) "ON" else "OFF")
+            val attempts = if (on) listOf(primary, minimal) else listOf(powerOnly, minimal, primary)
+            putOverlayWithFallback(zone, token, attempts)
+            return
         }
 
+        val setting = JSONObject().apply {
+            put("type", type)
+            put("power", if (on) "ON" else "OFF")
+            if (on && target != null && type != "HOT_WATER") {
+                val tempCaps = capabilities.optJSONObject("temperatures")?.optJSONObject("celsius")
+                val min = tempCaps?.optDouble("min", 5.0) ?: 5.0
+                val max = tempCaps?.optDouble("max", 30.0) ?: 30.0
+                put("temperature", JSONObject().put("celsius", target.coerceIn(min, max)))
+            }
+        }
+        putOverlay(zone, token, setting)
+    }
+
+    private fun putOverlayWithFallback(zone: Zone, token: String, settings: List<JSONObject>) {
+        var last: Exception? = null
+        val seen = mutableSetOf<String>()
+        for (setting in settings) {
+            val signature = setting.toString()
+            if (!seen.add(signature)) continue
+            try {
+                putOverlay(zone, token, setting)
+                return
+            } catch (e: Exception) {
+                last = e
+                val msg = e.message.orEmpty()
+                if (!msg.contains("422") && !msg.contains("setting.notSupported", true)) throw e
+            }
+        }
+        throw last ?: IllegalStateException("Tado rechazó la configuración solicitada")
+    }
+
+    private fun putOverlay(zone: Zone, token: String, setting: JSONObject) {
         val body = JSONObject()
             .put("setting", setting)
             .put("termination", JSONObject().put("type", "MANUAL"))
         request("PUT", "$API/homes/${zone.homeId}/zones/${zone.id}/overlay", token, body.toString())
     }
 
-    private fun buildAcSetting(current: JSONObject, capabilities: JSONObject, on: Boolean, requestedTarget: Double?, requestedMode: String?): JSONObject {
+    private fun buildAcSetting(current: JSONObject, capabilities: JSONObject, on: Boolean, requestedTarget: Double?, requestedMode: String?, includeOptional: Boolean): JSONObject {
         val result = JSONObject().put("type", "AIR_CONDITIONING").put("power", if (on) "ON" else "OFF")
         val initialStates = capabilities.optJSONObject("initialStates")
         val initialMode = initialStates?.optString("mode").orEmpty()
@@ -137,12 +163,14 @@ object TadoClient {
             result.put("temperature", JSONObject().put("celsius", (requestedTarget ?: fallback).coerceIn(min, max)))
         }
 
-        copySupportedChoice("fanSpeed", current, initialModeState, modeCaps, result)
-        copySupportedChoice("fanLevel", current, initialModeState, modeCaps, result)
-        copySupportedChoice("swing", current, initialModeState, modeCaps, result)
-        copySupportedChoice("verticalSwing", current, initialModeState, modeCaps, result)
-        copySupportedChoice("horizontalSwing", current, initialModeState, modeCaps, result)
-        copySupportedChoice("light", current, initialModeState, modeCaps, result)
+        if (includeOptional) {
+            copySupportedChoice("fanSpeed", current, initialModeState, modeCaps, result)
+            copySupportedChoice("fanLevel", current, initialModeState, modeCaps, result)
+            copySupportedChoice("swing", current, initialModeState, modeCaps, result)
+            copySupportedChoice("verticalSwing", current, initialModeState, modeCaps, result)
+            copySupportedChoice("horizontalSwing", current, initialModeState, modeCaps, result)
+            copySupportedChoice("light", current, initialModeState, modeCaps, result)
+        }
         return result
     }
 
