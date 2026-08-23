@@ -29,13 +29,14 @@
     <application android:name=".JarvisApplication" android:allowBackup="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
         <activity android:name=".SyncSettingsActivity" android:exported="false" android:label="Jarvis Sync" />
         <activity android:name=".DeviceHubActivity" android:exported="false" />
+        <activity android:name=".DomoticsHubActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChatActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
 
-        <service android:name=".WakeWordService" android:exported="false" android:foregroundServiceType="microphone" />
-        <service android:name=".PhoneBridgeService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".WakeWordService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false" />
+        <service android:name=".PhoneBridgeService" android:exported="false" android:foregroundServiceType="connectedDevice" android:stopWithTask="false" />
 
         <service android:name=".JarvisNotificationListener" android:label="Jarvis notification access" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
