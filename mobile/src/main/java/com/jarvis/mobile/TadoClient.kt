@@ -19,37 +19,59 @@ object TadoClient {
         val type: String,
         val power: String,
         val temperature: Double?,
-        val target: Double?
+        val target: Double?,
+        val overlayActive: Boolean
     )
 
     fun isConnected(context: Context): Boolean =
         context.getSharedPreferences("jarvis_mobile", Context.MODE_PRIVATE)
             .getString("domotics_tado_refresh_token", null) != null
 
+    /**
+     * Discover the homes and zones actually granted by the Tado account.
+     * Do not use /zoneStates: it is not consistently available across current Tado accounts.
+     * Read each zone through the supported /zones/{id}/state route instead.
+     */
     fun zones(context: Context): List<Zone> {
         val token = validToken(context)
         val me = JSONObject(get("$API/me", token))
         val homes = me.optJSONArray("homes") ?: JSONArray()
         val out = mutableListOf<Zone>()
+
         for (h in 0 until homes.length()) {
-            val homeId = homes.optJSONObject(h)?.optInt("id") ?: continue
-            val zones = JSONArray(get("$API/homes/$homeId/zones", token))
-            val states = JSONObject(get("$API/homes/$homeId/zoneStates", token)).optJSONObject("zoneStates") ?: JSONObject()
-            for (i in 0 until zones.length()) {
-                val z = zones.optJSONObject(i) ?: continue
-                val id = z.optInt("id")
-                val state = states.optJSONObject(id.toString()) ?: JSONObject()
+            val homeId = homes.optJSONObject(h)?.optInt("id", -1) ?: -1
+            if (homeId < 0) continue
+
+            val zoneList = JSONArray(get("$API/homes/$homeId/zones", token))
+            for (i in 0 until zoneList.length()) {
+                val z = zoneList.optJSONObject(i) ?: continue
+                val zoneId = z.optInt("id", -1)
+                if (zoneId < 0) continue
+
+                val state = runCatching {
+                    JSONObject(get("$API/homes/$homeId/zones/$zoneId/state", token))
+                }.getOrElse { JSONObject() }
+
                 val setting = state.optJSONObject("setting") ?: JSONObject()
-                val temp = state.optJSONObject("sensorDataPoints")?.optJSONObject("insideTemperature")?.optDouble("celsius")
-                val target = setting.optJSONObject("temperature")?.optDouble("celsius")
+                val sensor = state.optJSONObject("sensorDataPoints")
+                val inside = sensor?.optJSONObject("insideTemperature")
+                val temp = inside?.takeIf { it.has("celsius") }?.optDouble("celsius")
+                val targetObj = setting.optJSONObject("temperature")
+                val target = targetObj?.takeIf { it.has("celsius") }?.optDouble("celsius")
+                val type = z.optString("type").ifBlank { setting.optString("type", "HEATING") }
+                val power = setting.optString("power").ifBlank {
+                    if (state.optJSONObject("activityDataPoints")?.optJSONObject("heatingPower")?.optDouble("percentage", 0.0) ?: 0.0 > 0) "ON" else "OFF"
+                }
+
                 out += Zone(
                     homeId = homeId,
-                    id = id,
-                    name = z.optString("name", "Zona $id"),
-                    type = z.optString("type", setting.optString("type", "HEATING")),
-                    power = setting.optString("power", "UNKNOWN"),
+                    id = zoneId,
+                    name = z.optString("name", "Zona $zoneId"),
+                    type = type,
+                    power = power,
                     temperature = temp?.takeUnless { it.isNaN() },
-                    target = target?.takeUnless { it.isNaN() }
+                    target = target?.takeUnless { it.isNaN() },
+                    overlayActive = state.optString("overlayType").isNotBlank() && state.optString("overlayType") != "null"
                 )
             }
         }
@@ -57,16 +79,23 @@ object TadoClient {
     }
 
     fun setPower(context: Context, zone: Zone, on: Boolean, target: Double? = null) {
-        val type = if (zone.type.contains("AIR", true)) "AIR_CONDITIONING" else "HEATING"
+        val type = when {
+            zone.type.contains("AIR", true) -> "AIR_CONDITIONING"
+            zone.type.contains("HOT_WATER", true) -> "HOT_WATER"
+            else -> "HEATING"
+        }
         val setting = JSONObject().put("type", type).put("power", if (on) "ON" else "OFF")
-        if (on && target != null) setting.put("temperature", JSONObject().put("celsius", target))
+        if (on && target != null && type != "HOT_WATER") {
+            setting.put("temperature", JSONObject().put("celsius", target.coerceIn(5.0, 30.0)))
+        }
         val body = JSONObject()
             .put("setting", setting)
             .put("termination", JSONObject().put("type", "MANUAL"))
         put(context, "$API/homes/${zone.homeId}/zones/${zone.id}/overlay", body.toString())
     }
 
-    fun setTemperature(context: Context, zone: Zone, target: Double) = setPower(context, zone, true, target)
+    fun setTemperature(context: Context, zone: Zone, target: Double) =
+        setPower(context, zone, true, target.coerceIn(5.0, 30.0))
 
     fun resumeSchedule(context: Context, zone: Zone) {
         val token = validToken(context)
@@ -83,19 +112,27 @@ object TadoClient {
         val existing = prefs.getString("domotics_tado_access_token", null)
         val expiry = prefs.getLong("domotics_tado_access_expires_at", 0L)
         if (!existing.isNullOrBlank() && System.currentTimeMillis() < expiry - 30_000L) return existing
+
         val refresh = prefs.getString("domotics_tado_refresh_token", null)
             ?: throw IllegalStateException("Tado no está conectado")
         val body = "client_id=${enc(CLIENT_ID)}&grant_type=refresh_token&refresh_token=${enc(refresh)}"
         val c = URL(TOKEN).openConnection() as HttpURLConnection
-        c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 8000; c.readTimeout = 12000
+        c.requestMethod = "POST"
+        c.doOutput = true
+        c.connectTimeout = 8000
+        c.readTimeout = 12000
         c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
         c.setRequestProperty("Accept", "application/json")
         c.outputStream.use { it.write(body.toByteArray()) }
-        val text = (if (c.responseCode in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (c.responseCode !in 200..299) throw IllegalStateException("No se pudo renovar Tado (${c.responseCode})")
+        val code = c.responseCode
+        val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        c.disconnect()
+        if (code !in 200..299) throw IllegalStateException("No se pudo renovar Tado ($code): ${text.take(120)}")
+
         val json = JSONObject(text)
         val access = json.getString("access_token")
-        val edit = prefs.edit().putString("domotics_tado_access_token", access)
+        val edit = prefs.edit()
+            .putString("domotics_tado_access_token", access)
             .putLong("domotics_tado_access_expires_at", System.currentTimeMillis() + json.optLong("expires_in", 600L) * 1000L)
         json.optString("refresh_token").takeIf { it.isNotBlank() }?.let { edit.putString("domotics_tado_refresh_token", it) }
         edit.apply()
@@ -106,18 +143,24 @@ object TadoClient {
 
     private fun request(method: String, url: String, token: String, body: String?): String {
         val c = URL(url).openConnection() as HttpURLConnection
-        c.requestMethod = method; c.connectTimeout = 8000; c.readTimeout = 12000
+        c.requestMethod = method
+        c.connectTimeout = 8000
+        c.readTimeout = 12000
         c.setRequestProperty("Authorization", "Bearer $token")
         c.setRequestProperty("Accept", "application/json")
         if (body != null) {
             c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
+            c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             c.outputStream.use { it.write(body.toByteArray()) }
         }
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        val rateLimit = c.getHeaderField("ratelimit")
         c.disconnect()
-        if (code !in 200..299) throw IllegalStateException("Tado HTTP $code ${text.take(180)}")
+        if (code !in 200..299) {
+            val rateInfo = if (!rateLimit.isNullOrBlank()) " · límite $rateLimit" else ""
+            throw IllegalStateException("Tado HTTP $code ${text.take(180)}$rateInfo")
+        }
         return text
     }
 
