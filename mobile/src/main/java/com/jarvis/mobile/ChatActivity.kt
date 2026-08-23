@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
@@ -65,11 +67,24 @@ class ChatActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.visionCard).setOnClickListener{runCatching{startActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE))}}
         findViewById<TextView>(R.id.nowBrief).setOnClickListener{refreshNowBrief()}
         findViewById<View>(R.id.weatherCard).setOnClickListener{refreshWeather(null,false)}
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+            ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION),93)
+        }
         refreshWeather(null,false);handleWakeIntent(intent)
     }
 
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);handleWakeIntent(intent)}
-    private fun handleWakeIntent(intent:Intent?){if(intent?.getBooleanExtra("wake_word_triggered",false)==true){status.text="Hola Jarvis/Ale/Leo detectado · te escucho";handler.postDelayed({startVoiceCapture()},120)}}
+    private fun handleWakeIntent(intent:Intent?){
+        if(intent?.getBooleanExtra("wake_word_triggered",false)!=true)return
+        keepVoiceSessionAlive()
+        status.text="Hola Jarvis/Ale/Leo detectado · te escucho"
+        val command=intent.getStringExtra("wake_command").orEmpty().trim()
+        handler.postDelayed({
+            if(command.isNotBlank()){input.setText(command);sendMessage()} else startVoiceCapture()
+        },180)
+    }
+
+    private fun keepVoiceSessionAlive(){prefs.edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()}
 
     private fun newChat(showToast:Boolean):String{val id=UUID.randomUUID().toString();conversationId=id;prefs.edit().putString("currentConversation",id).putString("chat_$id","[]").remove("response_$id").apply();val index=chatIndex();index.put(JSONObject().put("id",id).put("title","Nuevo chat").put("updated",System.currentTimeMillis()));prefs.edit().putString("chatIndex",index.toString()).apply();if(::transcript.isInitialized)transcript.text="";if(showToast)Toast.makeText(this,"Nuevo chat",Toast.LENGTH_SHORT).show();return id}
     private fun chatIndex():JSONArray=runCatching{JSONArray(prefs.getString("chatIndex","[]"))}.getOrElse{JSONArray()}
@@ -94,6 +109,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun sendMessage(){
         val message=input.text.toString().trim();if(message.isBlank())return
+        keepVoiceSessionAlive()
         input.text.clear();append("user",message)
         if(isWeatherQuery(message)){
             status.text="Actualizando widget del tiempo…"
@@ -103,10 +119,28 @@ class ChatActivity : AppCompatActivity() {
         val local=actionRouter.handle(message)
         if(local.handled){append("assistant",local.message);JarvisWidgetRenderer.render(this,widgetContainer,message,local.message);status.text="Acción del teléfono";speak(local.message);return}
         status.text="Pensando…";val h=history();val previous=prefs.getString("response_$conversationId",null)
-        Thread{try{val result=postChat(message,h,previous);if(!result.second.isNullOrBlank())prefs.edit().putString("response_$conversationId",result.second).apply();runOnUiThread{append("assistant",result.first);JarvisWidgetRenderer.render(this,widgetContainer,message,result.first);status.text="● Listo · memoria activa";speak(result.first)}}catch(e:Exception){runOnUiThread{status.text="Error";Toast.makeText(this,e.message,Toast.LENGTH_LONG).show()}}}.start()
+        Thread{try{val result=postChat(message,h,previous);if(!result.second.isNullOrBlank())prefs.edit().putString("response_$conversationId",result.second).apply();runOnUiThread{append("assistant",result.first);JarvisWidgetRenderer.render(this,widgetContainer,message,result.first);status.text="● Listo · memoria activa";speak(result.first)}}catch(e:Exception){runOnUiThread{status.text="Error";Toast.makeText(this,e.message,Toast.LENGTH_LONG).show();handler.postDelayed({startVoiceCapture()},400)}}}.start()
     }
 
-    private fun postChat(message:String,history:JSONArray,previous:String?):Pair<String,String?>{val c=(URL("$BACKEND/api/chat").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=45000;setRequestProperty("Content-Type","application/json")};val payload=JSONObject().put("message",message).put("conversationId",conversationId).put("client","jarvis-mobile").put("history",history).put("clientMcps",localMcps()).apply{if(!previous.isNullOrBlank())put("previousResponseId",previous)};c.outputStream.use{it.write(payload.toString().toByteArray())};val body=(if(c.responseCode in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();if(c.responseCode !in 200..299)throw IllegalStateException("HTTP ${c.responseCode} $body");val json=JSONObject(body);return json.optString("reply") to json.optString("responseId").ifBlank{null}}
+    private fun lastLocationPayload():JSONObject?{
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED)return null
+        return runCatching{
+            val lm=getSystemService(LOCATION_SERVICE) as LocationManager
+            val providers=listOf(LocationManager.GPS_PROVIDER,LocationManager.NETWORK_PROVIDER,LocationManager.PASSIVE_PROVIDER)
+            var best:Location?=null
+            for(p in providers){val l=runCatching{lm.getLastKnownLocation(p)}.getOrNull()?:continue;if(best==null||l.time>(best?.time?:0L))best=l}
+            best?.let{JSONObject().put("latitude",it.latitude).put("longitude",it.longitude).put("accuracyMeters",it.accuracy.toDouble()).put("timestamp",it.time).put("source","android-phone")}
+        }.getOrNull()
+    }
+
+    private fun postChat(message:String,history:JSONArray,previous:String?):Pair<String,String?>{
+        val c=(URL("$BACKEND/api/chat").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=45000;setRequestProperty("Content-Type","application/json")}
+        val payload=JSONObject().put("message",message).put("conversationId",conversationId).put("client","jarvis-mobile").put("history",history).put("clientMcps",localMcps()).apply{
+            if(!previous.isNullOrBlank())put("previousResponseId",previous)
+            lastLocationPayload()?.let{put("location",it)}
+        }
+        c.outputStream.use{it.write(payload.toString().toByteArray())};val body=(if(c.responseCode in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();if(c.responseCode !in 200..299)throw IllegalStateException("HTTP ${c.responseCode} $body");val json=JSONObject(body);return json.optString("reply") to json.optString("responseId").ifBlank{null}
+    }
 
     private fun refreshWeather(place:String?=null,speakResult:Boolean=false){
         findViewById<View>(R.id.weatherCard).visibility=View.VISIBLE
@@ -130,12 +164,17 @@ class ChatActivity : AppCompatActivity() {
     private fun showVoiceSettings(){val voices=arrayOf("mi_voz","openvoice","coral","alloy","ash","ballad","echo","fable","nova","onyx","sage","shimmer","verse");val cur=prefs.getString("voice","mi_voz")?:"mi_voz";AlertDialog.Builder(this).setTitle("Voz de Jarvis").setSingleChoiceItems(voices,voices.indexOf(cur).coerceAtLeast(0)){d,w->prefs.edit().putString("voice",voices[w]).apply();d.dismiss();speak("Hola. Esta es mi voz.")}.show()}
 
     private fun toggleWakeWord(){val enabled=prefs.getBoolean("wake_word_enabled",false);if(enabled){stopService(Intent(this,WakeWordService::class.java));prefs.edit().putBoolean("wake_word_enabled",false).apply();status.text="Activación por voz desactivada"}else{if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),91);return};ContextCompat.startForegroundService(this,Intent(this,WakeWordService::class.java));prefs.edit().putBoolean("wake_word_enabled",true).apply();status.text="Hola Jarvis / Ale / Leo · escuchando en segundo plano"}}
-    private fun setupRecognizer(){if(!SpeechRecognizer.isRecognitionAvailable(this))return;recognizer?.destroy();recognizer=SpeechRecognizer.createSpeechRecognizer(this).apply{setRecognitionListener(object:RecognitionListener{override fun onReadyForSpeech(params:Bundle?){status.text="Escuchando…"};override fun onBeginningOfSpeech(){status.text="Te escucho…"};override fun onRmsChanged(rmsdB:Float){};override fun onBufferReceived(buffer:ByteArray?){};override fun onEndOfSpeech(){status.text="Procesando…"};override fun onError(error:Int){startRecorderFallback()};override fun onResults(results:Bundle?){val text=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(text.isNotBlank()){input.setText(text);sendMessage()}else startRecorderFallback()};override fun onPartialResults(partialResults:Bundle?){val p=partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull();if(!p.isNullOrBlank()){input.setText(p);status.text="Escuchando… $p"}};override fun onEvent(eventType:Int,params:Bundle?){}})}}
-    private fun startVoiceCapture(){if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),90);return};if(recognizer==null)setupRecognizer();val r=recognizer;if(r!=null){val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,650L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,450L)};try{r.cancel();r.startListening(i);return}catch(_:Exception){}};startRecorderFallback()}
+    private fun setupRecognizer(){if(!SpeechRecognizer.isRecognitionAvailable(this))return;recognizer?.destroy();recognizer=SpeechRecognizer.createSpeechRecognizer(this).apply{setRecognitionListener(object:RecognitionListener{override fun onReadyForSpeech(params:Bundle?){status.text="Escuchando…"};override fun onBeginningOfSpeech(){status.text="Te escucho…"};override fun onRmsChanged(rmsdB:Float){};override fun onBufferReceived(buffer:ByteArray?){};override fun onEndOfSpeech(){status.text="Procesando…"};override fun onError(error:Int){if(error==SpeechRecognizer.ERROR_RECOGNIZER_BUSY){handler.postDelayed({setupRecognizer();startVoiceCapture()},500)}else startRecorderFallback()};override fun onResults(results:Bundle?){val text=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(text.isNotBlank()){input.setText(text);sendMessage()}else handler.postDelayed({startVoiceCapture()},180)};override fun onPartialResults(partialResults:Bundle?){val p=partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull();if(!p.isNullOrBlank()){input.setText(p);status.text="Escuchando… $p"}};override fun onEvent(eventType:Int,params:Bundle?){}})}}
+    private fun startVoiceCapture(){
+        keepVoiceSessionAlive()
+        if(prefs.getBoolean("wake_word_enabled",false))runCatching{startService(Intent(this,WakeWordService::class.java).setAction(WakeWordService.ACTION_PAUSE_FOR_CONVERSATION))}
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),90);return}
+        if(recognizer==null)setupRecognizer();val r=recognizer;if(r!=null){val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,800L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,500L);putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,false)};try{r.cancel();handler.postDelayed({runCatching{r.startListening(i)}.onFailure{startRecorderFallback()}},120L);return}catch(_:Exception){}};startRecorderFallback()
+    }
     private fun startRecorderFallback(){if(recorder!=null)return;val file=File(cacheDir,"voice-${System.currentTimeMillis()}.m4a");voiceFile=file;recorder=(if(Build.VERSION.SDK_INT>=31)MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()).apply{setAudioSource(MediaRecorder.AudioSource.MIC);setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);setAudioEncoder(MediaRecorder.AudioEncoder.AAC);setAudioSamplingRate(16000);setAudioEncodingBitRate(64000);setOutputFile(file.absolutePath);prepare();start()};status.text="Escuchando…";handler.postDelayed({stopVoiceCaptureFallback()},4000)}
-    private fun stopVoiceCaptureFallback(){val r=recorder?:return;runCatching{r.stop()};runCatching{r.release()};recorder=null;val file=voiceFile?:return;voiceFile=null;Thread{try{val c=(URL("$BACKEND/api/transcribe").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=20000;setRequestProperty("Content-Type","audio/mp4")};c.outputStream.use{out->file.inputStream().use{it.copyTo(out)}};val body=c.inputStream.bufferedReader().use{it.readText()};val text=JSONObject(body).optString("text");runOnUiThread{input.setText(text);sendMessage()}}catch(_:Exception){runOnUiThread{status.text="Error de voz"}}finally{file.delete()}}.start()}
+    private fun stopVoiceCaptureFallback(){val r=recorder?:return;runCatching{r.stop()};runCatching{r.release()};recorder=null;val file=voiceFile?:return;voiceFile=null;Thread{try{val c=(URL("$BACKEND/api/transcribe").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=20000;setRequestProperty("Content-Type","audio/mp4")};c.outputStream.use{out->file.inputStream().use{it.copyTo(out)}};val body=c.inputStream.bufferedReader().use{it.readText()};val text=JSONObject(body).optString("text");runOnUiThread{if(text.isNotBlank()){input.setText(text);sendMessage()}else startVoiceCapture()}}catch(_:Exception){runOnUiThread{status.text="Error de voz";handler.postDelayed({startVoiceCapture()},500)}}finally{file.delete()}}.start()}
 
-    private fun speak(text:String){FastVoice.speak(this,prefs,text){status.text="● Hablando · voz clonada"}}
+    private fun speak(text:String){keepVoiceSessionAlive();FastVoice.speak(this,prefs,text){status.text="● Hablando · voz clonada"}}
     override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==90&&grantResults.firstOrNull()==PackageManager.PERMISSION_GRANTED)startVoiceCapture();if(requestCode==91&&grantResults.firstOrNull()==PackageManager.PERMISSION_GRANTED)toggleWakeWord()}
     override fun onDestroy(){handler.removeCallbacksAndMessages(null);recognizer?.destroy();recorder?.let{runCatching{it.release()}};FastVoice.stop();super.onDestroy()}
     companion object{private const val BACKEND="https://chatgpt-tv2.vercel.app"}
