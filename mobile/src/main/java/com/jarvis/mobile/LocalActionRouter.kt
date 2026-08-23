@@ -9,6 +9,7 @@ import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
@@ -23,6 +24,7 @@ class LocalActionRouter(private val activity: Activity) {
     fun handle(raw: String): Result {
         val text = raw.trim(); val lower = norm(text)
         when {
+            isDomoticsCommand(lower) -> return handleDomotics(text, lower)
             isAlarmCommand(lower) -> return createAlarm(text)
             Regex("^(puedes |podrias |quiero que |por favor )?(llama|llamar|telefonea|haz una llamada)(me)?( a| al)? ").containsMatchIn(lower) -> {
                 val target = lower.replace(Regex("^(puedes |podrias |quiero que |por favor )?(llama|llamar|telefonea|haz una llamada)(me)?( a| al)? "), "").trim()
@@ -45,6 +47,69 @@ class LocalActionRouter(private val activity: Activity) {
         return Result(false)
     }
 
+    private fun isDomoticsCommand(s:String):Boolean {
+        val deviceWord = listOf("aire acondicionado","clima","tado","sensibo","hue","luz","luces","roborock","robot","home connect","smartthings","termostato").any{s.contains(it)}
+        val actionWord = listOf("enciende","encender","apaga","apagar","pon a","sube","baja","temperatura","estado","como esta","cómo está","reanuda","horario").any{s.contains(it)}
+        return deviceWord && actionWord
+    }
+
+    private fun handleDomotics(raw:String, lower:String):Result {
+        val prefs=activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE)
+        val tadoConnected=prefs.getString("domotics_tado_status","")=="connected" || TadoClient.isConnected(activity)
+        val wantsClimate=listOf("aire acondicionado","clima","tado","termostato").any{lower.contains(it)}
+        if(wantsClimate && tadoConnected){
+            val target=Regex("(?:a|en|temperatura)\s*(\d{1,2}(?:[.,]\d)?)\s*(?:grados|°)?").find(lower)?.groupValues?.getOrNull(1)?.replace(',','.')?.toDoubleOrNull()
+            Thread {
+                try {
+                    val zones=TadoClient.zones(activity)
+                    if(zones.isEmpty()) throw IllegalStateException("Tado no devuelve ninguna zona controlable")
+                    val preferred=zones.firstOrNull{z->
+                        val n=norm(z.name)
+                        listOf("dormitorio","salon","salón","habitacion","habitación").any{lower.contains(norm(it))&&n.contains(norm(it))}
+                    } ?: zones.first()
+                    when {
+                        lower.contains("apaga") || lower.contains("apagar") -> TadoClient.setPower(activity,preferred,false)
+                        lower.contains("horario") || lower.contains("reanuda") -> TadoClient.resumeSchedule(activity,preferred)
+                        target!=null -> TadoClient.setTemperature(activity,preferred,target.coerceIn(5.0,30.0))
+                        lower.contains("sube") -> TadoClient.setTemperature(activity,preferred,(preferred.target?:preferred.temperature?:21.0)+1.0)
+                        lower.contains("baja") -> TadoClient.setTemperature(activity,preferred,(preferred.target?:preferred.temperature?:21.0)-1.0)
+                        else -> TadoClient.setPower(activity,preferred,true,preferred.target?:preferred.temperature?:21.0)
+                    }
+                    val fresh=runCatching{TadoClient.zones(activity).firstOrNull{it.id==preferred.id}}.getOrNull()
+                    activity.runOnUiThread{Toast.makeText(activity,"${preferred.name}: orden aplicada${fresh?.temperature?.let{" · %.1f °C".format(it)}?:""}",Toast.LENGTH_SHORT).show()}
+                }catch(e:Exception){activity.runOnUiThread{Toast.makeText(activity,"No pude controlar Tado: ${e.message}",Toast.LENGTH_LONG).show()}}
+            }.start()
+            val action=when{
+                lower.contains("apaga")||lower.contains("apagar")->"Apagando"
+                lower.contains("horario")||lower.contains("reanuda")->"Volviendo al horario automático de"
+                target!=null->"Ajustando a ${target.toInt()} grados"
+                lower.contains("sube")->"Subiendo un grado en"
+                lower.contains("baja")->"Bajando un grado en"
+                else->"Encendiendo"
+            }
+            return Result(true,"$action el climatizador Tado. Te mostraré el estado en pantalla.")
+        }
+
+        val provider=when{
+            lower.contains("sensibo")->"Sensibo"
+            lower.contains("hue")||lower.contains("luz")||lower.contains("luces")->"Philips Hue"
+            lower.contains("roborock")||lower.contains("robot")->"Roborock"
+            lower.contains("home connect")->"Home Connect"
+            lower.contains("smartthings")->"Samsung SmartThings"
+            else->null
+        }
+        if(provider!=null){
+            val key=when(provider){"Sensibo"->"sensibo";"Philips Hue"->"hue";"Roborock"->"roborock";"Home Connect"->"homeconnect";else->"smartthings"}
+            val connected=prefs.getString("domotics_${key}_status","")=="connected"
+            if(!connected){
+                activity.runOnUiThread{runCatching{activity.startActivity(Intent(activity,DomoticsHubActivity::class.java))}}
+                return Result(true,"$provider todavía no está autorizado para control real. He abierto Domótica para completar la conexión; no voy a fingir que la orden se ejecutó.")
+            }
+            return Result(true,"$provider figura conectado, pero su controlador de órdenes todavía no está disponible en esta compilación. No he enviado una orden falsa.")
+        }
+        return Result(false)
+    }
+
     private fun isAlarmCommand(s:String):Boolean = s.contains("alarma") || s.startsWith("despiertame ") || s.startsWith("despierta me ") || s.startsWith("avisame a las ") || s.startsWith("avisame a la ")
 
     private fun createAlarm(raw:String):Result {
@@ -63,20 +128,8 @@ class LocalActionRouter(private val activity: Activity) {
         if(s.contains("mediodia")) hour=12
         if(s.contains("medianoche")) hour=0
         if(hour !in 0..23 || minute !in 0..59) return Result(true,"La hora de la alarma no es válida.")
-        val intent=Intent(AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_HOUR,hour); putExtra(AlarmClock.EXTRA_MINUTES,minute); putExtra(AlarmClock.EXTRA_MESSAGE,"Jarvis"); putExtra(AlarmClock.EXTRA_SKIP_UI,true); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        return try {
-            val resolved=intent.resolveActivity(activity.packageManager)
-            if(resolved!=null){ activity.startActivity(intent); Result(true,"Alarma puesta a las %02d:%02d.".format(hour,minute)) }
-            else {
-                val show=Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(show); Result(true,"He abierto Alarmas porque el reloj del teléfono no acepta creación directa.")
-            }
-        } catch(_:Exception) {
-            runCatching { activity.startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            Result(true,"He abierto la sección de alarmas del teléfono.")
-        }
+        val intent=Intent(AlarmClock.ACTION_SET_ALARM).apply { putExtra(AlarmClock.EXTRA_HOUR,hour); putExtra(AlarmClock.EXTRA_MINUTES,minute); putExtra(AlarmClock.EXTRA_MESSAGE,"Jarvis"); putExtra(AlarmClock.EXTRA_SKIP_UI,true); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        return try { val resolved=intent.resolveActivity(activity.packageManager); if(resolved!=null){ activity.startActivity(intent); Result(true,"Alarma puesta a las %02d:%02d.".format(hour,minute)) } else { val show=Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); activity.startActivity(show); Result(true,"He abierto Alarmas porque el reloj del teléfono no acepta creación directa.") } } catch(_:Exception) { runCatching { activity.startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; Result(true,"He abierto la sección de alarmas del teléfono.") }
     }
 
     private fun phoneAccessStatus():Result{val contacts=ContextCompat.checkSelfPermission(activity,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED;val calls=ContextCompat.checkSelfPermission(activity,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED;if(!contacts||!calls)ActivityCompat.requestPermissions(activity,buildList{if(!contacts)add(Manifest.permission.READ_CONTACTS);if(!calls)add(Manifest.permission.CALL_PHONE)}.toTypedArray(),70);return Result(true,"Llamadas: ${if(calls)"habilitadas" else "falta permiso"}. Contactos: ${if(contacts)"habilitados" else "falta permiso"}.")}
