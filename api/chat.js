@@ -10,7 +10,8 @@ export default async function handler(req, res) {
     history = [],
     client = 'jarvis',
     previousResponseId = null,
-    clientMcps = []
+    clientMcps = [],
+    location = null
   } = req.body || {};
   if (!message || typeof message !== 'string') return res.status(400).json({ error: 'message_required' });
 
@@ -43,9 +44,22 @@ export default async function handler(req, res) {
     ? history.slice(-50).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
     : [];
 
+  const validLocation = location && Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude))
+    ? {
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        accuracyMeters: Number.isFinite(Number(location.accuracyMeters)) ? Math.round(Number(location.accuracyMeters)) : null,
+        timestamp: Number.isFinite(Number(location.timestamp)) ? Number(location.timestamp) : null
+      }
+    : null;
+
+  const locationContext = validLocation
+    ? ` Ubicación actual proporcionada por el teléfono: latitud ${validLocation.latitude}, longitud ${validLocation.longitude}${validLocation.accuracyMeters ? `, precisión aproximada ${validLocation.accuracyMeters} metros` : ''}. Úsala cuando el usuario pregunte distancias, cómo ir a un sitio, qué hay cerca o tiempos de desplazamiento. No muestres coordenadas salvo que sean útiles o te las pidan.`
+    : '';
+
   const developer = {
     role: 'developer',
-    content: `Eres ${assistantName}, el asistente personal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta con lo hablado antes. Usa búsqueda web para información actual. Si hay herramientas MCP disponibles, úsalas cuando ayuden y respeta las aprobaciones. Cliente: ${client}. Conversación: ${conversationId}.`
+    content: `Eres ${assistantName}, el asistente personal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta con lo hablado antes. Para temperaturas habladas en español usa expresiones naturales como "20 grados", no "20 C", salvo que el usuario pida la unidad explícitamente. Usa búsqueda web para información actual. Si hay herramientas MCP disponibles, úsalas cuando ayuden y respeta las aprobaciones. Cliente: ${client}. Conversación: ${conversationId}.${locationContext}`
   };
 
   const payload = {
