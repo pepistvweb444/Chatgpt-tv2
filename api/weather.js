@@ -7,6 +7,25 @@ export default async function handler(req, res) {
     let lon = Number(req.query?.lon || 0);
     let place = String(req.query?.place || '').trim();
 
+    // If the app asks for a city/place explicitly, geocode that place first.
+    if ((!lat || !lon) && place) {
+      const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search');
+      geoUrl.searchParams.set('name', place);
+      geoUrl.searchParams.set('count', '1');
+      geoUrl.searchParams.set('language', 'es');
+      geoUrl.searchParams.set('format', 'json');
+      const geo = await fetch(geoUrl);
+      if (geo.ok) {
+        const g = await geo.json();
+        const first = Array.isArray(g?.results) ? g.results[0] : null;
+        if (first) {
+          lat = Number(first.latitude || 0);
+          lon = Number(first.longitude || 0);
+          place = [first.name, first.admin1, first.country].filter(Boolean).join(', ');
+        }
+      }
+    }
+
     if ((!lat || !lon) && clientIp) {
       const geo = await fetch(`https://ipwho.is/${encodeURIComponent(clientIp)}`);
       if (geo.ok) {
