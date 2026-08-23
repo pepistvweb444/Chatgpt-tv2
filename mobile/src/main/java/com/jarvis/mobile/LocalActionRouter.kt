@@ -49,7 +49,7 @@ class LocalActionRouter(private val activity: Activity) {
 
     private fun isDomoticsCommand(s:String):Boolean {
         val deviceWord = listOf("aire acondicionado","clima","tado","sensibo","hue","luz","luces","roborock","robot","home connect","smartthings","termostato").any{s.contains(it)}
-        val actionWord = listOf("enciende","encender","apaga","apagar","pon a","sube","baja","temperatura","estado","como esta","cómo está","reanuda","horario").any{s.contains(it)}
+        val actionWord = listOf("enciende","encender","activa","activar","pon","ponlo","configura","ajusta","apaga","apagar","desactiva","desactivar","sube","baja","temperatura","estado","como esta","reanuda","horario","modo frio","modo calor","modo auto").any{s.contains(it)}
         return deviceWord && actionWord
     }
 
@@ -58,7 +58,16 @@ class LocalActionRouter(private val activity: Activity) {
         val tadoConnected=prefs.getString("domotics_tado_status","")=="connected" || TadoClient.isConnected(activity)
         val wantsClimate=listOf("aire acondicionado","clima","tado","termostato").any{lower.contains(it)}
         if(wantsClimate && tadoConnected){
-            val target=Regex("(?:a|en|temperatura)\s*(\d{1,2}(?:[.,]\d)?)\s*(?:grados|°)?").find(lower)?.groupValues?.getOrNull(1)?.replace(',','.')?.toDoubleOrNull()
+            val target=Regex("(?:a|en|temperatura|ajusta(?:do)? a)\s*(\d{1,2}(?:[.,]\d)?)\s*(?:grados|°)?").find(lower)?.groupValues?.getOrNull(1)?.replace(',','.')?.toDoubleOrNull()
+                ?: Regex("\b(1[6-9]|2[0-9]|30)\s*(?:grados|°)").find(lower)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            val requestedMode=when{
+                lower.contains("modo frio")||lower.contains("modo frío")||lower.contains("refriger") -> "COOL"
+                lower.contains("modo calor")||lower.contains("calefaccion")||lower.contains("calefacción") -> "HEAT"
+                lower.contains("modo auto")||lower.contains("automatico")||lower.contains("automático") -> "AUTO"
+                lower.contains("deshumid") -> "DRY"
+                lower.contains("ventilador") -> "FAN"
+                else -> null
+            }
             Thread {
                 try {
                     val zones=TadoClient.zones(activity)
@@ -68,26 +77,29 @@ class LocalActionRouter(private val activity: Activity) {
                         listOf("dormitorio","salon","salón","habitacion","habitación").any{lower.contains(norm(it))&&n.contains(norm(it))}
                     } ?: zones.first()
                     when {
-                        lower.contains("apaga") || lower.contains("apagar") -> TadoClient.setPower(activity,preferred,false)
+                        lower.contains("apaga") || lower.contains("apagar") || lower.contains("desactiva") || lower.contains("desactivar") -> TadoClient.setPower(activity,preferred,false)
                         lower.contains("horario") || lower.contains("reanuda") -> TadoClient.resumeSchedule(activity,preferred)
-                        target!=null -> TadoClient.setTemperature(activity,preferred,target.coerceIn(5.0,30.0))
+                        target!=null || requestedMode!=null -> TadoClient.setClimate(activity,preferred,target ?: preferred.target ?: preferred.temperature ?: 21.0,requestedMode)
                         lower.contains("sube") -> TadoClient.setTemperature(activity,preferred,(preferred.target?:preferred.temperature?:21.0)+1.0)
                         lower.contains("baja") -> TadoClient.setTemperature(activity,preferred,(preferred.target?:preferred.temperature?:21.0)-1.0)
                         else -> TadoClient.setPower(activity,preferred,true,preferred.target?:preferred.temperature?:21.0)
                     }
                     val fresh=runCatching{TadoClient.zones(activity).firstOrNull{it.id==preferred.id}}.getOrNull()
-                    activity.runOnUiThread{Toast.makeText(activity,"${preferred.name}: orden aplicada${fresh?.temperature?.let{" · %.1f °C".format(it)}?:""}",Toast.LENGTH_SHORT).show()}
+                    activity.runOnUiThread{Toast.makeText(activity,"${preferred.name}: orden aplicada${fresh?.target?.let{" · objetivo %.1f °C".format(it)}?:""}",Toast.LENGTH_SHORT).show()}
                 }catch(e:Exception){activity.runOnUiThread{Toast.makeText(activity,"No pude controlar Tado: ${e.message}",Toast.LENGTH_LONG).show()}}
             }.start()
             val action=when{
-                lower.contains("apaga")||lower.contains("apagar")->"Apagando"
+                lower.contains("apaga")||lower.contains("apagar")||lower.contains("desactiva")||lower.contains("desactivar")->"Apagando"
                 lower.contains("horario")||lower.contains("reanuda")->"Volviendo al horario automático de"
-                target!=null->"Ajustando a ${target.toInt()} grados"
+                target!=null&&requestedMode=="COOL"->"Poniendo el aire en modo frío a ${target.toInt()} grados"
+                target!=null->"Ajustando el aire a ${target.toInt()} grados"
+                requestedMode=="COOL"->"Poniendo el aire en modo frío"
+                requestedMode=="HEAT"->"Poniendo el aire en modo calor"
                 lower.contains("sube")->"Subiendo un grado en"
                 lower.contains("baja")->"Bajando un grado en"
                 else->"Encendiendo"
             }
-            return Result(true,"$action el climatizador Tado. Te mostraré el estado en pantalla.")
+            return Result(true,"$action. Te mostraré el estado real en pantalla.")
         }
 
         val provider=when{
@@ -101,11 +113,8 @@ class LocalActionRouter(private val activity: Activity) {
         if(provider!=null){
             val key=when(provider){"Sensibo"->"sensibo";"Philips Hue"->"hue";"Roborock"->"roborock";"Home Connect"->"homeconnect";else->"smartthings"}
             val connected=prefs.getString("domotics_${key}_status","")=="connected"
-            if(!connected){
-                activity.runOnUiThread{runCatching{activity.startActivity(Intent(activity,DomoticsHubActivity::class.java))}}
-                return Result(true,"$provider todavía no está autorizado para control real. He abierto Domótica para completar la conexión; no voy a fingir que la orden se ejecutó.")
-            }
-            return Result(true,"$provider figura conectado, pero su controlador de órdenes todavía no está disponible en esta compilación. No he enviado una orden falsa.")
+            if(!connected){activity.runOnUiThread{runCatching{activity.startActivity(Intent(activity,DomoticsHubActivity::class.java))}};return Result(true,"$provider todavía no está autorizado para control real. He abierto Domótica para completar la conexión.")}
+            return Result(true,"$provider figura conectado, pero su controlador de órdenes todavía no está disponible en esta compilación.")
         }
         return Result(false)
     }
