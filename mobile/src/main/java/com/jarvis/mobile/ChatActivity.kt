@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -27,6 +28,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.UUID
 
 class ChatActivity : AppCompatActivity() {
@@ -62,8 +64,8 @@ class ChatActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.phoneCard).setOnClickListener{startActivity(Intent(this,DeviceHubActivity::class.java))}
         findViewById<TextView>(R.id.visionCard).setOnClickListener{runCatching{startActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE))}}
         findViewById<TextView>(R.id.nowBrief).setOnClickListener{refreshNowBrief()}
-        findViewById<android.view.View>(R.id.weatherCard).setOnClickListener{refreshWeather()}
-        refreshWeather();handleWakeIntent(intent)
+        findViewById<View>(R.id.weatherCard).setOnClickListener{refreshWeather(null,false)}
+        refreshWeather(null,false);handleWakeIntent(intent)
     }
 
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);handleWakeIntent(intent)}
@@ -78,9 +80,26 @@ class ChatActivity : AppCompatActivity() {
     private fun append(role:String,text:String){val arr=history();arr.put(JSONObject().put("role",role).put("content",text));prefs.edit().putString("chat_$conversationId",arr.toString()).apply();transcript.append(if(role=="user")"\nTú\n$text\n" else "\nJarvis\n$text\n");val idx=chatIndex();for(i in 0 until idx.length()){val o=idx.optJSONObject(i)?:continue;if(o.optString("id")==conversationId){if(role=="user"&&o.optString("title")=="Nuevo chat")o.put("title",text.take(40));o.put("updated",System.currentTimeMillis());break}};prefs.edit().putString("chatIndex",idx.toString()).apply();scroll.post{scroll.fullScroll(ScrollView.FOCUS_DOWN)}}
     private fun loadConversation(){val arr=history();val sb=StringBuilder();for(i in 0 until arr.length()){val o=arr.optJSONObject(i)?:continue;sb.append(if(o.optString("role")=="user")"\nTú\n" else "\nJarvis\n").append(o.optString("content")).append("\n")};transcript.text=sb.toString()}
 
+    private fun isWeatherQuery(message:String):Boolean{
+        val q=message.lowercase()
+        return q.contains("tiempo")||q.contains("temperatura")||q.contains("va a llover")||q.contains("lloverá")||q.contains("previsión")||q.contains("prevision")||q.contains("meteorolog")
+    }
+
+    private fun extractWeatherPlace(message:String):String?{
+        val clean=message.trim().replace(Regex("[?!.]+$"),"")
+        val patterns=listOf(Regex("(?i)\\ben\\s+(.+)$"),Regex("(?i)\\bde\\s+(.+)$"))
+        for(p in patterns){val m=p.find(clean);val value=m?.groupValues?.getOrNull(1)?.trim();if(!value.isNullOrBlank()&&value.length<80)return value}
+        return null
+    }
+
     private fun sendMessage(){
         val message=input.text.toString().trim();if(message.isBlank())return
         input.text.clear();append("user",message)
+        if(isWeatherQuery(message)){
+            status.text="Actualizando widget del tiempo…"
+            refreshWeather(extractWeatherPlace(message),true)
+            return
+        }
         val local=actionRouter.handle(message)
         if(local.handled){append("assistant",local.message);JarvisWidgetRenderer.render(this,widgetContainer,message,local.message);status.text="Acción del teléfono";speak(local.message);return}
         status.text="Pensando…";val h=history();val previous=prefs.getString("response_$conversationId",null)
@@ -89,7 +108,22 @@ class ChatActivity : AppCompatActivity() {
 
     private fun postChat(message:String,history:JSONArray,previous:String?):Pair<String,String?>{val c=(URL("$BACKEND/api/chat").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=8000;readTimeout=45000;setRequestProperty("Content-Type","application/json")};val payload=JSONObject().put("message",message).put("conversationId",conversationId).put("client","jarvis-mobile").put("history",history).put("clientMcps",localMcps()).apply{if(!previous.isNullOrBlank())put("previousResponseId",previous)};c.outputStream.use{it.write(payload.toString().toByteArray())};val body=(if(c.responseCode in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();if(c.responseCode !in 200..299)throw IllegalStateException("HTTP ${c.responseCode} $body");val json=JSONObject(body);return json.optString("reply") to json.optString("responseId").ifBlank{null}}
 
-    private fun refreshWeather(){findViewById<TextView>(R.id.weatherDetail).text="Actualizando…";Thread{try{val c=(URL("$BACKEND/api/weather").openConnection() as HttpURLConnection).apply{connectTimeout=6000;readTimeout=8000};val json=JSONObject(c.inputStream.bufferedReader().use{it.readText()});val code=json.optInt("code",3);val icon=weatherIcon(code);val temp=json.optDouble("temperature");val feels=json.optDouble("feelsLike");val wind=json.optDouble("wind");val days=json.optJSONArray("days")?:JSONArray();val forecast=mutableListOf<String>();for(i in 0 until minOf(days.length(),4)){val d=days.optJSONObject(i)?:continue;forecast+="${d.optString("date").takeLast(5)} ${weatherIcon(d.optInt("code"))} ${d.optDouble("min").toInt()}°/${d.optDouble("max").toInt()}° · lluvia ${d.optInt("rain")}%"};runOnUiThread{findViewById<TextView>(R.id.weatherIcon).text=icon;findViewById<TextView>(R.id.weatherPlace).text=json.optString("place","Ubicación actual");findViewById<TextView>(R.id.weatherTemp).text="${temp.toInt()}°";findViewById<TextView>(R.id.weatherDetail).text="Sensación ${feels.toInt()}° · viento ${wind.toInt()} km/h";findViewById<TextView>(R.id.weatherForecast).text=forecast.joinToString("   ")}}catch(_:Exception){runOnUiThread{findViewById<TextView>(R.id.weatherDetail).text="Tiempo no disponible · pulsa para reintentar"}}}.start()}
+    private fun refreshWeather(place:String?=null,speakResult:Boolean=false){
+        findViewById<View>(R.id.weatherCard).visibility=View.VISIBLE
+        findViewById<TextView>(R.id.weatherForecast).visibility=View.VISIBLE
+        findViewById<TextView>(R.id.weatherDetail).text="Actualizando…"
+        Thread{
+            try{
+                val endpoint=if(place.isNullOrBlank()) "$BACKEND/api/weather" else "$BACKEND/api/weather?place=${URLEncoder.encode(place,"UTF-8")}" 
+                val c=(URL(endpoint).openConnection() as HttpURLConnection).apply{connectTimeout=6000;readTimeout=8000}
+                val body=(if(c.responseCode in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+                if(c.responseCode !in 200..299)throw IllegalStateException(body)
+                val json=JSONObject(body);val code=json.optInt("code",3);val icon=weatherIcon(code);val temp=json.optDouble("temperature");val feels=json.optDouble("feelsLike");val wind=json.optDouble("wind");val resolvedPlace=json.optString("place","Ubicación actual");val days=json.optJSONArray("days")?:JSONArray();val forecast=mutableListOf<String>();for(i in 0 until minOf(days.length(),4)){val d=days.optJSONObject(i)?:continue;forecast+="${d.optString("date").takeLast(5)} ${weatherIcon(d.optInt("code"))} ${d.optDouble("min").toInt()}°/${d.optDouble("max").toInt()}° · lluvia ${d.optInt("rain")}%"}
+                val spoken="En $resolvedPlace hay ${temp.toInt()} grados. Sensación de ${feels.toInt()} grados y viento de ${wind.toInt()} kilómetros por hora."
+                runOnUiThread{findViewById<TextView>(R.id.weatherIcon).text=icon;findViewById<TextView>(R.id.weatherPlace).text=resolvedPlace;findViewById<TextView>(R.id.weatherTemp).text="${temp.toInt()}°";findViewById<TextView>(R.id.weatherDetail).text="Sensación ${feels.toInt()}° · viento ${wind.toInt()} km/h";findViewById<TextView>(R.id.weatherForecast).text=forecast.joinToString("   ");status.text="● Tiempo actualizado";if(speakResult)speak(spoken);scroll.post{scroll.smoothScrollTo(0,0)}}
+            }catch(_:Exception){runOnUiThread{findViewById<TextView>(R.id.weatherDetail).text="Tiempo no disponible · pulsa para reintentar";status.text="No se pudo actualizar el tiempo"}}
+        }.start()
+    }
     private fun weatherIcon(code:Int):String=when(code){0->"☀️";1,2->"🌤️";3->"☁️";45,48->"🌫️";in 51..67->"🌧️";in 71..77->"🌨️";in 80..82->"🌦️";in 95..99->"⛈️";else->"🌤️"}
     private fun refreshNowBrief(){val card=findViewById<TextView>(R.id.nowBrief);card.text="NOW BRIEF\nActualizando…";val notif=runCatching{JSONArray(prefs.getString("notification_feed","[]"))}.getOrElse{JSONArray()};val recent=mutableListOf<String>();for(i in (notif.length()-1) downTo 0){val o=notif.optJSONObject(i)?:continue;val t=listOf(o.optString("title"),o.optString("text")).filter{it.isNotBlank()}.joinToString(": ");if(t.isNotBlank())recent.add(t.take(120));if(recent.size>=4)break};val prompt="Crea un Now Brief breve para hoy sin repetir el tiempo, que ya se muestra en un widget. Resume estas notificaciones recientes: ${recent.joinToString(" | ")}. Máximo 6 líneas, en español.";Thread{try{val result=postChat(prompt,JSONArray(),null).first;runOnUiThread{card.text="NOW BRIEF\n$result"}}catch(_:Exception){runOnUiThread{card.text="NOW BRIEF\nNo se pudo actualizar"}}}.start()}
     private fun showPlugins(){AlertDialog.Builder(this).setTitle("Complementos").setMessage("MCP remotos, cuentas y domótica de Jarvis.").setPositiveButton("DOMÓTICA"){_,_->startActivity(Intent(this,DomoticsHubActivity::class.java))}.setNeutralButton("MCP"){_,_->startActivity(Intent(this,MainActivity::class.java))}.setNegativeButton("Cerrar",null).show()}
