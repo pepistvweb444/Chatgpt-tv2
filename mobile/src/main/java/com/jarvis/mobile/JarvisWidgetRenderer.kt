@@ -11,6 +11,7 @@ object JarvisWidgetRenderer {
     fun render(activity: Activity, container: LinearLayout, query: String, answer: String) {
         val q = query.lowercase()
         val kind = when {
+            q.contains("noticia") || q.contains("titular") || q.contains("actualidad") -> "📰  NOTICIAS"
             q.contains("alarma") || q.contains("despiert") || q.contains("avisa") -> "⏰  ALARMA"
             q.contains("whatsapp") || q.contains("sms") || q.contains("mensaje") -> "💬  MENSAJES"
             q.contains("tiempo") || q.contains("temperatura") || q.contains("lluv") -> "🌤️  TIEMPO"
@@ -19,18 +20,10 @@ object JarvisWidgetRenderer {
             q.contains("llama") || q.contains("llamar") || q.contains("telefono") -> "📞  TELÉFONO"
             else -> return
         }
-        container.removeAllViews()
-        container.visibility = LinearLayout.VISIBLE
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(34, 26, 34, 26)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(245, 247, 250)); cornerRadius = 28f
-            }
-        }
-        val title = TextView(activity).apply { text = kind; textSize = 13f; setTextColor(Color.rgb(80,80,80)) }
-        val body = TextView(activity).apply { text = answer; textSize = 18f; setTextColor(Color.rgb(25,25,25)); setPadding(0,8,0,0) }
-        card.addView(title); card.addView(body)
-        container.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0,8,0,14) })
+        container.removeAllViews();container.visibility=LinearLayout.VISIBLE
+        val card=LinearLayout(activity).apply{orientation=LinearLayout.VERTICAL;setPadding(34,26,34,26);background=GradientDrawable().apply{setColor(Color.rgb(245,247,250));cornerRadius=28f}}
+        card.addView(TextView(activity).apply{text=kind;textSize=13f;setTextColor(Color.rgb(80,80,80))})
+        card.addView(TextView(activity).apply{text=answer;textSize=18f;setTextColor(Color.rgb(25,25,25));setPadding(0,8,0,0)})
+        container.addView(card,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply{setMargins(0,8,0,14)})
     }
 }
