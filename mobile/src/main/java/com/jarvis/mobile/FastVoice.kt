@@ -35,21 +35,17 @@ object FastVoice {
         stop();interrupted=false
         prefs.edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
         val gen=generation.incrementAndGet();val text=speechText(raw)
-        if(text.isBlank()){activity.runOnUiThread{onStart?.invoke();relisten(activity)};return}
+        if(text.isBlank()){activity.runOnUiThread{onStart?.invoke();relisten(activity,700L)};return}
         prefs.edit().putString("voice","mi_voz").apply()
         val chunks=chunk(text);val files=ConcurrentHashMap<Int,File>();val started=AtomicBoolean(false);val failed=AtomicBoolean(false)
-        fun fail(){if(generation.get()!=gen||!failed.compareAndSet(false,true))return;activity.runOnUiThread{onStart?.invoke();relisten(activity)}}
+        fun fail(){if(generation.get()!=gen||!failed.compareAndSet(false,true))return;activity.runOnUiThread{onStart?.invoke();relisten(activity,700L)}}
         chunks.forEachIndexed{index,part->pool.execute{
             if(failed.get()||generation.get()!=gen)return@execute
-            var last:Exception?=null
             repeat(3){attempt->
                 if(files[index]!=null||generation.get()!=gen)return@repeat
-                try{files[index]=downloadClone(activity,part,index);last=null;return@repeat}catch(e:Exception){last=e;if(attempt<2)Thread.sleep(180L*(attempt+1))}
+                try{files[index]=downloadClone(activity,part,index);return@repeat}catch(_:Exception){if(attempt<2)Thread.sleep(180L*(attempt+1))}
             }
-            if(files[index]==null){
-                if(index==0)fail()
-                else runCatching{files[index]=downloadClone(activity,part,index)}
-            }
+            if(files[index]==null){if(index==0)fail() else runCatching{files[index]=downloadClone(activity,part,index)}}
             if(index==0&&files[index]!=null&&started.compareAndSet(false,true)&&generation.get()==gen)activity.runOnUiThread{onStart?.invoke();startBargeIn(activity,text,gen);play(activity,files,chunks,0,gen)}
         }}
     }
@@ -96,7 +92,13 @@ object FastVoice {
 
     private fun play(activity:Activity,files:ConcurrentHashMap<Int,File>,chunks:List<String>,index:Int,gen:Int){
         if(generation.get()!=gen||interrupted)return
-        if(index>=chunks.size){stopBargeRecognizer();activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply();activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)relisten(activity)},220L);return}
+        if(index>=chunks.size){
+            stopBargeRecognizer()
+            activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
+            // Give the speaker/recognizer a short tail window so Jarvis cannot transcribe its own last words.
+            activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)relisten(activity,0L)},700L)
+            return
+        }
         val file=files[index]
         if(file==null){activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)play(activity,files,chunks,index,gen)},45L);return}
         runCatching{player?.release()}
@@ -105,7 +107,9 @@ object FastVoice {
 
     private fun startBargeIn(activity:Activity,assistantText:String,gen:Int){
         if(!SpeechRecognizer.isRecognitionAvailable(activity))return
-        stopBargeRecognizer();val assistantTokens=normalize(assistantText).split(' ').filter{it.length>2}.toSet()
+        stopBargeRecognizer()
+        val assistantNormalized=normalize(assistantText)
+        val assistantTokens=assistantNormalized.split(' ').filter{it.length>2}.toSet()
         activity.window.decorView.postDelayed({
             if(generation.get()!=gen||interrupted)return@postDelayed
             val r=SpeechRecognizer.createSpeechRecognizer(activity);bargeRecognizer=r
@@ -115,37 +119,54 @@ object FastVoice {
                 override fun onRmsChanged(rmsdB:Float){}
                 override fun onBufferReceived(buffer:ByteArray?){}
                 override fun onEndOfSpeech(){}
-                override fun onError(error:Int){if(generation.get()==gen&&!interrupted)restartBarge(activity,assistantText,gen,260L)}
-                override fun onPartialResults(partialResults:Bundle?){val heard=partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();maybeInterrupt(activity,heard,assistantTokens,gen,false)}
-                override fun onResults(results:Bundle?){val heard=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(!maybeInterrupt(activity,heard,assistantTokens,gen,true))restartBarge(activity,assistantText,gen,160L)}
+                override fun onError(error:Int){if(generation.get()==gen&&!interrupted)restartBarge(activity,assistantText,gen,320L)}
+                override fun onPartialResults(partialResults:Bundle?){val heard=partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();maybeInterrupt(activity,heard,assistantNormalized,assistantTokens,gen,false)}
+                override fun onResults(results:Bundle?){val heard=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(!maybeInterrupt(activity,heard,assistantNormalized,assistantTokens,gen,true))restartBarge(activity,assistantText,gen,220L)}
                 override fun onEvent(eventType:Int,params:Bundle?){}
             })
-            val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,420L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,280L);putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,false)}
+            val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,520L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,340L);putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,false)}
             runCatching{r.startListening(i)}
-        },180L)
+        },320L)
     }
 
     private fun restartBarge(activity:Activity,assistantText:String,gen:Int,delay:Long){activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)startBargeIn(activity,assistantText,gen)},delay)}
 
-    private fun maybeInterrupt(activity:Activity,heardRaw:String,assistantTokens:Set<String>,gen:Int,final:Boolean):Boolean{
+    private fun maybeInterrupt(activity:Activity,heardRaw:String,assistantNormalized:String,assistantTokens:Set<String>,gen:Int,final:Boolean):Boolean{
         if(generation.get()!=gen||interrupted)return false
         val heard=heardRaw.trim();val h=normalize(heard);if(h.length<2)return false
         val tokens=h.split(' ').filter{it.isNotBlank()};if(tokens.isEmpty())return false
+        val explicitStop=h=="para"||h=="espera"||h=="calla"
+        val explicitAddress=h.startsWith("jarvis ")||h.startsWith("ale ")||h.startsWith("leo ")||h.startsWith("lola ")
         val overlap=tokens.count{it in assistantTokens}.toDouble()/tokens.size
         val novel=tokens.count{it !in assistantTokens}
-        val explicitStop=h=="para"||h=="espera"||h=="calla"||h.startsWith("jarvis ")||h.startsWith("ale ")||h.startsWith("leo ")
-        val looksLikeEcho=overlap>=0.82&&tokens.size>=2
-        val realSpeech=explicitStop || (!looksLikeEcho && if(final){tokens.size>=1&&novel>=1&&overlap<0.72}else{h.length>=8&&novel>=2&&overlap<0.52})
-        if(!realSpeech)return false
+        val novelRatio=novel.toDouble()/tokens.size
+        val phraseEcho=h.length>=7 && (assistantNormalized.contains(h) || (h.length>20 && h.contains(assistantNormalized.take(20))))
+        val looksLikeEcho=phraseEcho || overlap>=0.68 || novelRatio<0.34
+
+        // Partial recognition is deliberately strict: the loudspeaker often appears here first.
+        val naturalInterrupt=if(final){
+            !looksLikeEcho && h.length>=6 && tokens.size>=2 && novel>=2 && overlap<0.48
+        }else{
+            !looksLikeEcho && h.length>=12 && tokens.size>=4 && novel>=3 && overlap<0.32
+        }
+        if(!(explicitStop||explicitAddress||naturalInterrupt))return false
+
         interrupted=true
         activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
         runCatching{player?.stop()};runCatching{player?.release()};player=null;stopBargeRecognizer()
-        if(explicitStop && (h=="para"||h=="espera"||h=="calla")){activity.runOnUiThread{relisten(activity)};return true}
-        activity.runOnUiThread{val input=activity.findViewById<EditText>(R.id.input);input.setText(heard);input.setSelection(heard.length);activity.findViewById<Button>(R.id.send).performClick()}
+        if(explicitStop){activity.runOnUiThread{relisten(activity,350L)};return true}
+
+        // When the user addresses Jarvis by name, strip only the wake-name prefix before sending.
+        val cleaned=heard.replace(Regex("(?i)^\\s*(jarvis|ale|leo|lola)[,.:;!]?\\s*"),"").trim().ifBlank{heard}
+        activity.runOnUiThread{val input=activity.findViewById<EditText>(R.id.input);input.setText(cleaned);input.setSelection(cleaned.length);activity.findViewById<Button>(R.id.send).performClick()}
         return true
     }
 
-    private fun relisten(activity:Activity){if(activity.isFinishing||activity.isDestroyed)return;activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply();activity.runOnUiThread{runCatching{activity.findViewById<Button>(R.id.mic).performClick()}}}
+    private fun relisten(activity:Activity,delay:Long=0L){
+        if(activity.isFinishing||activity.isDestroyed)return
+        activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
+        activity.runOnUiThread{activity.window.decorView.postDelayed({runCatching{activity.findViewById<Button>(R.id.mic).performClick()}},delay)}
+    }
     private fun stopBargeRecognizer(){runCatching{bargeRecognizer?.cancel()};runCatching{bargeRecognizer?.destroy()};bargeRecognizer=null}
     private fun normalize(value:String):String=Normalizer.normalize(value.lowercase(Locale.getDefault()),Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"),"").replace(Regex("[^a-z0-9 ]+")," ").replace(Regex("\\s+")," ").trim()
 }
