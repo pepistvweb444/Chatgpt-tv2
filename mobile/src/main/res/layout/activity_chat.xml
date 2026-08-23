@@ -26,6 +26,7 @@
             </LinearLayout>
             <TextView android:id="@+id/weatherForecast" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:padding="12dp" android:background="#F7F9FC" android:text="" android:textColor="#333333" android:textSize="13sp" />
             <TextView android:id="@+id/nowBrief" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="14dp" android:padding="14dp" android:background="#F5F5F5" android:text="Now Brief · pulsa para actualizar" android:textColor="#333333" android:textSize="14sp" />
+            <LinearLayout android:id="@+id/widgetContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
             <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#161616" android:textSize="17sp" android:lineSpacingExtra="9dp" android:paddingBottom="18dp" />
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
                 <TextView android:id="@+id/phoneCard" android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
@@ -41,6 +42,7 @@
             <Button android:id="@+id/voice" android:layout_width="70dp" android:layout_height="44dp" android:text="Voz" />
             <Button android:id="@+id/wake" android:layout_width="110dp" android:layout_height="44dp" android:text="Hola Jarvis" />
             <Button android:id="@+id/device" android:layout_width="95dp" android:layout_height="44dp" android:text="Teléfono" />
+            <Button android:id="@+id/home" android:layout_width="100dp" android:layout_height="44dp" android:text="Domótica" />
         </LinearLayout>
     </HorizontalScrollView>
 
