@@ -61,6 +61,14 @@ object TadoClient {
     }
 
     fun setPower(context: Context, zone: Zone, on: Boolean, target: Double? = null) {
+        setPowerInternal(context, zone, on, target, null)
+    }
+
+    fun setClimate(context: Context, zone: Zone, target: Double?, mode: String?) {
+        setPowerInternal(context, zone, true, target, mode)
+    }
+
+    private fun setPowerInternal(context: Context, zone: Zone, on: Boolean, target: Double?, requestedMode: String?) {
         val token = validToken(context)
         val state = runCatching {
             JSONObject(get("$API/homes/${zone.homeId}/zones/${zone.id}/state", token))
@@ -78,7 +86,7 @@ object TadoClient {
         }.getOrElse { JSONObject() }
 
         val setting = if (type == "AIR_CONDITIONING") {
-            buildAcSetting(current, capabilities, on, target ?: zone.target ?: zone.temperature)
+            buildAcSetting(current, capabilities, on, target ?: zone.target ?: zone.temperature, requestedMode)
         } else {
             JSONObject().apply {
                 put("type", type)
@@ -98,7 +106,7 @@ object TadoClient {
         request("PUT", "$API/homes/${zone.homeId}/zones/${zone.id}/overlay", token, body.toString())
     }
 
-    private fun buildAcSetting(current: JSONObject, capabilities: JSONObject, on: Boolean, requestedTarget: Double?): JSONObject {
+    private fun buildAcSetting(current: JSONObject, capabilities: JSONObject, on: Boolean, requestedTarget: Double?, requestedMode: String?): JSONObject {
         val result = JSONObject().put("type", "AIR_CONDITIONING").put("power", if (on) "ON" else "OFF")
         val initialStates = capabilities.optJSONObject("initialStates")
         val initialMode = initialStates?.optString("mode").orEmpty()
@@ -106,7 +114,9 @@ object TadoClient {
         val supportedModes = capabilities.keys().asSequence()
             .filter { it !in setOf("type", "initialStates") && capabilities.optJSONObject(it) != null }
             .toList()
+        val desired = requestedMode?.uppercase()?.takeIf { it in supportedModes }
         val mode = when {
+            desired != null -> desired
             currentMode.isNotBlank() && currentMode in supportedModes -> currentMode
             initialMode.isNotBlank() && initialMode in supportedModes -> initialMode
             "COOL" in supportedModes -> "COOL"
