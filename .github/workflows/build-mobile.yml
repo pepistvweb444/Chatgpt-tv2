@@ -6,7 +6,6 @@ on:
       - jarvis-tv-clean-v064
     paths:
       - mobile/**
-      - scripts/patch_mobile_continuous_voice.py
       - .github/workflows/build-mobile.yml
   workflow_dispatch:
 
@@ -25,10 +24,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Apply continuous voice integration
-        shell: bash
-        run: python3 scripts/patch_mobile_continuous_voice.py
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -50,26 +45,30 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Configure AndroidX
+      - name: Build Mobile APK
+        id: build
         shell: bash
         run: |
-          printf '%s\n' \
-            'android.useAndroidX=true' \
-            'android.enableJetifier=true' \
-            'org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8' \
-            'kotlin.code.style=official' > gradle.properties
+          set -o pipefail
+          gradle --no-daemon --stacktrace :mobile:assembleDebug 2>&1 | tee mobile-build.log
 
-      - name: Build Mobile APK
-        shell: bash
-        run: gradle --no-daemon --stacktrace clean :mobile:assembleDebug
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-Mobile-build-log
+          path: mobile-build.log
+          if-no-files-found: warn
 
       - name: Verify Mobile APK
+        if: success()
         shell: bash
         run: |
           cp mobile/build/outputs/apk/debug/mobile-debug.apk Jarvis-Mobile-v0.6.5-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.6.5-debug.apk
 
       - name: Upload Mobile APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-Mobile-v0.6.5-debug
