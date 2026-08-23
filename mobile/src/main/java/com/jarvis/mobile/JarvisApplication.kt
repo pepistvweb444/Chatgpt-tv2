@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 class JarvisApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Keep sync and wake-word services ready when Jarvis starts.
         JarvisSync.start(this)
         val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE)
         if(prefs.getBoolean("wake_word_enabled",false) && ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED){
