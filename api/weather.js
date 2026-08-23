@@ -6,6 +6,7 @@ export default async function handler(req, res) {
     let lat = Number(req.query?.lat || 0);
     let lon = Number(req.query?.lon || 0);
     let place = String(req.query?.place || '').trim();
+    const gpsProvided = Boolean(lat && lon);
 
     // If the app asks for a city/place explicitly, geocode that place first.
     if ((!lat || !lon) && place) {
@@ -26,6 +27,25 @@ export default async function handler(req, res) {
       }
     }
 
+    // When Android sends exact coordinates, resolve a human-readable locality for the widget.
+    if (gpsProvided && !place) {
+      try {
+        const reverseUrl = new URL('https://api.bigdatacloud.net/data/reverse-geocode-client');
+        reverseUrl.searchParams.set('latitude', String(lat));
+        reverseUrl.searchParams.set('longitude', String(lon));
+        reverseUrl.searchParams.set('localityLanguage', 'es');
+        const reverse = await fetch(reverseUrl, { headers: { 'User-Agent': 'Jarvis-Mobile/1.0' } });
+        if (reverse.ok) {
+          const r = await reverse.json();
+          place = [r.locality || r.city || r.principalSubdivision, r.principalSubdivision, r.countryName]
+            .filter(Boolean)
+            .filter((v, i, a) => a.indexOf(v) === i)
+            .join(', ');
+        }
+      } catch (_) {}
+    }
+
+    // IP is only a fallback. The mobile app should normally send GPS coordinates.
     if ((!lat || !lon) && clientIp) {
       const geo = await fetch(`https://ipwho.is/${encodeURIComponent(clientIp)}`);
       if (geo.ok) {
@@ -61,9 +81,12 @@ export default async function handler(req, res) {
       rain: daily.precipitation_probability_max?.[i]
     }));
 
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+    res.setHeader('Cache-Control', 'private, max-age=60');
     return res.status(200).json({
-      place: place || 'Ubicación actual',
+      place: place || (gpsProvided ? 'Tu ubicación actual' : 'Ubicación aproximada'),
+      latitude: lat,
+      longitude: lon,
+      source: gpsProvided ? 'phone-gps' : 'fallback',
       temperature: current.temperature_2m,
       feelsLike: current.apparent_temperature,
       code: current.weather_code,
