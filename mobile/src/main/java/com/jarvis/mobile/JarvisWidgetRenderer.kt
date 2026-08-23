@@ -11,13 +11,21 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 object JarvisWidgetRenderer {
+    private const val BACKEND="https://chatgpt-tv2.vercel.app"
+
     fun render(activity: Activity, container: LinearLayout, query: String, answer: String) {
         val q=query.lowercase()
+        if(q.contains("noticia")||q.contains("titular")||q.contains("actualidad")){
+            fetchAndRenderNews(activity,container,query)
+            return
+        }
         val kind=when{
-            q.contains("noticia")||q.contains("titular")||q.contains("actualidad")->"📰  NOTICIAS"
             q.contains("alarma")||q.contains("despiert")||q.contains("avisa")->"⏰  ALARMA"
             q.contains("whatsapp")||q.contains("sms")||q.contains("mensaje")->"💬  MENSAJES"
             q.contains("tiempo")||q.contains("temperatura")||q.contains("lluv")->"🌤️  TIEMPO"
@@ -31,6 +39,28 @@ object JarvisWidgetRenderer {
         card.addView(TextView(activity).apply{text=kind;textSize=13f;setTextColor(Color.rgb(80,80,80))})
         card.addView(TextView(activity).apply{text=answer;textSize=18f;setTextColor(Color.rgb(25,25,25));setPadding(0,8,0,0)})
         container.addView(card,params())
+    }
+
+    private fun fetchAndRenderNews(activity:Activity,container:LinearLayout,query:String){
+        container.removeAllViews();container.visibility=LinearLayout.VISIBLE
+        container.addView(TextView(activity).apply{text="📰  Cargando últimas noticias…";textSize=15f;setTextColor(Color.DKGRAY);setPadding(4,8,4,12)})
+        Thread{
+            try{
+                val topic=extractTopic(query)
+                val endpoint=if(topic.isBlank())"$BACKEND/api/news" else "$BACKEND/api/news?q=${URLEncoder.encode(topic,"UTF-8")}" 
+                val c=(URL(endpoint).openConnection() as HttpURLConnection).apply{connectTimeout=5000;readTimeout=12000}
+                val body=(if(c.responseCode in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+                if(c.responseCode !in 200..299)throw IllegalStateException("HTTP ${c.responseCode}")
+                val items=JSONObject(body).optJSONArray("items")?:JSONArray()
+                activity.runOnUiThread{renderNews(activity,container,items)}
+            }catch(_:Exception){activity.runOnUiThread{container.removeAllViews();container.addView(TextView(activity).apply{text="No se pudieron cargar las noticias ahora.";textSize=15f;setTextColor(Color.DKGRAY)})}}
+        }.start()
+    }
+
+    private fun extractTopic(query:String):String{
+        var q=query.lowercase().replace("últimas noticias","").replace("ultimas noticias","").replace("noticias","").replace("titulares","").replace("actualidad","")
+        q=q.replace(Regex("(?i)\\b(de|sobre|acerca de|hoy|del día|del dia|últimas|ultimas)\\b")," ")
+        return q.replace(Regex("[?!.]+")," ").replace(Regex("\\s+")," ").trim()
     }
 
     fun renderNews(activity:Activity,container:LinearLayout,items:JSONArray){
