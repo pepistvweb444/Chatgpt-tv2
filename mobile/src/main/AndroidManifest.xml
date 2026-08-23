@@ -29,7 +29,14 @@
     <application android:name=".JarvisApplication" android:allowBackup="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
         <activity android:name=".SyncSettingsActivity" android:exported="false" android:label="Jarvis Sync" />
         <activity android:name=".DeviceHubActivity" android:exported="false" />
-        <activity android:name=".DomoticsHubActivity" android:exported="false" />
+        <activity android:name=".DomoticsHubActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="jarvis" android:host="domotics" android:pathPrefix="/callback" />
+            </intent-filter>
+        </activity>
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChatActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
