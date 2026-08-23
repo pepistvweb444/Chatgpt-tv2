@@ -29,7 +29,17 @@ class WakeWordService : Service() {
     private var wakeLock:PowerManager.WakeLock?=null
 
     override fun onCreate(){super.onCreate();createChannel();startForegroundNotification();acquireWakeLock();running=true;main.post{startRecognizer()}}
-    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{running=true;acquireWakeLock();main.post{startRecognizer()};return START_STICKY}
+    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
+        running=true;acquireWakeLock()
+        if(intent?.action==ACTION_PAUSE_FOR_CONVERSATION){
+            prefs.edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
+            runCatching{recognizer?.cancel()};runCatching{recognizer?.destroy()};recognizer=null
+            main.postDelayed({startRecognizer()},1200L)
+            return START_STICKY
+        }
+        main.post{startRecognizer()}
+        return START_STICKY
+    }
 
     private fun acquireWakeLock(){if(wakeLock?.isHeld==true)return;wakeLock=(getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"Jarvis:WakeWord").apply{setReferenceCounted(false);runCatching{acquire(12*60*60*1000L)}}}
 
@@ -42,9 +52,6 @@ class WakeWordService : Service() {
 
     private fun startRecognizer(){
         if(!running||triggered)return
-        // During a live conversation ChatActivity owns the microphone. The hotword recognizer
-        // must stay out of the way or Android reports BUSY and the UI says "Escuchando" while
-        // no audio is actually captured.
         if(conversationActive()){
             runCatching{recognizer?.cancel()};runCatching{recognizer?.destroy()};recognizer=null
             restartSoon(1200L)
@@ -73,7 +80,6 @@ class WakeWordService : Service() {
     private fun trigger(raw:String){
         if(!running||triggered)return
         triggered=true
-        // Reserve the microphone for the actual conversation immediately, before opening ChatActivity.
         prefs.edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
         runCatching{recognizer?.cancel()};runCatching{recognizer?.destroy()};recognizer=null
         val command=extractCommand(raw)
@@ -104,5 +110,8 @@ class WakeWordService : Service() {
     override fun onDestroy(){running=false;main.removeCallbacksAndMessages(null);runCatching{recognizer?.cancel()};runCatching{recognizer?.destroy()};recognizer=null;runCatching{if(wakeLock?.isHeld==true)wakeLock?.release()};wakeLock=null;super.onDestroy()}
     override fun onBind(intent:Intent?):IBinder?=null
     private fun createChannel(){if(android.os.Build.VERSION.SDK_INT>=26)getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL,"Jarvis wake word",NotificationManager.IMPORTANCE_LOW))}
-    companion object{private const val CHANNEL="jarvis_wake_word"}
+    companion object{
+        const val ACTION_PAUSE_FOR_CONVERSATION="com.jarvis.mobile.PAUSE_FOR_CONVERSATION"
+        private const val CHANNEL="jarvis_wake_word"
+    }
 }
