@@ -9,7 +9,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import org.json.JSONObject
 import java.util.UUID
 
 class DomoticsHubActivity : Activity() {
@@ -35,10 +34,18 @@ class DomoticsHubActivity : Activity() {
         list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         root.addView(ScrollView(this).apply{addView(list)},LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f))
         root.addView(Button(this).apply{text="Volver";setOnClickListener{finish()}})
-        setContentView(root);handleCallback(intent);refresh()
+        setContentView(root)
+        handleCallback(intent)
+        refresh()
     }
 
-    override fun onNewIntent(intent: Intent?) { super.onNewIntent(intent); if(intent!=null){setIntent(intent);handleCallback(intent);refresh()} }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallback(intent)
+        refresh()
+    }
+
     override fun onResume(){super.onResume();refresh()}
 
     private fun refresh(){
@@ -58,13 +65,15 @@ class DomoticsHubActivity : Activity() {
     private fun startLogin(p:Provider){
         val installId=prefs.getString("domotics_install_id",null) ?: UUID.randomUUID().toString().also{prefs.edit().putString("domotics_install_id",it).apply()}
         prefs.edit().putString("domotics_${p.id}_status","pending").apply()
-        val url="$backend/api/domotics/connect?provider=${Uri.encode(p.id)}&installId=${Uri.encode(installId)}&returnUri=${Uri.encode("jarvis://domotics/callback")}" 
+        val returnUri="jarvis://domotics/callback"
+        val url="$backend/api/domotics/connect?provider=${Uri.encode(p.id)}&installId=${Uri.encode(installId)}&returnUri=${Uri.encode(returnUri)}"
         val ok=runCatching{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)));true}.getOrDefault(false)
         if(!ok) Toast.makeText(this,"No se pudo abrir el inicio de sesión.",Toast.LENGTH_LONG).show()
     }
 
     private fun disconnect(p:Provider){
-        prefs.edit().remove("domotics_${p.id}_status").remove("domotics_${p.id}_account").apply();refresh()
+        prefs.edit().remove("domotics_${p.id}_status").remove("domotics_${p.id}_account").apply()
+        refresh()
         Toast.makeText(this,"${p.name} desconectado de este dispositivo.",Toast.LENGTH_SHORT).show()
     }
 
