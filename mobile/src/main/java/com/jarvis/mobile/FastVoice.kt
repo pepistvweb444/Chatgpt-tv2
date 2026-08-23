@@ -41,10 +41,16 @@ object FastVoice {
         fun fail(){if(generation.get()!=gen||!failed.compareAndSet(false,true))return;activity.runOnUiThread{onStart?.invoke();relisten(activity)}}
         chunks.forEachIndexed{index,part->pool.execute{
             if(failed.get()||generation.get()!=gen)return@execute
-            try{
-                files[index]=downloadClone(activity,part,index)
-                if(index==0&&started.compareAndSet(false,true)&&generation.get()==gen)activity.runOnUiThread{onStart?.invoke();startBargeIn(activity,text,gen);play(activity,files,chunks.size,0,gen)}
-            }catch(_:Exception){if(index==0)fail()}
+            var last:Exception?=null
+            repeat(3){attempt->
+                if(files[index]!=null||generation.get()!=gen)return@repeat
+                try{files[index]=downloadClone(activity,part,index);last=null;return@repeat}catch(e:Exception){last=e;if(attempt<2)Thread.sleep(180L*(attempt+1))}
+            }
+            if(files[index]==null){
+                if(index==0)fail()
+                else runCatching{files[index]=downloadClone(activity,part,index)}
+            }
+            if(index==0&&files[index]!=null&&started.compareAndSet(false,true)&&generation.get()==gen)activity.runOnUiThread{onStart?.invoke();startBargeIn(activity,text,gen);play(activity,files,chunks,0,gen)}
         }}
     }
 
@@ -58,7 +64,6 @@ object FastVoice {
         s=s.replace(Regex("\\([^)]{0,220}\\)")," ").replace(Regex("\\[[^]]{0,220}]")," ")
         s=s.replace(Regex("(?m)^\\s*(?:[-*•]+|\\d+[.)])\\s*"),"")
         s=s.replace(Regex("[*_`#>|~^=+\\\\/{}<>]+")," ")
-        // Natural spoken Spanish: 20 °C / 20 C / 20ºC -> "20 grados".
         s=s.replace(Regex("(?i)(\\d+(?:[.,]\\d+)?)\\s*[°º]?\\s*c(?:elsius)?\\b"),"$1 grados")
         s=s.replace(Regex("(?i)(\\d+(?:[.,]\\d+)?)\\s*grados\\s*c(?:elsius)?\\b"),"$1 grados")
         s=s.replace("&"," y ").replace("%"," por ciento ").replace("€"," euros ")
@@ -72,10 +77,10 @@ object FastVoice {
     private fun chunk(text:String):List<String>{
         val out=mutableListOf<String>();var rest=text;var first=true
         while(rest.isNotBlank()){
-            val max=if(first)52 else 105
+            val max=if(first)64 else 120
             if(rest.length<=max){out+=rest;break}
             val w=rest.take(max+1);var cut=listOf(w.lastIndexOf(". "),w.lastIndexOf("? "),w.lastIndexOf("! "),w.lastIndexOf(", "),w.lastIndexOf(' ')).maxOrNull()?:max
-            if(cut<if(first)20 else 36)cut=max
+            if(cut<if(first)24 else 42)cut=max
             val take=(cut+if(w.getOrNull(cut) in listOf('.','?','!',','))1 else 0).coerceAtMost(rest.length)
             out+=rest.take(take).trim();rest=rest.drop(take).trim();first=false
         }
@@ -83,23 +88,19 @@ object FastVoice {
     }
 
     private fun downloadClone(activity:Activity,text:String,index:Int):File{
-        val c=(URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=1800;readTimeout=8500;setRequestProperty("Content-Type","application/json; charset=utf-8");setRequestProperty("Accept","audio/*");setRequestProperty("Connection","keep-alive")}
+        val c=(URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply{requestMethod="POST";doOutput=true;connectTimeout=2200;readTimeout=10000;setRequestProperty("Content-Type","application/json; charset=utf-8");setRequestProperty("Accept","audio/*");setRequestProperty("Connection","keep-alive")}
         c.outputStream.use{it.write(JSONObject().put("text",text).put("voice","mi_voz").put("provider","race-clone").put("speed",1.12).toString().toByteArray())}
         if(c.responseCode !in 200..299)throw IllegalStateException("TTS ${c.responseCode}")
         return File(activity.cacheDir,"jarvis-clone-${System.currentTimeMillis()}-$index.mp3").also{f->c.inputStream.use{input->f.outputStream().use{input.copyTo(it)}}}
     }
 
-    private fun play(activity:Activity,files:ConcurrentHashMap<Int,File>,total:Int,index:Int,gen:Int){
+    private fun play(activity:Activity,files:ConcurrentHashMap<Int,File>,chunks:List<String>,index:Int,gen:Int){
         if(generation.get()!=gen||interrupted)return
-        if(index>=total){
-            stopBargeRecognizer()
-            activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
-            activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)relisten(activity)},180L)
-            return
-        }
-        val file=files[index];if(file==null){activity.window.decorView.postDelayed({play(activity,files,total,index,gen)},25L);return}
+        if(index>=chunks.size){stopBargeRecognizer();activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply();activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)relisten(activity)},220L);return}
+        val file=files[index]
+        if(file==null){activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)play(activity,files,chunks,index,gen)},45L);return}
         runCatching{player?.release()}
-        player=MediaPlayer().apply{setDataSource(file.absolutePath);setOnPreparedListener{if(generation.get()==gen&&!interrupted)it.start()};setOnCompletionListener{p->p.release();file.delete();if(player===p)player=null;play(activity,files,total,index+1,gen)};setOnErrorListener{p,_,_->p.release();file.delete();if(player===p)player=null;play(activity,files,total,index+1,gen);true};prepareAsync()}
+        player=MediaPlayer().apply{setDataSource(file.absolutePath);setOnPreparedListener{if(generation.get()==gen&&!interrupted)it.start()};setOnCompletionListener{p->p.release();file.delete();if(player===p)player=null;play(activity,files,chunks,index+1,gen)};setOnErrorListener{p,_,_->p.release();file.delete();if(player===p)player=null;play(activity,files,chunks,index+1,gen);true};prepareAsync()}
     }
 
     private fun startBargeIn(activity:Activity,assistantText:String,gen:Int){
@@ -114,14 +115,14 @@ object FastVoice {
                 override fun onRmsChanged(rmsdB:Float){}
                 override fun onBufferReceived(buffer:ByteArray?){}
                 override fun onEndOfSpeech(){}
-                override fun onError(error:Int){if(generation.get()==gen&&!interrupted)restartBarge(activity,assistantText,gen,220L)}
+                override fun onError(error:Int){if(generation.get()==gen&&!interrupted)restartBarge(activity,assistantText,gen,260L)}
                 override fun onPartialResults(partialResults:Bundle?){val heard=partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();maybeInterrupt(activity,heard,assistantTokens,gen,false)}
-                override fun onResults(results:Bundle?){val heard=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(!maybeInterrupt(activity,heard,assistantTokens,gen,true))restartBarge(activity,assistantText,gen,120L)}
+                override fun onResults(results:Bundle?){val heard=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty();if(!maybeInterrupt(activity,heard,assistantTokens,gen,true))restartBarge(activity,assistantText,gen,160L)}
                 override fun onEvent(eventType:Int,params:Bundle?){}
             })
-            val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,350L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,220L);putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,false)}
+            val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES");putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,420L);putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,280L);putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,false)}
             runCatching{r.startListening(i)}
-        },120L)
+        },180L)
     }
 
     private fun restartBarge(activity:Activity,assistantText:String,gen:Int,delay:Long){activity.window.decorView.postDelayed({if(generation.get()==gen&&!interrupted)startBargeIn(activity,assistantText,gen)},delay)}
@@ -132,21 +133,19 @@ object FastVoice {
         val tokens=h.split(' ').filter{it.isNotBlank()};if(tokens.isEmpty())return false
         val overlap=tokens.count{it in assistantTokens}.toDouble()/tokens.size
         val novel=tokens.count{it !in assistantTokens}
-        val looksLikeEcho=overlap>=0.90&&tokens.size>=3
-        val realSpeech=!looksLikeEcho && if(final){tokens.size>=1&&(novel>=1||tokens.size>=3)}else{h.length>=3&&(novel>=1||tokens.size>=2&&overlap<0.75)}
+        val explicitStop=h=="para"||h=="espera"||h=="calla"||h.startsWith("jarvis ")||h.startsWith("ale ")||h.startsWith("leo ")
+        val looksLikeEcho=overlap>=0.82&&tokens.size>=2
+        val realSpeech=explicitStop || (!looksLikeEcho && if(final){tokens.size>=1&&novel>=1&&overlap<0.72}else{h.length>=8&&novel>=2&&overlap<0.52})
         if(!realSpeech)return false
         interrupted=true
         activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
         runCatching{player?.stop()};runCatching{player?.release()};player=null;stopBargeRecognizer()
+        if(explicitStop && (h=="para"||h=="espera"||h=="calla")){activity.runOnUiThread{relisten(activity)};return true}
         activity.runOnUiThread{val input=activity.findViewById<EditText>(R.id.input);input.setText(heard);input.setSelection(heard.length);activity.findViewById<Button>(R.id.send).performClick()}
         return true
     }
 
-    private fun relisten(activity:Activity){
-        if(activity.isFinishing||activity.isDestroyed)return
-        activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply()
-        activity.runOnUiThread{runCatching{activity.findViewById<Button>(R.id.mic).performClick()}}
-    }
+    private fun relisten(activity:Activity){if(activity.isFinishing||activity.isDestroyed)return;activity.getSharedPreferences("jarvis_mobile",Activity.MODE_PRIVATE).edit().putLong("voice_session_until",System.currentTimeMillis()+120_000L).apply();activity.runOnUiThread{runCatching{activity.findViewById<Button>(R.id.mic).performClick()}}}
     private fun stopBargeRecognizer(){runCatching{bargeRecognizer?.cancel()};runCatching{bargeRecognizer?.destroy()};bargeRecognizer=null}
     private fun normalize(value:String):String=Normalizer.normalize(value.lowercase(Locale.getDefault()),Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"),"").replace(Regex("[^a-z0-9 ]+")," ").replace(Regex("\\s+")," ").trim()
 }
