@@ -45,6 +45,20 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Normalize Kotlin regex source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt')
+          s = p.read_text()
+          bad = 'Regex("(?:a|en|temperatura)\\s*(\\d{1,2}(?:[.,]\\d)?)\\s*(?:grados|°)?")'
+          good = 'Regex("""(?:a|en|temperatura)\\s*(\\d{1,2}(?:[.,]\\d)?)\\s*(?:grados|°)?""")'
+          if bad in s:
+              s = s.replace(bad, good)
+              p.write_text(s)
+          PY
+
       - name: Build Mobile APK
         id: build
         shell: bash
