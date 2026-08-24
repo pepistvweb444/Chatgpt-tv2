@@ -131,6 +131,9 @@ jobs:
       - name: Route daily news questions to rich widgets
         run: python3 mobile/patch_today_news_widgets.py
 
+      - name: Keep quick cards and wire recent chats
+        run: python3 mobile/patch_persistent_home_recents.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -153,4 +156,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes phone actions, direct calls, Tado OAuth runtime, remote control, messaging/agenda widgets, hands-free voice and rich daily news widgets.
+# Main Jarvis UI keeps quick cards visible above conversations and makes recent chats directly navigable.
