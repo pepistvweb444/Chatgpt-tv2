@@ -134,6 +134,9 @@ jobs:
       - name: Keep quick cards and wire recent chats
         run: python3 mobile/patch_persistent_home_recents.py
 
+      - name: Wire persistent artifact library
+        run: python3 mobile/patch_library_main.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -156,4 +159,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI keeps quick cards visible above conversations and makes recent chats directly navigable.
+# Jarvis Mobile keeps quick cards, clickable recents, connected tools and a persistent artifact library.
