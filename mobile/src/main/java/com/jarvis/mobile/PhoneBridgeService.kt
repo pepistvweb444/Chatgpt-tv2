@@ -26,19 +26,32 @@ class PhoneBridgeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= 26) {
-            getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, "Jarvis TV bridge", NotificationManager.IMPORTANCE_LOW)
-            )
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                getSystemService(NotificationManager::class.java).createNotificationChannel(
+                    NotificationChannel(CHANNEL, "Jarvis TV bridge", NotificationManager.IMPORTANCE_LOW)
+                )
+            }
+            val open = PendingIntent.getActivity(this, 0, Intent(this, ChatActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            startForeground(93, NotificationCompat.Builder(this, CHANNEL)
+                .setSmallIcon(android.R.drawable.sym_action_call)
+                .setContentTitle("Jarvis · puente con TV")
+                .setContentText("Llamadas, SMS y notificaciones para Jarvis TV")
+                .setOngoing(true).setContentIntent(open).build())
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
+                .putBoolean("bridge_running", true)
+                .remove("bridge_start_error")
+                .apply()
+            running = true
+            Thread { serve() }.start()
+        } catch (e: Throwable) {
+            running = false
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
+                .putBoolean("bridge_running", false)
+                .putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
+                .apply()
+            stopSelf()
         }
-        val open = PendingIntent.getActivity(this, 0, Intent(this, ChatActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        startForeground(93, NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle("Jarvis · puente con TV")
-            .setContentText("Llamadas, SMS y notificaciones para Jarvis TV")
-            .setOngoing(true).setContentIntent(open).build())
-        running = true
-        Thread { serve() }.start()
     }
 
     private fun serve() {
@@ -61,7 +74,12 @@ class PhoneBridgeService : Service() {
                     }
                 }.start()
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
+                .putBoolean("bridge_running", false)
+                .putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
+                .apply()
+        }
     }
 
     private fun handle(path: String): Pair<Int,String> {
@@ -131,6 +149,7 @@ class PhoneBridgeService : Service() {
 
     override fun onDestroy() {
         running = false
+        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).apply()
         runCatching { server?.close() }
         super.onDestroy()
     }
