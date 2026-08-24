@@ -86,6 +86,9 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Apply main UI voice transcription
+        run: python3 mobile/patch_main_voice.py
+
       - name: Apply complete weather widget
         run: python3 mobile/patch_weather_widget.py
 
