@@ -77,6 +77,9 @@ jobs:
       - name: Apply TV companion and mobile remote
         run: python3 scripts/apply_tv_companion.py
 
+      - name: Apply mobile-style TV interface
+        run: python3 scripts/apply_tv_mobile_ui.py
+
       - name: Build TV APK only
         id: build_apk
         shell: bash
