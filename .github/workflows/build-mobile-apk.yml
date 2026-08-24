@@ -88,65 +88,48 @@ jobs:
 
       - name: Apply main UI voice transcription
         run: python3 mobile/patch_main_voice.py
-
       - name: Apply complete weather widget
         run: python3 mobile/patch_weather_widget.py
-
       - name: Fix Programadas menu crash
         run: python3 mobile/patch_scheduled_menu.py
-
       - name: Restore agents and Tado settings
         run: python3 mobile/patch_agents_tado.py
-
       - name: Add official Tado account login
         run: python3 mobile/patch_tado_oauth.py
-
       - name: Unify Tado OAuth state and climate queries
         run: python3 mobile/patch_tado_runtime.py
-
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
-
       - name: Connect SMS WhatsApp RCS and call actions
         run: python3 mobile/patch_phone_actions.py
-
       - name: Enable direct contact calls
         run: python3 mobile/patch_direct_calls.py
-
       - name: Wire multi-step phone agent
         run: python3 mobile/patch_phone_agent.py
-
       - name: Add authenticated Remote control
         run: python3 mobile/patch_remote_control.py
-
+      - name: Expose unread inbox to Jarvis TV
+        run: python3 mobile/patch_tv_sync.py
       - name: Add messaging and agenda widgets
         run: python3 mobile/patch_messaging_agenda.py
-
       - name: Harden agenda sources and calendar diagnostics
         run: python3 mobile/patch_agenda_hardening.py
-
       - name: Build unified unread inbox
         run: python3 mobile/patch_unread_inbox.py
-
       - name: Enable continuous hands-free voice
         run: python3 mobile/patch_handsfree_voice.py
-
       - name: Route daily news questions to rich widgets
         run: python3 mobile/patch_today_news_widgets.py
-
       - name: Keep quick cards and wire recent chats
         run: python3 mobile/patch_persistent_home_recents.py
-
       - name: Wire persistent artifact library
         run: python3 mobile/patch_library_main.py
-
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
       - name: Build mobile APK
         shell: bash
-        run: |
-          gradle --no-daemon --stacktrace :mobile:assembleDebug
+        run: gradle --no-daemon --stacktrace :mobile:assembleDebug
 
       - name: Sign and verify mobile APK
         shell: bash
@@ -161,5 +144,3 @@ jobs:
           name: Jarvis-Mobile-v0.2.5-debug
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
-
-# Jarvis Mobile keeps quick cards, clickable recents, unified unread inbox and a persistent artifact library.
