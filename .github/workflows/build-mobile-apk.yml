@@ -92,6 +92,9 @@ jobs:
       - name: Apply complete weather widget
         run: python3 mobile/patch_weather_widget.py
 
+      - name: Normalize generated Kotlin
+        run: python3 mobile/fix_generated_kotlin.py
+
       - name: Build mobile APK
         shell: bash
         run: |
