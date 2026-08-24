@@ -23,6 +23,8 @@ class MobileRemoteClient(context: Context) {
 
     fun unreadMessages(): JSONObject = get("/unread", auth = true)
 
+    fun agenda(): JSONObject = get("/agenda", auth = true)
+
     private fun get(path: String, auth: Boolean = false): JSONObject {
         val h = host()
         if (h.isBlank()) throw IllegalStateException("Configura primero la IP o nombre del móvil")
