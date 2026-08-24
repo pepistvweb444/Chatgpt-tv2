@@ -184,7 +184,7 @@ class MainActivity : AppCompatActivity() {
         images.take(4).forEach { imageUrl -> addRemoteImage(card, imageUrl) }
         videos.take(4).forEach { videoUrl ->
             card.addView(TextView(this).apply {
-                text = "▶  Abrir vídeo"
+                this.text = "▶  Abrir vídeo"
                 textSize = 13f
                 setTextColor(Color.WHITE)
                 setPadding(dp(12), dp(8), dp(12), dp(8))
