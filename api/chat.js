@@ -84,8 +84,12 @@ export default async function handler(req, res) {
   }
   for (const server of Array.isArray(clientMcps) ? clientMcps.slice(0, 8) : []) addMcp(server);
 
+  // The mobile app stores UI-only metadata (visual/images/videos) in history.
+  // Never forward those custom keys to the Responses API; it accepts role/content only here.
   const trimmedHistory = Array.isArray(history)
-    ? history.slice(-50).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
+    ? history.slice(-50)
+        .filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
+        .map(x => ({ role: x.role, content: x.content }))
     : [];
 
   const validLocation = location && Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude))
