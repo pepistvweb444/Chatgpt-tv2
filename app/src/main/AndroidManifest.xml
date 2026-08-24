@@ -17,7 +17,8 @@
         android:banner="@drawable/tv_banner"
         android:icon="@drawable/app_icon"
         android:label="Jarvis TV"
-        android:theme="@style/Theme.JarvisTV">
+        android:theme="@style/Theme.JarvisTV"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
