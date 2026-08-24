@@ -35,13 +35,7 @@ async function newsMedia(query) {
     if (!r.ok) return [];
     const xml = await r.text();
     const blocks = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 5).map(m => m[1]);
-    const items = blocks.map(b => ({
-      title: tag(b,'title').replace(/\s+-\s+[^-]+$/,''),
-      source: tag(b,'source'),
-      url: tag(b,'link'),
-      published: tag(b,'pubDate'),
-      image: '', video: ''
-    }));
+    const items = blocks.map(b => ({ title:tag(b,'title').replace(/\s+-\s+[^-]+$/,''), source:tag(b,'source'), url:tag(b,'link'), published:tag(b,'pubDate'), image:'', video:'' }));
     return await Promise.all(items.map(enrichNews));
   } catch { return []; }
 }
@@ -59,10 +53,19 @@ export default async function handler(req, res) {
     client = 'jarvis',
     previousResponseId = null,
     clientMcps = [],
+    selectedTools = [],
     location = null,
-    agentsEnabled = true
+    agentsEnabled = true,
+    agentsConfig = {}
   } = req.body || {};
   if (!message || typeof message !== 'string') return res.status(400).json({ error: 'message_required' });
+
+  const agentCfg = {
+    research: agentsConfig?.research !== false,
+    news: agentsConfig?.news !== false,
+    home: agentsConfig?.home !== false
+  };
+  const selected = Array.isArray(selectedTools) ? selectedTools.map(String).slice(0, 20) : [];
 
   const tools = [{ type: 'web_search' }];
   const mcpLabels = [];
@@ -71,6 +74,7 @@ export default async function handler(req, res) {
     const url = String(server.server_url);
     if (!/^https:\/\//i.test(url)) return;
     const label = String(server.server_label).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'mcp';
+    if (mcpLabels.includes(label)) return;
     mcpLabels.push(label);
     tools.push({
       type: 'mcp', server_label: label, server_url: url,
@@ -84,12 +88,8 @@ export default async function handler(req, res) {
   }
   for (const server of Array.isArray(clientMcps) ? clientMcps.slice(0, 8) : []) addMcp(server);
 
-  // The mobile app stores UI-only metadata (visual/images/videos) in history.
-  // Never forward those custom keys to the Responses API; it accepts role/content only here.
   const trimmedHistory = Array.isArray(history)
-    ? history.slice(-50)
-        .filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
-        .map(x => ({ role: x.role, content: x.content }))
+    ? history.slice(-50).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x => ({ role:x.role, content:x.content }))
     : [];
 
   const validLocation = location && Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude))
@@ -100,7 +100,9 @@ export default async function handler(req, res) {
     : '';
 
   const isNews = /(noticia|noticias|actualidad|últim[ao]s?|hoy|ahora|prensa|titulares|news)/i.test(message);
-  const needsAgents = Boolean(agentsEnabled) && (isNews || message.length > 180 || /(investiga|compara|analiza|planifica|busca|revisa todo)/i.test(message));
+  const isHome = /(tado|aire acondicionado|climatiz|temperatura de casa|domótica|luces|persianas|termostato)/i.test(message);
+  const researchRequested = message.length > 180 || /(investiga|compara|analiza|planifica|busca|revisa todo)/i.test(message);
+  const needsAgents = Boolean(agentsEnabled) && ((agentCfg.news && isNews) || (agentCfg.research && researchRequested));
   const model = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
   const agentsUsed = [];
   const specialistContext = [];
@@ -108,24 +110,28 @@ export default async function handler(req, res) {
   try {
     if (needsAgents) {
       const jobs = [];
-      jobs.push(openai(key, {
-        model,
-        tools: [{ type:'web_search' }], tool_choice:'auto',
-        input: [{ role:'developer', content:'Eres el agente investigador de Jarvis. Investiga hechos actuales, verifica fuentes y devuelve un informe breve en español para otro agente, no para el usuario final.' }, { role:'user', content:message }]
-      }).then(r => { agentsUsed.push('research'); specialistContext.push(`AGENTE INVESTIGADOR:\n${r.text}`); }).catch(() => {}));
-      if (isNews) {
+      if (agentCfg.research && (researchRequested || isNews)) {
         jobs.push(openai(key, {
-          model,
-          tools: [{ type:'web_search' }], tool_choice:'auto',
-          input: [{ role:'developer', content:'Eres el agente de noticias de Jarvis. Selecciona las novedades más relevantes, evita duplicados, indica por qué importan y prioriza información reciente. Devuelve notas para el orquestador.' }, { role:'user', content:message }]
+          model, tools:[{ type:'web_search' }], tool_choice:'auto',
+          input:[{ role:'developer', content:'Eres el agente investigador de Jarvis. Investiga hechos actuales, verifica fuentes y devuelve un informe breve en español para otro agente, no para el usuario final.' }, { role:'user', content:message }]
+        }).then(r => { agentsUsed.push('research'); specialistContext.push(`AGENTE INVESTIGADOR:\n${r.text}`); }).catch(() => {}));
+      }
+      if (agentCfg.news && isNews) {
+        jobs.push(openai(key, {
+          model, tools:[{ type:'web_search' }], tool_choice:'auto',
+          input:[{ role:'developer', content:'Eres el agente de noticias de Jarvis. Selecciona las novedades más relevantes, evita duplicados, indica por qué importan y prioriza información reciente. Devuelve notas para el orquestador.' }, { role:'user', content:message }]
         }).then(r => { agentsUsed.push('news'); specialistContext.push(`AGENTE DE NOTICIAS:\n${r.text}`); }).catch(() => {}));
       }
       await Promise.all(jobs);
     }
 
+    const selectedContext = selected.length ? ` Herramientas seleccionadas por el usuario: ${selected.join(', ')}.` : '';
+    const homeContext = isHome && agentCfg.home
+      ? ' Para domótica y climatización, usa el MCP apropiado cuando esté disponible. Si Tado está entre las herramientas/MCP, priorízalo para el aire acondicionado y el termostato. No afirmes haber cambiado un dispositivo si la herramienta no confirma la acción.'
+      : '';
     const developer = {
       role: 'developer',
-      content: `Eres ${assistantName}, orquestador principal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta. Habla de forma natural y fácil de leer en voz alta: frases completas, puntuación clara, sin leer URLs largas. Usa búsqueda web para información actual y MCP cuando ayude. Si recibes informes de agentes especialistas, intégralos, comprueba coherencia y entrega una única respuesta final. Para noticias, menciona titulares y contexto; la interfaz mostrará aparte imágenes o vídeos disponibles. Cliente: ${client}. Conversación: ${conversationId}.${locationContext}`
+      content: `Eres ${assistantName}, orquestador principal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta. Habla de forma natural y fácil de leer en voz alta: frases completas, puntuación clara, sin leer URLs largas. Usa búsqueda web para información actual y MCP cuando ayude. Si recibes informes de agentes especialistas, intégralos, comprueba coherencia y entrega una única respuesta final. Para noticias, menciona titulares y contexto; la interfaz mostrará aparte imágenes o vídeos disponibles. Cliente: ${client}. Conversación: ${conversationId}.${locationContext}${selectedContext}${homeContext}`
     };
 
     const input = previousResponseId && typeof previousResponseId === 'string'
@@ -138,16 +144,16 @@ export default async function handler(req, res) {
     const final = await openai(key, payload);
     const news = isNews ? await newsMedia(message) : [];
     return res.status(200).json({
-      reply: final.text,
+      reply:final.text,
       conversationId,
-      responseId: final.data.id || null,
-      tools: { webSearch:true, mcp:mcpLabels },
-      agents: { enabled:Boolean(agentsEnabled), used:agentsUsed },
+      responseId:final.data.id || null,
+      tools:{ webSearch:true, mcp:mcpLabels, selected },
+      agents:{ enabled:Boolean(agentsEnabled), config:agentCfg, used:agentsUsed },
       news,
-      images: news.map(n => n.image).filter(Boolean),
-      videos: news.map(n => n.video).filter(Boolean)
+      images:news.map(n => n.image).filter(Boolean),
+      videos:news.map(n => n.video).filter(Boolean)
     });
   } catch (error) {
-    return res.status(500).json({ error: error?.message || 'backend_error' });
+    return res.status(500).json({ error:error?.message || 'backend_error' });
   }
 }
