@@ -98,11 +98,17 @@ jobs:
       - name: Restore agents and Tado settings
         run: python3 mobile/patch_agents_tado.py
 
+      - name: Add official Tado account login
+        run: python3 mobile/patch_tado_oauth.py
+
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
 
       - name: Connect SMS WhatsApp RCS and call actions
         run: python3 mobile/patch_phone_actions.py
+
+      - name: Enable direct contact calls
+        run: python3 mobile/patch_direct_calls.py
 
       - name: Wire multi-step phone agent
         run: python3 mobile/patch_phone_agent.py
@@ -112,6 +118,9 @@ jobs:
 
       - name: Add messaging and agenda widgets
         run: python3 mobile/patch_messaging_agenda.py
+
+      - name: Harden agenda sources and calendar diagnostics
+        run: python3 mobile/patch_agenda_hardening.py
 
       - name: Enable continuous hands-free voice
         run: python3 mobile/patch_handsfree_voice.py
@@ -141,4 +150,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes phone actions, remote control, messaging/agenda widgets, hands-free voice and rich daily news widgets.
+# Main Jarvis UI routes phone actions, direct calls, Tado OAuth, remote control, messaging/agenda widgets, hands-free voice and rich daily news widgets.
