@@ -34,9 +34,11 @@ methods = r'''    private fun isMessageReadIntent(lower: String): Boolean =
     private fun isAgendaQuery(lower: String): Boolean {
         val subject = lower.contains("cita") || lower.contains("citas") || lower.contains("agenda") ||
             lower.contains("calendario") || lower.contains("recordatorio") || lower.contains("recordatorios") ||
-            lower.contains("evento") || lower.contains("eventos") || lower.contains("reunión") || lower.contains("reunion")
+            lower.contains("evento") || lower.contains("eventos") || lower.contains("reunión") || lower.contains("reunion") ||
+            lower.contains("tarea") || lower.contains("tareas") || lower.contains("pendiente") || lower.contains("pendientes")
         val asks = lower.contains("qué") || lower.startsWith("que ") || lower.contains(" tengo") ||
-            lower.contains("hoy") || lower.contains("mañana") || lower.contains("proxim") || lower.contains("dime") || lower.contains("muéstr") || lower.contains("muestr")
+            lower.contains("hoy") || lower.contains("mañana") || lower.contains("proxim") || lower.contains("dime") ||
+            lower.contains("muéstr") || lower.contains("muestr") || lower.contains("cuáles") || lower.contains("cuales")
         return subject && asks
     }
 
@@ -112,39 +114,52 @@ methods = r'''    private fun isMessageReadIntent(lower: String): Boolean =
             android.content.ContentUris.appendId(uri, end)
             activity.contentResolver.query(
                 uri.build(),
-                arrayOf(CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.EVENT_LOCATION, CalendarContract.Instances.ALL_DAY),
+                arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.EVENT_LOCATION, CalendarContract.Instances.ALL_DAY),
                 null, null, CalendarContract.Instances.BEGIN + " ASC"
             )?.use { c ->
+                val ei = c.getColumnIndex(CalendarContract.Instances.EVENT_ID)
                 val ti = c.getColumnIndex(CalendarContract.Instances.TITLE)
                 val bi = c.getColumnIndex(CalendarContract.Instances.BEGIN)
                 val li = c.getColumnIndex(CalendarContract.Instances.EVENT_LOCATION)
                 val ai = c.getColumnIndex(CalendarContract.Instances.ALL_DAY)
                 while (c.moveToNext() && out.size < 20) {
+                    val eventId = if (ei >= 0) c.getLong(ei) else -1L
                     val title = if (ti >= 0) c.getString(ti).orEmpty() else "Evento"
                     val begin = if (bi >= 0) c.getLong(bi) else now
                     val place = if (li >= 0) c.getString(li).orEmpty() else ""
                     val allDay = ai >= 0 && c.getInt(ai) == 1
                     val whenText = if (allDay) SimpleDateFormat("EEE dd/MM · todo el día", Locale.getDefault()).format(Date(begin)) else sdf.format(Date(begin))
-                    out += "Calendario|$whenText|${title.replace("|", " ")}|${place.replace("|", " ")}"
+                    var reminder = ""
+                    if (eventId >= 0) {
+                        runCatching {
+                            activity.contentResolver.query(CalendarContract.Reminders.CONTENT_URI, arrayOf(CalendarContract.Reminders.MINUTES), "${CalendarContract.Reminders.EVENT_ID}=?", arrayOf(eventId.toString()), null)?.use { rc ->
+                                if (rc.moveToFirst()) {
+                                    val mi = rc.getColumnIndex(CalendarContract.Reminders.MINUTES)
+                                    if (mi >= 0) reminder = " · aviso ${rc.getInt(mi)} min antes"
+                                }
+                            }
+                        }
+                    }
+                    out += "Calendario|$whenText|${title.replace("|", " ")}|${(place + reminder).replace("|", " ")}"
                 }
             }
         }
 
-        // Some reminder/task apps expose due items only as notifications; include recent relevant notifications.
+        // Task/reminder apps usually expose due items through notifications rather than CalendarContract.
         val feed = notificationFeed()
         for (i in feed.length() - 1 downTo 0) {
             if (out.size >= 24) break
             val n = feed.optJSONObject(i) ?: continue
             val pkg = n.optString("package")
             val blob = (pkg + " " + n.optString("title") + " " + n.optString("text")).lowercase()
-            if (!(blob.contains("calendar") || blob.contains("calendario") || blob.contains("task") || blob.contains("tarea") || blob.contains("reminder") || blob.contains("recordatorio"))) continue
+            if (!(blob.contains("calendar") || blob.contains("calendario") || blob.contains("task") || blob.contains("tarea") || blob.contains("reminder") || blob.contains("recordatorio") || blob.contains("todo") || blob.contains("keep"))) continue
             val title = n.optString("title").ifBlank { "Recordatorio" }
             val body = n.optString("text").replace("|", " ").replace("\n", " ")
             out += "Recordatorio|Ahora|${title.replace("|", " ")}|${body.take(500)}"
         }
 
         return if (out.isNotEmpty()) Result(true, "__AGENDA_WIDGET__\n" + out.distinct().joinToString("\n"))
-        else Result(true, "__AGENDA_EMPTY__|No encuentro citas en el calendario del teléfono para los próximos $days días. Para tareas de Google/Microsoft activa también el MCP correspondiente.")
+        else Result(true, "__AGENDA_EMPTY__|No encuentro citas, recordatorios o tareas en el teléfono para los próximos $days días. Para Google Tasks/Microsoft To Do activa también su integración o MCP.")
     }
 
 '''
