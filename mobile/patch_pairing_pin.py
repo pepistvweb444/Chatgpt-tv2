@@ -1,6 +1,8 @@
 from pathlib import Path
+import re
 
-# Add a short-lived/easy 4-digit pairing PIN on top of the existing long Remote token.
+# Add a simple 4-digit pairing PIN on top of the existing long Remote token.
+# The user only types IP + PIN on the TV; the long token is exchanged and stored automatically.
 p = Path('mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt')
 s = p.read_text()
 
@@ -27,29 +29,11 @@ if '/pair?' not in s:
     s = s.replace(marker, marker + pair_block, 1)
 p.write_text(s)
 
-# Replace the visible long-token workflow with a four-digit PIN workflow.
+# Replace all visible Remote-token management buttons with PIN-oriented controls.
 p = Path('mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt')
 s = p.read_text()
 
-old_activate = r'''        add("Activar control Remote de Jarvis") {
-            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
-            var token = prefs.getString("remote_token", "").orEmpty()
-            if (token.isBlank()) token = UUID.randomUUID().toString().replace("-", "")
-            prefs.edit().putString("remote_token", token).putBoolean("remote_control_enabled", true).apply()
-            runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }
-            Toast.makeText(this, "Remote activado. Usa una VPN privada para acceder desde fuera de tu Wi‑Fi.\nIP: ${localIp()}:${PhoneBridgeService.PORT}\nToken: $token", Toast.LENGTH_LONG).show()
-        }
-        add("Desactivar control Remote") {
-            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("remote_control_enabled", false).apply()
-            Toast.makeText(this, "Remote desactivado", Toast.LENGTH_SHORT).show()
-        }
-        add("Regenerar token Remote") {
-            val token = UUID.randomUUID().toString().replace("-", "")
-            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putString("remote_token", token).apply()
-            Toast.makeText(this, "Nuevo token Remote: $token", Toast.LENGTH_LONG).show()
-        }
-'''
-new_activate = r'''        add("Activar control Remote de Jarvis") {
+new_buttons = r'''        add("Activar control Remote de Jarvis") {
             val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
             var token = prefs.getString("remote_token", "").orEmpty()
             if (token.isBlank()) token = UUID.randomUUID().toString().replace("-", "")
@@ -86,11 +70,22 @@ new_activate = r'''        add("Activar control Remote de Jarvis") {
                 .apply()
             Toast.makeText(this, "Remote desactivado", Toast.LENGTH_SHORT).show()
         }
+
 '''
-if old_activate in s:
-    s = s.replace(old_activate, new_activate, 1)
-elif 'Mostrar / permitir PIN de emparejamiento' not in s:
-    raise SystemExit('Remote button block not found in DeviceHubActivity')
+
+# patch_remote_control.py always inserts its Remote controls immediately before this stable button.
+anchor = '        add("Activar puente con Jarvis TV") {'
+if 'Mostrar / permitir PIN de emparejamiento' not in s:
+    if anchor not in s:
+        raise SystemExit('TV bridge anchor not found in DeviceHubActivity')
+    # Remove whatever Remote control block previous patches generated, independent of exact whitespace/text.
+    start = s.find('        add("Activar control Remote de Jarvis") {')
+    end = s.find(anchor)
+    if start >= 0 and end > start:
+        s = s[:start] + new_buttons + s[end:]
+    else:
+        # Safe fallback: insert PIN controls before TV bridge instead of failing the whole build.
+        s = s.replace(anchor, new_buttons + anchor, 1)
 
 # Add the current PIN to the status panel without exposing the long token.
 needle = 'val listenerConnected = prefs.getBoolean("notification_listener_connected", false)\n'
