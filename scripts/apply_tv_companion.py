@@ -7,11 +7,10 @@ field = '    private val prefs by lazy { getSharedPreferences("jarvis", MODE_PRI
 if 'private val tvApps by lazy' not in s:
     s = s.replace(field, field + '    private val tvApps by lazy { TvAppController(this) }\n    private val mobileRemote by lazy { MobileRemoteClient(this) }\n', 1)
 
-# Route local TV app/media commands and explicit phone commands before the backend.
 old = '''        input.text.clear()
         append("user", text)
         val backend = prefs.getString("backendUrl", DEFAULT_BACKEND)?.trim().orEmpty().ifBlank { DEFAULT_BACKEND }.trimEnd('/')'''
-new = '''        input.text.clear()
+new = r'''        input.text.clear()
         append("user", text)
 
         val localTv = runCatching { tvApps.handle(text) }.getOrNull()
@@ -66,22 +65,24 @@ new = '''        input.text.clear()
 if old in s:
     s = s.replace(old, new, 1)
 
-# Add paired mobile fields and test button to TV settings.
 old_settings = '''        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
         val testBackendButton = Button(this).apply { text = "PROBAR BACKEND / OPENAI"; setOnClickListener { testBackend(backend.text.toString()) } }'''
-new_settings = '''        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
+new_settings = r'''        val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
         val mobileHost = edit("IP o nombre del móvil emparejado", prefs.getString("mobile_remote_host", "").orEmpty())
         val mobileToken = edit("Token Remote de Jarvis Mobile", prefs.getString("mobile_remote_token", "").orEmpty())
         val testBackendButton = Button(this).apply { text = "PROBAR BACKEND / OPENAI"; setOnClickListener { testBackend(backend.text.toString()) } }
         val testMobileButton = Button(this).apply { text = "PROBAR CONEXIÓN CON MÓVIL"; setOnClickListener {
             prefs.edit().putString("mobile_remote_host", mobileHost.text.toString().trim()).putString("mobile_remote_token", mobileToken.text.toString().trim()).apply()
-            Thread { runCatching { mobileRemote.ping() }.onSuccess { runOnUiThread { Toast.makeText(this, "Jarvis Mobile conectado", Toast.LENGTH_LONG).show() } }.onFailure { e -> runOnUiThread { Toast.makeText(this, "Móvil: ${e.message}", Toast.LENGTH_LONG).show() } } }.start()
+            Thread {
+                runCatching { mobileRemote.ping() }
+                    .onSuccess { runOnUiThread { Toast.makeText(this, "Jarvis Mobile conectado", Toast.LENGTH_LONG).show() } }
+                    .onFailure { e -> runOnUiThread { Toast.makeText(this, "Móvil: ${e.message}", Toast.LENGTH_LONG).show() } }
+            }.start()
         } }'''
 if old_settings in s:
     s = s.replace(old_settings, new_settings, 1)
 
 s = s.replace('box.addView(name); box.addView(wake); box.addView(backend); box.addView(testBackendButton);', 'box.addView(name); box.addView(wake); box.addView(backend); box.addView(mobileHost); box.addView(mobileToken); box.addView(testBackendButton); box.addView(testMobileButton);')
-
 old_save = '''prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).apply(); showHome()'''
 new_save = '''prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).putString("mobile_remote_host", mobileHost.text.toString().trim()).putString("mobile_remote_token", mobileToken.text.toString().trim()).apply(); showHome()'''
 if old_save in s:
