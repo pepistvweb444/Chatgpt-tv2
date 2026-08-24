@@ -3,7 +3,6 @@ package com.jarvis.mobile
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ScrollView
@@ -31,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var widgetBody: TextView
     private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
     private var conversationId = ""
+    private var activeWidgetKind: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,9 +51,10 @@ class MainActivity : AppCompatActivity() {
         conversationId = prefs.getString("currentConversation", null) ?: newConversation()
         loadConversation()
         refreshDrawerRecents()
+        restoreSelectedTools()
 
-        findViewById<Button>(R.id.send).setOnClickListener { sendMessage() }
-        findViewById<Button>(R.id.mic).setOnClickListener { Toast.makeText(this, "Habla con Jarvis", Toast.LENGTH_SHORT).show() }
+        findViewById<View>(R.id.send).setOnClickListener { sendMessage() }
+        findViewById<View>(R.id.mic).setOnClickListener { Toast.makeText(this, "Habla con Jarvis", Toast.LENGTH_SHORT).show() }
         findViewById<View>(R.id.chats).setOnClickListener { openDrawer() }
         findViewById<View>(R.id.closeDrawer).setOnClickListener { closeDrawer() }
         drawerScrim.setOnClickListener { closeDrawer() }
@@ -64,27 +65,31 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tools).setOnClickListener { showToolPicker() }
         findViewById<View>(R.id.menuPlugins).setOnClickListener { showToolPicker() }
         findViewById<View>(R.id.homeAutomation).setOnClickListener {
-            showWidget("Domótica", "Casa conectada\nLuces · clima · escenas · energía\nPulsa o habla con Jarvis para controlar dispositivos")
+            activeWidgetKind = "home"
+            showWidget("Domótica", "⌂  Casa conectada\n\nConsultando luces, clima, escenas y energía…")
             sendAutomationPrompt("Muéstrame el estado de mi domótica y los dispositivos de casa")
         }
         findViewById<View>(R.id.dayWidget).setOnClickListener {
-            showWidget("Resumen del día", "Agenda · recordatorios · asuntos importantes\nJarvis está preparando tu resumen")
+            activeWidgetKind = "day"
+            showWidget("Resumen del día", "✦  Preparando tu resumen\n\nAgenda · recordatorios · asuntos importantes")
             sendAutomationPrompt("Dame mi resumen del día con agenda, recordatorios y asuntos importantes")
         }
         findViewById<View>(R.id.newsWidget).setOnClickListener {
-            showWidget("Noticias", "Noticias importantes de hoy\nLas respuestas podrán incluir tarjetas, imágenes y vídeos")
+            activeWidgetKind = "news"
+            showWidget("Noticias", "▣  Actualizando noticias importantes…\n\nLas noticias podrán incluir imágenes y vídeos cuando estén disponibles")
             sendAutomationPrompt("Muéstrame las noticias más importantes de hoy con imágenes o vídeos cuando existan")
         }
         findViewById<View>(R.id.weatherWidget).setOnClickListener {
-            showWidget("Tiempo", "Consultando tiempo actual y previsión…")
+            activeWidgetKind = "weather"
+            showWidget("Tiempo", "☁  Consultando tiempo actual y previsión…")
             sendAutomationPrompt("¿Qué tiempo hace ahora y cuál es la previsión de hoy?")
         }
-        findViewById<View>(R.id.phoneControl).setOnClickListener { closeDrawer(); startActivity(Intent(this, DeviceHubActivity::class.java)) }
+        findViewById<View>(R.id.phoneControl).setOnClickListener { closeDrawer(); runCatching { startActivity(Intent(this, DeviceHubActivity::class.java)) } }
         findViewById<View>(R.id.voiceSettings).setOnClickListener { showVoiceSettings() }
         findViewById<View>(R.id.camera).setOnClickListener { closeDrawer(); Toast.makeText(this, "Imágenes y cámara", Toast.LENGTH_SHORT).show() }
         findViewById<View>(R.id.files).setOnClickListener {
             closeDrawer()
-            startActivity(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "*/*" })
+            runCatching { startActivity(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "*/*" }) }
         }
         findViewById<View>(R.id.wakeWord).setOnClickListener {
             closeDrawer()
@@ -104,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         drawerScrim.visibility = View.GONE
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (sideMenu.visibility == View.VISIBLE) closeDrawer() else super.onBackPressed()
     }
@@ -112,12 +118,33 @@ class MainActivity : AppCompatActivity() {
         widgetTitle.text = title
         widgetBody.text = body
         widgetHost.visibility = View.VISIBLE
-        scroll.post { scroll.smoothScrollTo(0, widgetHost.top) }
+        scroll.post { scroll.smoothScrollTo(0, widgetHost.top.coerceAtLeast(0)) }
+    }
+
+    private fun updateWidgetFromReply(question: String, reply: String) {
+        val lower = question.lowercase()
+        val kind = activeWidgetKind ?: when {
+            lower.contains("tiempo") || lower.contains("previsión") -> "weather"
+            lower.contains("domótica") || lower.contains("casa") -> "home"
+            lower.contains("noticias") -> "news"
+            lower.contains("resumen") || lower.contains("agenda") -> "day"
+            else -> null
+        }
+        if (kind == null) return
+        val clean = reply.replace(Regex("https?://\\S+"), "").replace(Regex("[*_`#>|]+"), " ").trim()
+        when (kind) {
+            "weather" -> showWidget("Tiempo · en tiempo real", "☁  ${clean.take(900)}")
+            "home" -> showWidget("Domótica · estado de casa", "⌂  ${clean.take(900)}")
+            "news" -> showWidget("Noticias · ahora", "▣  ${clean.take(900)}")
+            "day" -> showWidget("Resumen del día", "✦  ${clean.take(900)}")
+        }
+        activeWidgetKind = kind
     }
 
     private fun startNewChat() {
         conversationId = newConversation()
         transcript.text = ""
+        activeWidgetKind = null
         widgetHost.visibility = View.GONE
         welcomePanel.visibility = View.VISIBLE
         recentChats.text = "¿En qué puedo ayudarte hoy?"
@@ -150,10 +177,13 @@ class MainActivity : AppCompatActivity() {
         val a = history()
         a.put(JSONObject().put("role", role).put("content", text))
         prefs.edit().putString("chat_$conversationId", a.toString()).apply()
-        if (role == "user") welcomePanel.visibility = View.GONE
+        if (role == "user" && widgetHost.visibility != View.VISIBLE) welcomePanel.visibility = View.GONE
         transcript.append(if (role == "user") "\nTú\n$text\n" else "\nJarvis\n$text\n")
         updateConversationTitle(text, role)
-        scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+        scroll.post {
+            if (widgetHost.visibility == View.VISIBLE) scroll.smoothScrollTo(0, widgetHost.top.coerceAtLeast(0))
+            else scroll.fullScroll(ScrollView.FOCUS_DOWN)
+        }
     }
 
     private fun updateConversationTitle(text: String, role: String) {
@@ -193,9 +223,19 @@ class MainActivity : AppCompatActivity() {
         }.setNegativeButton("Cerrar", null).show()
     }
 
+    private fun restoreSelectedTools() {
+        val selected = runCatching { JSONArray(prefs.getString("selected_tools", "[]")) }.getOrElse { JSONArray() }
+        if (selected.length() == 0) return
+        val names = (0 until selected.length()).map { selected.optString(it) }.filter { it.isNotBlank() }
+        findViewById<TextView>(R.id.selectedTools).text = names.joinToString("   •   ")
+        findViewById<HorizontalScrollView>(R.id.selectedToolsScroll).visibility = if (names.isEmpty()) View.GONE else View.VISIBLE
+    }
+
     private fun showToolPicker() {
-        val tools = arrayOf("ChatGPT", "Home Assistant / Domótica", "Homey", "Home Connect", "Google Maps", "Gmail", "Calendario", "Notion", "WhatsApp", "Otros MCP")
-        val checked = BooleanArray(tools.size) { false }
+        val tools = arrayOf("ChatGPT", "Google Maps", "Home Assistant", "Homey", "Home Connect", "Gmail", "Calendario", "Notion", "WhatsApp", "Otros MCP")
+        val stored = runCatching { JSONArray(prefs.getString("selected_tools", "[]")) }.getOrElse { JSONArray() }
+        val selectedSet = (0 until stored.length()).map { stored.optString(it) }.toSet()
+        val checked = BooleanArray(tools.size) { selectedSet.contains(tools[it]) }
         AlertDialog.Builder(this)
             .setTitle("Herramientas y complementos")
             .setMultiChoiceItems(tools, checked) { _, which, isChecked -> checked[which] = isChecked }
@@ -219,7 +259,7 @@ class MainActivity : AppCompatActivity() {
     private fun showConnections() {
         AlertDialog.Builder(this)
             .setTitle("Complementos y MCP")
-            .setMessage("Usa el botón + junto al campo de texto para elegir las aplicaciones y MCP con las que quieres hablar.")
+            .setMessage("Usa el botón + junto al campo de texto para elegir ChatGPT, domótica, Maps, Gmail, Calendario y otros MCP con los que quieras hablar.")
             .setPositiveButton("Aceptar", null)
             .show()
     }
@@ -228,7 +268,7 @@ class MainActivity : AppCompatActivity() {
         val voices = arrayOf("coral", "alloy", "ash", "ballad", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse")
         AlertDialog.Builder(this).setTitle("Voz de Jarvis").setItems(voices) { _, i ->
             prefs.edit().putString("voice", voices[i]).apply()
-            speak("Hola. Esta es mi voz de Jarvis.")
+            safeSpeak("Hola. Esta es mi voz de Jarvis.")
         }.show()
     }
 
@@ -248,32 +288,33 @@ class MainActivity : AppCompatActivity() {
                     setRequestProperty("Content-Type", "application/json")
                 }
                 val selected = runCatching { JSONArray(prefs.getString("selected_tools", "[]")) }.getOrElse { JSONArray() }
-                val body = JSONObject()
-                    .put("message", m)
-                    .put("conversationId", conversationId)
-                    .put("client", "jarvis-mobile")
-                    .put("history", history())
-                    .put("selectedTools", selected)
-                    .toString()
+                val body = JSONObject().put("message", m).put("conversationId", conversationId).put("client", "jarvis-mobile").put("history", history()).put("selectedTools", selected).toString()
                 c.outputStream.use { it.write(body.toByteArray()) }
-                val raw = (if (c.responseCode in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
+                val stream = if (c.responseCode in 200..299) c.inputStream else c.errorStream
+                val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (c.responseCode !in 200..299) throw IllegalStateException("HTTP ${c.responseCode}: ${raw.take(180)}")
                 val reply = runCatching { JSONObject(raw).optString("reply") }.getOrDefault(raw).ifBlank { raw }
                 runOnUiThread {
                     append("assistant", reply)
+                    updateWidgetFromReply(m, reply)
                     status.text = "Jarvis listo"
-                    speak(reply)
+                    safeSpeak(reply)
                 }
-            } catch (e: Exception) {
-                runOnUiThread { status.text = "Error: ${e.message}" }
+            } catch (e: Throwable) {
+                runOnUiThread { status.text = "Error: ${e.message ?: "No se pudo completar la respuesta"}" }
             }
         }.start()
     }
 
-    private fun speak(text: String) {
+    private fun safeSpeak(text: String) {
         val clean = text.replace(Regex("https?://\\S+"), " ").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\s+"), " ").trim()
         if (clean.isBlank()) return
-        val i = Intent(this, MobileSpeechService::class.java).putExtra("text", clean).putExtra("voice", prefs.getString("voice", "coral"))
-        androidx.core.content.ContextCompat.startForegroundService(this, i)
+        runCatching {
+            val i = Intent(this, MobileSpeechService::class.java).putExtra("text", clean).putExtra("voice", prefs.getString("voice", "coral"))
+            androidx.core.content.ContextCompat.startForegroundService(this, i)
+        }.onFailure {
+            status.text = "Respuesta lista · voz no disponible"
+        }
     }
 
     companion object { private const val BACKEND = "https://chatgpt-tv2.vercel.app" }
