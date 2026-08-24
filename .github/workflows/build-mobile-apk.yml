@@ -113,6 +113,9 @@ jobs:
       - name: Enable continuous hands-free voice
         run: python3 mobile/patch_handsfree_voice.py
 
+      - name: Route daily news questions to rich widgets
+        run: python3 mobile/patch_today_news_widgets.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -135,4 +138,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes phone actions, agent tasks, messaging/agenda widgets and hands-free voice.
+# Main Jarvis UI routes phone actions, agent tasks, messaging/agenda widgets, hands-free voice and rich daily news widgets.
