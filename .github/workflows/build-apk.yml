@@ -2,9 +2,9 @@ name: Build Jarvis TV APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, jarvis-write-test ]
     paths-ignore:
-      - 'Jarvis-TV-v0.6.4-debug.apk.b64'
+      - 'Jarvis-TV-v0.6.5-debug.apk.b64'
       - 'LATEST_RUN_ID.txt'
       - 'BUILD_FAILURE_LOG.txt'
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jarvis-tv-apk-main
+  group: jarvis-tv-apk-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -33,7 +33,6 @@ jobs:
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
-          cat gradle.properties
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -72,88 +71,8 @@ jobs:
               -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
           fi
 
-      - name: Apply Jarvis TV 0.6.4 voice fixes
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
-          s = p.read_text()
-          s = s.replace('connectTimeout = 12000; readTimeout = 60000', 'connectTimeout = 8000; readTimeout = 45000')
-          s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)', 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)\\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)\\n            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)')
-          s = s.replace('● Escuchando 7 s · OpenAI…', '● Escuchando 4 s · Jarvis…')
-          s = s.replace('handler.postDelayed({ stopRecorder(true) }, 7000)', 'handler.postDelayed({ stopRecorder(true) }, 4000)')
-
-          start = s.index('    private fun downloadSpeech(')
-          end = s.index('    private fun testBackend(', start)
-          replacement = r'''    private fun downloadSpeech(endpoint: String, text: String, outFile: File) {
-        val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 8000; readTimeout = 45000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "audio/mpeg")
-        }
-        val payload = JSONObject().put("text", text).put("voice", prefs.getString("voice", "coral") ?: "coral").put("speed", 1.08).toString()
-        c.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-        val code = c.responseCode
-        if (code !in 200..299) throw IllegalStateException("TTS HTTP $code")
-        c.inputStream.use { inputStream -> outFile.outputStream().use { inputStream.copyTo(it) } }
-    }
-
-    private fun splitForSpeech(text: String): List<String> {
-        val clean = text.replace(Regex("(?m)^\\s*[-•*]+\\s*"), "").replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
-        if (clean.isBlank()) return emptyList()
-        val max = 650
-        val out = mutableListOf<String>()
-        var rest = clean
-        while (rest.isNotBlank()) {
-            if (rest.length <= max) { out.add(rest); break }
-            var cut = rest.take(max + 1).lastIndexOf(' ')
-            if (cut < 320) cut = max
-            out.add(rest.take(cut).trim())
-            rest = rest.drop(cut).trim()
-        }
-        return out
-    }
-
-    private fun speakWithOpenAI(text: String) {
-        val backend = prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND }
-        val chunks = splitForSpeech(text)
-        if (chunks.isEmpty()) return
-        voicePlayer?.release(); voicePlayer = null
-        playSpeechChunk(resolveEndpoint(backend, "speech"), chunks, 0)
-    }
-
-    private fun playSpeechChunk(endpoint: String, chunks: List<String>, index: Int) {
-        if (index >= chunks.size) { runOnUiThread { status.text = "● Listo · respuesta completa" }; return }
-        Thread {
-            val file = File(cacheDir, "jarvis-reply-${System.currentTimeMillis()}-$index.mp3")
-            try {
-                downloadSpeech(endpoint, chunks[index], file)
-                runOnUiThread {
-                    voicePlayer?.release()
-                    voicePlayer = MediaPlayer().apply {
-                        setDataSource(file.absolutePath)
-                        setOnPreparedListener { p -> status.text = "● Hablando · ${index + 1}/${chunks.size}"; p.start() }
-                        setOnCompletionListener { p -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1) }
-                        setOnErrorListener { p, _, _ -> p.release(); if (voicePlayer === p) voicePlayer = null; file.delete(); playSpeechChunk(endpoint, chunks, index + 1); true }
-                        prepareAsync()
-                    }
-                }
-            } catch (_: Exception) {
-                file.delete()
-                runOnUiThread {
-                    tts?.speak(chunks[index], TextToSpeech.QUEUE_ADD, null, "jarvis-fallback-$index")
-                    handler.postDelayed({ playSpeechChunk(endpoint, chunks, index + 1) }, 900L)
-                }
-            }
-        }.start()
-    }
-
-'''
-          s = s[:start] + replacement + s[end:]
-          s = s.replace('Ajustes de Jarvis TV v0.6.1', 'Ajustes de Jarvis TV v0.6.4')
-          s = s.replace('PROBAR VOZ OPENAI', 'PROBAR VOZ JARVIS · NOIZ')
-          p.write_text(s)
-          PY
+      - name: Apply Jarvis TV 0.6.5 runtime patch
+        run: python3 scripts/apply_v065.py
 
       - name: Build TV APK only
         id: build_apk
@@ -172,8 +91,8 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.4-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.4-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.5-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.5-debug.apk
 
       - name: Persist failure log
         if: failure() && steps.build_apk.outputs.exit_code != '0'
@@ -190,8 +109,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-TV-v0.6.4-debug
-          path: Jarvis-TV-v0.6.4-debug.apk
+          name: Jarvis-TV-v0.6.5-debug
+          path: Jarvis-TV-v0.6.5-debug.apk
           if-no-files-found: error
 
       - name: Record successful run ID
@@ -202,16 +121,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_RUN_ID.txt
-          git commit -m "ci: record signed Jarvis TV APK run [skip ci]" || true
+          git commit -m "ci: record signed Jarvis TV APK [skip ci]" || true
           git push
 
       - name: Publish APK payload for ChatGPT
         if: success()
         shell: bash
         run: |
-          base64 -w 0 Jarvis-TV-v0.6.4-debug.apk > Jarvis-TV-v0.6.4-debug.apk.b64
+          base64 -w 0 Jarvis-TV-v0.6.5-debug.apk > Jarvis-TV-v0.6.5-debug.apk.b64
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Jarvis-TV-v0.6.4-debug.apk.b64
-          git commit -m "build: publish signed Jarvis TV APK payload [skip ci]" || true
+          git add Jarvis-TV-v0.6.5-debug.apk.b64
+          git commit -m "build: publish signed Jarvis TV 0.6.5 APK payload [skip ci]" || true
           git push
