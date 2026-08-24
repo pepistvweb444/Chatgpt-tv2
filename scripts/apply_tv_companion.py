@@ -75,8 +75,8 @@ new_settings = r'''        val backend = edit("URL de Jarvis Backend", prefs.get
             prefs.edit().putString("mobile_remote_host", mobileHost.text.toString().trim()).putString("mobile_remote_token", mobileToken.text.toString().trim()).apply()
             Thread {
                 runCatching { mobileRemote.ping() }
-                    .onSuccess { runOnUiThread { Toast.makeText(this, "Jarvis Mobile conectado", Toast.LENGTH_LONG).show() } }
-                    .onFailure { e -> runOnUiThread { Toast.makeText(this, "Móvil: ${e.message}", Toast.LENGTH_LONG).show() } }
+                    .onSuccess { runOnUiThread { Toast.makeText(this@MainActivity, "Jarvis Mobile conectado", Toast.LENGTH_LONG).show() } }
+                    .onFailure { e -> runOnUiThread { Toast.makeText(this@MainActivity, "Móvil: ${e.message}", Toast.LENGTH_LONG).show() } }
             }.start()
         } }'''
 if old_settings in s:
