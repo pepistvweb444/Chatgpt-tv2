@@ -108,6 +108,8 @@ jobs:
         run: python3 mobile/patch_phone_agent.py
       - name: Add authenticated Remote control
         run: python3 mobile/patch_remote_control.py
+      - name: Add four-digit TV pairing PIN
+        run: python3 mobile/patch_pairing_pin.py
       - name: Expose unread inbox to Jarvis TV
         run: python3 mobile/patch_tv_sync.py
       - name: Add messaging and agenda widgets
