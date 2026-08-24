@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     const url = new URL('https://api.open-meteo.com/v1/forecast');
     url.searchParams.set('latitude', String(lat));
     url.searchParams.set('longitude', String(lon));
-    url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,wind_speed_10m');
+    url.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m');
     url.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max');
     url.searchParams.set('timezone', 'auto');
     url.searchParams.set('forecast_days', '4');
@@ -47,6 +47,7 @@ export default async function handler(req, res) {
       place: place || 'Ubicación actual',
       temperature: current.temperature_2m,
       feelsLike: current.apparent_temperature,
+      humidity: current.relative_humidity_2m,
       code: current.weather_code,
       wind: current.wind_speed_10m,
       days
