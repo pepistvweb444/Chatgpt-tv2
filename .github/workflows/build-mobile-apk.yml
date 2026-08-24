@@ -101,6 +101,9 @@ jobs:
       - name: Add official Tado account login
         run: python3 mobile/patch_tado_oauth.py
 
+      - name: Unify Tado OAuth state and climate queries
+        run: python3 mobile/patch_tado_runtime.py
+
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
 
@@ -150,4 +153,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes phone actions, direct calls, Tado OAuth, remote control, messaging/agenda widgets, hands-free voice and rich daily news widgets.
+# Main Jarvis UI routes phone actions, direct calls, Tado OAuth runtime, remote control, messaging/agenda widgets, hands-free voice and rich daily news widgets.
