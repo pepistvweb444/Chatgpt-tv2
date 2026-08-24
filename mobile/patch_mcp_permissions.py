@@ -139,6 +139,8 @@ functions = r'''    private fun showMcpSettings() {
         val items = arrayOf(
             "Acceso a notificaciones",
             "Accesibilidad · controlar aplicaciones",
+            "SMS y RCS",
+            "Calendario, citas y recordatorios",
             "Permisos de Jarvis",
             "Notificaciones de Jarvis",
             "Micrófono",
@@ -151,15 +153,17 @@ functions = r'''    private fun showMcpSettings() {
                 when (which) {
                     0 -> runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
                     1 -> runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                    2 -> runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
-                    3 -> {
+                    2 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS), 1213)
+                    3 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR), 1214)
+                    4 -> runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
+                    5 -> {
                         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1210)
                         } else runCatching { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
                     }
-                    4 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1211)
-                    5 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
-                    6 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE), 1212)
+                    6 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1211)
+                    7 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
+                    8 -> ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE), 1212)
                 }
             }
             .setNegativeButton("Cerrar", null)
