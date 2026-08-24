@@ -86,6 +86,9 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Apply complete weather widget
+        run: python3 mobile/patch_weather_widget.py
+
       - name: Build mobile APK
         shell: bash
         run: |
