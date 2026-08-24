@@ -20,28 +20,35 @@ class MobileSpeechService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= 26) {
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Voz de Jarvis", NotificationManager.IMPORTANCE_LOW))
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val nm = getSystemService(NotificationManager::class.java)
+                nm.createNotificationChannel(NotificationChannel(CHANNEL, "Voz de Jarvis", NotificationManager.IMPORTANCE_LOW))
+            }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            generation.incrementAndGet(); player?.release(); player = null; stopSelf(); return START_NOT_STICKY
+        return runCatching {
+            if (intent?.action == ACTION_STOP) {
+                generation.incrementAndGet(); player?.release(); player = null; stopSelf(); return@runCatching START_NOT_STICKY
+            }
+            val text = intent?.getStringExtra("text").orEmpty().trim()
+            val voice = intent?.getStringExtra("voice").orEmpty().ifBlank { "coral" }
+            if (text.isBlank()) return@runCatching START_NOT_STICKY
+            val token = generation.incrementAndGet()
+            startForeground(4406, NotificationCompat.Builder(this, CHANNEL)
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentTitle("Jarvis está hablando")
+                .setContentText(text.take(80))
+                .setOngoing(true)
+                .build())
+            Thread { speakChunks(text, voice, token) }.start()
+            START_NOT_STICKY
+        }.getOrElse {
+            stopSelf()
+            START_NOT_STICKY
         }
-        val text = intent?.getStringExtra("text").orEmpty().trim()
-        val voice = intent?.getStringExtra("voice").orEmpty().ifBlank { "coral" }
-        if (text.isBlank()) return START_NOT_STICKY
-        val token = generation.incrementAndGet()
-        startForeground(4406, NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Jarvis está hablando")
-            .setContentText(text.take(80))
-            .setOngoing(true)
-            .build())
-        Thread { speakChunks(text, voice, token) }.start()
-        return START_NOT_STICKY
     }
 
     private fun chunks(text: String): List<String> {
@@ -77,7 +84,7 @@ class MobileSpeechService : Service() {
                 val lock = Object()
                 synchronized(lock) {
                     if (token != generation.get()) return
-                    player?.release()
+                    runCatching { player?.release() }
                     player = MediaPlayer().apply {
                         setDataSource(file.absolutePath)
                         setOnCompletionListener { synchronized(lock) { lock.notifyAll() } }
@@ -85,15 +92,15 @@ class MobileSpeechService : Service() {
                         prepare(); start()
                     }
                     lock.wait(120000)
-                    player?.release(); player = null
+                    runCatching { player?.release() }; player = null
                 }
-            } catch (_: Exception) {
-            } finally { file.delete() }
+            } catch (_: Throwable) {
+            } finally { runCatching { file.delete() } }
         }
         if (token == generation.get()) stopSelf()
     }
 
-    override fun onDestroy() { generation.incrementAndGet(); player?.release(); player = null; super.onDestroy() }
+    override fun onDestroy() { generation.incrementAndGet(); runCatching { player?.release() }; player = null; super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
