@@ -101,6 +101,9 @@ jobs:
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
 
+      - name: Connect SMS WhatsApp RCS and call actions
+        run: python3 mobile/patch_phone_actions.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -123,4 +126,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Agents, Tado, MCP manager and phone permissions settings restored.
+# Main Jarvis UI now routes local SMS, WhatsApp/RCS notification reads and calls.
