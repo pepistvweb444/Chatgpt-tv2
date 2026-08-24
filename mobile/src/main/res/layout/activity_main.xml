@@ -2,63 +2,358 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#090B10">
+    android:background="#070A0F">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:orientation="horizontal">
-            <Button android:id="@+id/chats" android:layout_width="48dp" android:layout_height="48dp" android:text="☰" android:textSize="20sp" />
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Jarvis" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold" />
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AI Companion" android:textColor="#6D7CFF" android:textSize="11sp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/chats"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="☰"
+                android:textSize="20sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingStart="12dp">
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Jarvis"
+                    android:textColor="#F7F8FA"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AI Companion"
+                    android:textColor="#617CFF"
+                    android:textSize="11sp" />
             </LinearLayout>
-            <Button android:id="@+id/newChat" android:layout_width="48dp" android:layout_height="48dp" android:text="✎" />
-            <Button android:id="@+id/connections" android:layout_width="48dp" android:layout_height="48dp" android:text="⋮" android:textSize="20sp" />
+
+            <Button
+                android:id="@+id/newChat"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="✎"
+                android:textSize="18sp" />
+
+            <Button
+                android:id="@+id/connections"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="⋮"
+                android:textSize="21sp" />
         </LinearLayout>
 
-        <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="● Jarvis listo" android:textColor="#78D8FF" android:textSize="12sp" android:paddingStart="6dp" android:paddingTop="4dp" android:paddingBottom="6dp" />
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="8dp"
+            android:text="● Jarvis listo"
+            android:textColor="#6FBFFF"
+            android:textSize="12sp" />
 
-        <HorizontalScrollView android:layout_width="match_parent" android:layout_height="74dp" android:scrollbars="none">
-            <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal">
-                <Button android:id="@+id/dayWidget" android:layout_width="142dp" android:layout_height="68dp" android:layout_marginEnd="8dp" android:text="✦ Resumen del día" android:textAllCaps="false" />
-                <Button android:id="@+id/homeAutomation" android:layout_width="132dp" android:layout_height="68dp" android:layout_marginEnd="8dp" android:text="⌂ Domótica" android:textAllCaps="false" />
-                <Button android:id="@+id/newsWidget" android:layout_width="120dp" android:layout_height="68dp" android:layout_marginEnd="8dp" android:text="▣ Noticias" android:textAllCaps="false" />
-                <Button android:id="@+id/weatherWidget" android:layout_width="120dp" android:layout_height="68dp" android:text="☁ Tiempo" android:textAllCaps="false" />
-            </LinearLayout>
-        </HorizontalScrollView>
+        <ScrollView
+            android:id="@+id/scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbars="none">
 
-        <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:layout_marginTop="6dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="4dp">
-                <TextView android:id="@+id/recentChats" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Buenos días. ¿En qué puedo ayudarte hoy?" android:textColor="#AAB3C2" android:textSize="14sp" android:padding="6dp" />
-                <TextView android:id="@+id/transcript" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#F4F6FA" android:textSize="17sp" android:lineSpacingExtra="8dp" android:padding="8dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:id="@+id/welcomePanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="10dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Buenos días"
+                        android:textColor="#F7F8FA"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/recentChats"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="3dp"
+                        android:paddingBottom="14dp"
+                        android:text="¿En qué puedo ayudarte hoy?"
+                        android:textColor="#9EA8B7"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/dayWidget"
+                            android:layout_width="0dp"
+                            android:layout_height="94dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:text="✦  Resumen del día\nAgenda · avisos"
+                            android:textAllCaps="false" />
+
+                        <Button
+                            android:id="@+id/homeAutomation"
+                            android:layout_width="0dp"
+                            android:layout_height="94dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:text="⌂  Domótica\nCasa · clima · luces"
+                            android:textAllCaps="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="10dp">
+
+                        <Button
+                            android:id="@+id/newsWidget"
+                            android:layout_width="0dp"
+                            android:layout_height="94dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:text="▣  Noticias\nLo más importante"
+                            android:textAllCaps="false" />
+
+                        <Button
+                            android:id="@+id/weatherWidget"
+                            android:layout_width="0dp"
+                            android:layout_height="94dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:text="☁  Tiempo\nPrevisión local"
+                            android:textAllCaps="false" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widgetHost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/widgetTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Tiempo · Pamplona"
+                        android:textColor="#BFD5FF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/widgetBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:padding="18dp"
+                        android:background="#11182A"
+                        android:text="22°C\nParcialmente nublado\nMáx. 32° · Mín. 18°"
+                        android:textColor="#FFFFFF"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/transcript"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="18dp"
+                    android:textColor="#F2F4F8"
+                    android:textSize="17sp"
+                    android:lineSpacingExtra="9dp" />
             </LinearLayout>
         </ScrollView>
 
-        <HorizontalScrollView android:id="@+id/selectedToolsScroll" android:layout_width="match_parent" android:layout_height="42dp" android:scrollbars="none" android:visibility="gone">
-            <LinearLayout android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal">
-                <TextView android:id="@+id/selectedTools" android:layout_width="wrap_content" android:layout_height="match_parent" android:gravity="center_vertical" android:text="ChatGPT   Home Assistant   Gmail   Maps" android:textColor="#C9D2E3" android:textSize="12sp" android:paddingHorizontal="10dp" />
-            </LinearLayout>
+        <HorizontalScrollView
+            android:id="@+id/selectedToolsScroll"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/selectedTools"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="ChatGPT   Home Assistant   Gmail"
+                android:textColor="#BFC8D8"
+                android:textSize="12sp" />
         </HorizontalScrollView>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="4dp">
-            <Button android:id="@+id/tools" android:layout_width="52dp" android:layout_height="56dp" android:text="＋" android:textSize="22sp" />
-            <EditText android:id="@+id/input" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:layout_marginStart="7dp" android:hint="Pregunta lo que quieras…" android:textColor="#FFFFFF" android:textColorHint="#7F8795" android:background="#141821" android:paddingHorizontal="16dp" android:singleLine="true" />
-            <Button android:id="@+id/mic" android:layout_width="52dp" android:layout_height="56dp" android:layout_marginStart="7dp" android:text="🎙" />
-            <Button android:id="@+id/send" android:layout_width="52dp" android:layout_height="56dp" android:layout_marginStart="7dp" android:text="➤" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="5dp">
+
+            <Button
+                android:id="@+id/tools"
+                android:layout_width="54dp"
+                android:layout_height="58dp"
+                android:text="＋"
+                android:textSize="22sp" />
+
+            <EditText
+                android:id="@+id/input"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:layout_marginStart="7dp"
+                android:background="#121720"
+                android:hint="Pregunta lo que quieras…"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#7F8795" />
+
+            <Button
+                android:id="@+id/mic"
+                android:layout_width="52dp"
+                android:layout_height="58dp"
+                android:layout_marginStart="7dp"
+                android:text="🎙" />
+
+            <Button
+                android:id="@+id/send"
+                android:layout_width="52dp"
+                android:layout_height="58dp"
+                android:layout_marginStart="7dp"
+                android:text="➤" />
         </LinearLayout>
     </LinearLayout>
 
-    <LinearLayout android:id="@+id/sideMenu" android:layout_width="310dp" android:layout_height="match_parent" android:orientation="vertical" android:background="#0E1118" android:padding="18dp" android:visibility="gone" android:elevation="18dp">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="JARVIS" android:textColor="#FFFFFF" android:textSize="24sp" android:textStyle="bold" />
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="AI COMPANION" android:textColor="#6D7CFF" android:textSize="12sp" android:paddingBottom="16dp" />
-        <Button android:id="@+id/menuNewChat" android:layout_width="match_parent" android:layout_height="48dp" android:text="✎  Nuevo chat" android:textAllCaps="false" />
-        <Button android:id="@+id/menuHistory" android:layout_width="match_parent" android:layout_height="48dp" android:text="▤  Chats" android:textAllCaps="false" />
-        <Button android:id="@+id/camera" android:layout_width="match_parent" android:layout_height="48dp" android:text="◉  Imágenes / Cámara" android:textAllCaps="false" />
-        <Button android:id="@+id/files" android:layout_width="match_parent" android:layout_height="48dp" android:text="▣  Biblioteca / Archivos" android:textAllCaps="false" />
-        <Button android:id="@+id/phoneControl" android:layout_width="match_parent" android:layout_height="48dp" android:text="⌘  Remote / Teléfono" android:textAllCaps="false" />
-        <Button android:id="@+id/wakeWord" android:layout_width="match_parent" android:layout_height="48dp" android:text="◷  Programadas / Hola Jarvis" android:textAllCaps="false" />
-        <Button android:id="@+id/menuPlugins" android:layout_width="match_parent" android:layout_height="48dp" android:text="⛓  Complementos" android:textAllCaps="false" />
-        <Button android:id="@+id/voiceSettings" android:layout_width="match_parent" android:layout_height="48dp" android:text="🔊  Voz y ajustes" android:textAllCaps="false" />
-        <Space android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-        <TextView android:id="@+id/menuRecents" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Recientes\n\nTodavía no hay conversaciones" android:textColor="#C7CFDD" android:textSize="14sp" />
+    <View
+        android:id="@+id/drawerScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/sideMenu"
+        android:layout_width="310dp"
+        android:layout_height="match_parent"
+        android:background="#0B0E14"
+        android:elevation="24dp"
+        android:orientation="vertical"
+        android:padding="18dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="JARVIS"
+                    android:textColor="#FFFFFF"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AI COMPANION"
+                    android:textColor="#617CFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/closeDrawer"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:text="✕" />
+        </LinearLayout>
+
+        <Button android:id="@+id/menuNewChat" android:layout_width="match_parent" android:layout_height="48dp" android:text="✎   Nuevo chat" android:textAllCaps="false" />
+        <Button android:id="@+id/menuHistory" android:layout_width="match_parent" android:layout_height="48dp" android:text="▤   Chats" android:textAllCaps="false" />
+        <Button android:id="@+id/camera" android:layout_width="match_parent" android:layout_height="48dp" android:text="◉   Imágenes" android:textAllCaps="false" />
+        <Button android:id="@+id/files" android:layout_width="match_parent" android:layout_height="48dp" android:text="▣   Biblioteca" android:textAllCaps="false" />
+        <Button android:id="@+id/phoneControl" android:layout_width="match_parent" android:layout_height="48dp" android:text="⌘   Remote / Teléfono" android:textAllCaps="false" />
+        <Button android:id="@+id/wakeWord" android:layout_width="match_parent" android:layout_height="48dp" android:text="◷   Programadas / Hola Jarvis" android:textAllCaps="false" />
+        <Button android:id="@+id/menuPlugins" android:layout_width="match_parent" android:layout_height="48dp" android:text="⛓   Complementos" android:textAllCaps="false" />
+        <Button android:id="@+id/voiceSettings" android:layout_width="match_parent" android:layout_height="48dp" android:text="⚙   Ajustes y voz" android:textAllCaps="false" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="18dp"
+            android:paddingBottom="8dp"
+            android:text="Recientes"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/menuRecents"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:text="Todavía no hay conversaciones"
+                android:textColor="#C3CBD8"
+                android:textSize="14sp"
+                android:lineSpacingExtra="6dp" />
+        </ScrollView>
     </LinearLayout>
 </FrameLayout>
