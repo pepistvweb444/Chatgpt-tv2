@@ -20,12 +20,12 @@ Daemon will be stopped at the end of the build
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugJniLibFolders
 > Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:processDebugManifestForPackage
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:mergeLibDexDebug
 > Task :app:processDebugResources
@@ -37,21 +37,17 @@ Daemon will be stopped at the end of the build
 > Task :app:compileDebugKotlin
 e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
     1. Kotlin compile daemon is ready
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:300:145 Syntax error: Expecting '"'.
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:300:145 Syntax error: Incorrect template entry: .
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:304:3 Syntax error: Expecting '"'.
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:304:3 Syntax error: Incorrect template entry: .
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:620:92 None of the following candidates is applicable:
+e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:618:56 None of the following candidates is applicable:
 static fun makeText(p0: Context!, p1: CharSequence!, p2: Int): Toast!
 static fun makeText(p0: Context!, p1: Int, p2: Int): Toast!
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:620:153 Unresolved reference 'show'.
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:620:203 None of the following candidates is applicable:
+e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:618:117 Unresolved reference 'show'.
+e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:619:61 None of the following candidates is applicable:
 static fun makeText(p0: Context!, p1: CharSequence!, p2: Int): Toast!
 static fun makeText(p0: Context!, p1: Int, p2: Int): Toast!
-e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:620:260 Unresolved reference 'show'.
+e: file:///home/runner/work/Chatgpt-tv2/Chatgpt-tv2/app/src/main/java/com/jarvis/tv/MainActivity.kt:619:118 Unresolved reference 'show'.
 
 > Task :app:compileDebugKotlin FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build_apk-1787581631796.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build_apk-1787582274633.json
 
 FAILURE: Build failed with an exception.
 
@@ -255,5 +251,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 24s
+BUILD FAILED in 26s
 26 actionable tasks: 26 executed
