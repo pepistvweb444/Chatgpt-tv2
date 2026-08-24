@@ -25,13 +25,17 @@ class WakeWordService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        val open = PendingIntent.getActivity(this, 0, Intent(this, ChatActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val open = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).putExtra("hands_free", true),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         startForeground(
             71,
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentTitle("Jarvis escuchando")
-                .setContentText("Di “Hola Jarvis” para abrir el asistente")
+                .setContentText("Di “Hola Jarvis” o “Hola Ale”")
                 .setOngoing(true)
                 .setContentIntent(open)
                 .build()
@@ -55,22 +59,25 @@ class WakeWordService : Service() {
                 r.setAudioEncodingBitRate(32000)
                 r.setOutputFile(f.absolutePath)
                 r.prepare(); r.start()
-                Thread.sleep(2600)
+                Thread.sleep(2300)
                 runCatching { r.stop() }; runCatching { r.release() }; recorder = null
                 if (f.exists() && f.length() > 256) {
                     val text = transcribe(f).lowercase()
-                    if (text.contains("hola jarvis") || text.contains("oye jarvis")) {
-                        val i = Intent(this, ChatActivity::class.java).apply {
+                    val wake = text.contains("hola jarvis") || text.contains("oye jarvis") ||
+                        text.contains("hola ale") || text.contains("oye ale") || text.contains("alé jarvis")
+                    if (wake) {
+                        val i = Intent(this, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                             putExtra("wake_word_triggered", true)
+                            putExtra("hands_free", true)
                         }
-                        startActivity(i)
-                        Thread.sleep(2500)
+                        runCatching { startActivity(i) }
+                        Thread.sleep(4500)
                     }
                 }
             } catch (_: Exception) {
                 runCatching { recorder?.release() }; recorder = null
-                try { Thread.sleep(1800) } catch (_: Exception) {}
+                try { Thread.sleep(1200) } catch (_: Exception) {}
             } finally { f.delete() }
         }
     }
