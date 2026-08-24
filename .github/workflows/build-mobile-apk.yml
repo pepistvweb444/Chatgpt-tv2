@@ -107,6 +107,9 @@ jobs:
       - name: Wire multi-step phone agent
         run: python3 mobile/patch_phone_agent.py
 
+      - name: Add messaging and agenda widgets
+        run: python3 mobile/patch_messaging_agenda.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -129,4 +132,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes local phone actions and multi-step accessibility agent tasks.
+# Main Jarvis UI routes phone actions, multi-step agent tasks, messaging and agenda widgets.
