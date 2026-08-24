@@ -104,3 +104,5 @@ jobs:
           name: Jarvis-Mobile-v0.2.5-debug
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
+
+# Triggered manually on 2026-08-24 to rebuild the mobile APK.
