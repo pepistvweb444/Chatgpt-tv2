@@ -95,6 +95,9 @@ jobs:
       - name: Fix Programadas menu crash
         run: python3 mobile/patch_scheduled_menu.py
 
+      - name: Restore agents and Tado settings
+        run: python3 mobile/patch_agents_tado.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -117,4 +120,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Programadas crash fix applied in mobile build.
+# Agents and Tado settings restored in mobile build.
