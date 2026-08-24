@@ -125,6 +125,9 @@ jobs:
       - name: Harden agenda sources and calendar diagnostics
         run: python3 mobile/patch_agenda_hardening.py
 
+      - name: Build unified unread inbox
+        run: python3 mobile/patch_unread_inbox.py
+
       - name: Enable continuous hands-free voice
         run: python3 mobile/patch_handsfree_voice.py
 
@@ -159,4 +162,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Jarvis Mobile keeps quick cards, clickable recents, connected tools and a persistent artifact library.
+# Jarvis Mobile keeps quick cards, clickable recents, unified unread inbox and a persistent artifact library.
