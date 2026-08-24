@@ -83,6 +83,12 @@ jobs:
       - name: Apply mobile-style TV interface
         run: python3 scripts/apply_tv_mobile_ui.py
 
+      - name: Apply mobile agenda and unread sync widgets
+        run: python3 scripts/apply_tv_personal_sync.py
+
+      - name: Apply rich TV news widgets with media previews
+        run: python3 scripts/apply_tv_rich_news_widgets.py
+
       - name: Build TV APK only
         id: build_apk
         shell: bash
