@@ -10,9 +10,15 @@ import androidx.core.content.ContextCompat
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val canOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
-        if (!canOverlay) return
-        try {
-            ContextCompat.startForegroundService(context, Intent(context, OverlayService::class.java))
-        } catch (_: Exception) {}
+        if (canOverlay) {
+            runCatching {
+                ContextCompat.startForegroundService(context, Intent(context, OverlayService::class.java))
+            }
+        }
+        // Some Android TV builds restrict microphone foreground services directly
+        // from BOOT_COMPLETED. We try here and MainActivity retries whenever Jarvis opens.
+        runCatching {
+            ContextCompat.startForegroundService(context, Intent(context, WakeWordService::class.java))
+        }
     }
 }
