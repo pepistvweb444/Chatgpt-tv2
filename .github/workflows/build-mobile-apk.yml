@@ -110,6 +110,9 @@ jobs:
       - name: Add messaging and agenda widgets
         run: python3 mobile/patch_messaging_agenda.py
 
+      - name: Enable continuous hands-free voice
+        run: python3 mobile/patch_handsfree_voice.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -132,4 +135,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Main Jarvis UI routes phone actions, multi-step agent tasks, messaging and agenda widgets.
+# Main Jarvis UI routes phone actions, agent tasks, messaging/agenda widgets and hands-free voice.
