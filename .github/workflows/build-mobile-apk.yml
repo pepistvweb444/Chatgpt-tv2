@@ -98,6 +98,9 @@ jobs:
       - name: Restore agents and Tado settings
         run: python3 mobile/patch_agents_tado.py
 
+      - name: Add MCP and phone permissions settings
+        run: python3 mobile/patch_mcp_permissions.py
+
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -120,4 +123,4 @@ jobs:
           path: Jarvis-Mobile-v0.2.5-debug.apk
           if-no-files-found: error
 
-# Agents and Tado settings restored in mobile build.
+# Agents, Tado, MCP manager and phone permissions settings restored.
