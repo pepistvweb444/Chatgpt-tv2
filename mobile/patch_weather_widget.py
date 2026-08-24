@@ -109,6 +109,7 @@ new2 = '''    private fun weatherIcon(code: Int): String = when (code) {
         val code = data.optInt("code", -1)
         val days = data.optJSONArray("days") ?: JSONArray()
         val today = days.optJSONObject(0)
+        val todayDate = today?.optString("date").orEmpty()
 
         card.addView(TextView(this).apply {
             text = place
@@ -174,7 +175,7 @@ new2 = '''    private fun weatherIcon(code: Int): String = when (code) {
         })
 
         card.addView(TextView(this).apply {
-            text = "Hoy${today?.optString("date")?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}"
+            text = if (todayDate.isBlank()) "Hoy" else "Hoy · $todayDate"
             textSize = 13f
             setTextColor(Color.rgb(224, 233, 246))
             setPadding(0, 0, 0, dp(8))
