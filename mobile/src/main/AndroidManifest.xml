@@ -23,11 +23,15 @@
 
     <application android:allowBackup="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
         <activity android:name=".DeviceHubActivity" android:exported="false" />
-        <activity android:name=".MainActivity" android:exported="false" />
-        <activity android:name=".ChatActivity" android:exported="true">
-            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        <activity android:name=".ChatActivity" android:exported="false" />
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
 
+        <service android:name=".MobileSpeechService" android:exported="false" />
         <service android:name=".WakeWordService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".PhoneBridgeService" android:exported="false" />
 
