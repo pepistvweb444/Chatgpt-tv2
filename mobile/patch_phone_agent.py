@@ -9,9 +9,6 @@ if 'private val phoneAgent by lazy' not in s:
         raise SystemExit('lastLocation field marker not found')
     s = s.replace(field, field + '    private val phoneAgent by lazy { PhoneAgentController(this) }\n', 1)
 
-# patch_phone_actions.py runs before this script and adds LocalActionRouter.
-# Multi-step tasks MUST run before the simple local router, otherwise a phrase like
-# "abre Glovo y haz un pedido" is incorrectly consumed by the generic "abre ..." rule.
 if 'phoneAgent.looksLikePhoneTask(message)' not in s:
     marker = '''        val local = runCatching { actionRouter.handle(message) }.getOrNull()'''
     idx_send = s.find('    private fun sendMessage() {')
@@ -24,12 +21,42 @@ if 'phoneAgent.looksLikePhoneTask(message)' not in s:
     block = '''        if (phoneAgent.looksLikePhoneTask(message)) {
             val enabled = prefs.getBoolean("accessibility_connected", false)
             if (!enabled) {
-                renderMessageCard("assistant", "Para controlar otras aplicaciones necesito que actives Jarvis en Accesibilidad. Abro la configuración para que puedas concederlo.")
+                val warning = "Para controlar otras aplicaciones necesito que actives Jarvis en Accesibilidad. Abro la configuración para que puedas concederlo."
+                renderMessageCard("assistant", warning)
+                saveHistory("assistant", warning, false)
                 runCatching { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                 return
             }
             status.text = "Jarvis está controlando el teléfono…"
+            val started = "Control del teléfono iniciado · ${message.take(180)}"
+            renderMessageCard("assistant", started)
+            saveHistory("assistant", started, false)
+            var lastProgress = ""
             phoneAgent.run(
+                message,
+                onUpdate = { t -> runOnUiThread {
+                    status.text = t
+                    if (t.isNotBlank() && t != lastProgress) {
+                        lastProgress = t
+                        renderMessageCard("assistant", t)
+                        saveHistory("assistant", t, false)
+                    }
+                } },
+                onDone = { result -> runOnUiThread {
+                    status.text = "Jarvis listo"
+                    val finalText = if (result.isBlank()) "He terminado el control del teléfono." else result
+                    renderMessageCard("assistant", finalText)
+                    saveHistory("assistant", finalText, false)
+                    safeSpeak(finalText)
+                } }
+            )
+            return
+        }
+
+'''
+    s = s[:idx_marker] + block + s[idx_marker:]
+else:
+    old = '''            phoneAgent.run(
                 message,
                 onUpdate = { t -> runOnUiThread { status.text = t } },
                 onDone = { result -> runOnUiThread {
@@ -38,12 +65,31 @@ if 'phoneAgent.looksLikePhoneTask(message)' not in s:
                     saveHistory("assistant", result, false)
                     safeSpeak(result)
                 } }
-            )
-            return
-        }
-
-'''
-    s = s[:idx_marker] + block + s[idx_marker:]
+            )'''
+    new = '''            val started = "Control del teléfono iniciado · ${message.take(180)}"
+            renderMessageCard("assistant", started)
+            saveHistory("assistant", started, false)
+            var lastProgress = ""
+            phoneAgent.run(
+                message,
+                onUpdate = { t -> runOnUiThread {
+                    status.text = t
+                    if (t.isNotBlank() && t != lastProgress) {
+                        lastProgress = t
+                        renderMessageCard("assistant", t)
+                        saveHistory("assistant", t, false)
+                    }
+                } },
+                onDone = { result -> runOnUiThread {
+                    status.text = "Jarvis listo"
+                    val finalText = if (result.isBlank()) "He terminado el control del teléfono." else result
+                    renderMessageCard("assistant", finalText)
+                    saveHistory("assistant", finalText, false)
+                    safeSpeak(finalText)
+                } }
+            )'''
+    if old in s:
+        s = s.replace(old, new, 1)
 
 p.write_text(s)
-print('Phone agent wired before LocalActionRouter')
+print('Phone agent progress and final result are persisted in conversation')
