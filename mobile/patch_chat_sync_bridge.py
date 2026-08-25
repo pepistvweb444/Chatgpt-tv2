@@ -1,0 +1,81 @@
+from pathlib import Path
+
+p=Path('mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt')
+s=p.read_text()
+
+# Upgrade the tiny HTTP parser to accept POST JSON while preserving existing routes.
+old='''                        val path = first.split(" ").getOrNull(1).orEmpty()
+                        val response = handle(path, headers)'''
+new='''                        val parts = first.split(" ")
+                        val method = parts.getOrNull(0).orEmpty().uppercase()
+                        val path = parts.getOrNull(1).orEmpty()
+                        val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, 1024 * 1024) ?: 0
+                        val bodyChars = CharArray(contentLength)
+                        var read = 0
+                        while (read < contentLength) {
+                            val n = reader.read(bodyChars, read, contentLength - read)
+                            if (n <= 0) break
+                            read += n
+                        }
+                        val requestBody = if (read > 0) String(bodyChars, 0, read) else ""
+                        val response = handle(path, headers, method, requestBody)'''
+if old in s:
+    s=s.replace(old,new,1)
+else:
+    raise SystemExit('HTTP parser anchor not found')
+
+s=s.replace('private fun handle(path: String, headers: Map<String,String> = emptyMap()): Pair<Int,String> {',
+            'private fun handle(path: String, headers: Map<String,String> = emptyMap(), method: String = "GET", body: String = ""): Pair<Int,String> {',1)
+
+marker='        if (path.startsWith("/ping")) return 200 to JSONObject().put("ok", true).put("device", "jarvis-phone").toString()\n'
+block=r'''        if (path.startsWith("/chats")) {
+            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+            val expected = prefs.getString("remote_token", "").orEmpty()
+            val supplied = headers["authorization"].orEmpty().removePrefix("Bearer ").trim()
+            if (expected.isBlank() || supplied != expected) return 401 to JSONObject().put("error", "unauthorized").toString()
+            if (!prefs.getBoolean("remote_control_enabled", false)) return 403 to JSONObject().put("error", "remote-disabled").toString()
+            val idx = runCatching { JSONArray(prefs.getString("chatIndex", "[]")) }.getOrElse { JSONArray() }
+            return 200 to JSONObject().put("ok", true).put("currentConversation", prefs.getString("currentConversation", "").orEmpty()).put("chats", idx).toString()
+        }
+        if (path.startsWith("/chat?")) {
+            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+            val expected = prefs.getString("remote_token", "").orEmpty()
+            val supplied = headers["authorization"].orEmpty().removePrefix("Bearer ").trim()
+            if (expected.isBlank() || supplied != expected) return 401 to JSONObject().put("error", "unauthorized").toString()
+            val rawId = path.substringAfter("id=", "").substringBefore("&")
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8.name()).trim()
+            if (id.isBlank()) return 400 to JSONObject().put("error", "id-required").toString()
+            val history = runCatching { JSONArray(prefs.getString("chat_$id", "[]")) }.getOrElse { JSONArray() }
+            val idx = runCatching { JSONArray(prefs.getString("chatIndex", "[]")) }.getOrElse { JSONArray() }
+            var title = "Chat"; var updated = 0L
+            for (i in 0 until idx.length()) idx.optJSONObject(i)?.let { if(it.optString("id")==id){title=it.optString("title").ifBlank{"Chat"};updated=it.optLong("updated")} }
+            return 200 to JSONObject().put("ok", true).put("id", id).put("title", title).put("updated", updated).put("history", history).toString()
+        }
+        if (path.startsWith("/chat-sync") && method == "POST") {
+            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+            val expected = prefs.getString("remote_token", "").orEmpty()
+            val supplied = headers["authorization"].orEmpty().removePrefix("Bearer ").trim()
+            if (expected.isBlank() || supplied != expected) return 401 to JSONObject().put("error", "unauthorized").toString()
+            if (!prefs.getBoolean("remote_control_enabled", false)) return 403 to JSONObject().put("error", "remote-disabled").toString()
+            val j = runCatching { JSONObject(body) }.getOrElse { return 400 to JSONObject().put("error", "invalid-json").toString() }
+            val id = j.optString("id").trim(); if(id.isBlank()) return 400 to JSONObject().put("error", "id-required").toString()
+            val history = j.optJSONArray("history") ?: JSONArray()
+            val title = j.optString("title").ifBlank { "Chat" }
+            val updated = j.optLong("updated", System.currentTimeMillis())
+            val idx = runCatching { JSONArray(prefs.getString("chatIndex", "[]")) }.getOrElse { JSONArray() }
+            var found=false
+            for(i in 0 until idx.length()){
+                val o=idx.optJSONObject(i)?:continue
+                if(o.optString("id")==id){o.put("title",title).put("updated",updated);found=true;break}
+            }
+            if(!found) idx.put(JSONObject().put("id",id).put("title",title).put("updated",updated))
+            prefs.edit().putString("chat_$id",history.toString()).putString("chatIndex",idx.toString()).putString("currentConversation",id).apply()
+            return 200 to JSONObject().put("ok",true).put("id",id).put("messages",history.length()).toString()
+        }
+'''
+if '/chat-sync' not in s:
+    if marker not in s: raise SystemExit('ping marker not found')
+    s=s.replace(marker,marker+block,1)
+
+p.write_text(s)
+print('Authenticated TV/mobile chat sync endpoints applied')
