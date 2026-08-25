@@ -28,6 +28,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("com.google.android.gms:play-services-auth:21.6.0")
 
+    // Fully embedded/offline Spanish speech recognition. No Android/Google
+    // SpeechRecognizer service and no paid transcription API are required.
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
+
     // Google Home APIs Android SDK is distributed by Google as local AAR files,
     // not from Google Maven. Drop the authenticated SDK AARs in mobile/libs/.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
