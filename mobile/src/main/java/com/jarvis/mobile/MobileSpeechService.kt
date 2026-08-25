@@ -13,21 +13,18 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicInteger
 
 class MobileSpeechService : Service() {
     private var player: MediaPlayer? = null
     private val generation = AtomicInteger(0)
-    private val downloader = Executors.newFixedThreadPool(2)
+    private val downloader = Executors.newFixedThreadPool(4)
 
     override fun onCreate() {
         super.onCreate()
-        runCatching {
-            if (Build.VERSION.SDK_INT >= 26) {
-                getSystemService(NotificationManager::class.java)
-                    .createNotificationChannel(NotificationChannel(CHANNEL, "Voz de Jarvis", NotificationManager.IMPORTANCE_LOW))
-            }
+        if (Build.VERSION.SDK_INT >= 26) runCatching {
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(NotificationChannel(CHANNEL, "Voz de Jarvis", NotificationManager.IMPORTANCE_LOW))
         }
     }
 
@@ -41,36 +38,22 @@ class MobileSpeechService : Service() {
         val token = generation.incrementAndGet()
         startForeground(4406, NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Jarvis está hablando")
-            .setContentText(text.take(80))
-            .setOngoing(true).build())
+            .setContentTitle("Jarvis está hablando").setContentText(text.take(80)).setOngoing(true).build())
         Thread { speakPipelined(text, voice, token) }.start()
         START_NOT_STICKY
     }.getOrElse { stopSelf(); START_NOT_STICKY }
 
-    /**
-     * First chunk is deliberately short so Jarvis begins speaking quickly.
-     * Remaining chunks are larger and are downloaded while the previous chunk
-     * is already playing, eliminating the old 5-10 second silent gaps.
-     */
     private fun chunks(text: String): List<String> {
-        val clean = text.replace(Regex("https?://\\S+"), " ")
-            .replace(Regex("[*_`#>|]+"), " ")
-            .replace(Regex("\\s+"), " ").trim()
+        val clean = text.replace(Regex("https?://\\S+"), " ").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\s+"), " ").trim()
         if (clean.isBlank()) return emptyList()
-        val out = mutableListOf<String>()
-        var rest = clean
-        var first = true
+        val out = mutableListOf<String>(); var rest = clean; var first = true
         while (rest.isNotBlank()) {
-            val max = if (first) 240 else 1200
-            val minCut = if (first) 70 else 280
+            val max = if (first) 95 else 620
+            val minCut = if (first) 28 else 180
             val limit = minOf(max, rest.length)
             val marks = listOf(". ", "? ", "! ", "; ", ", ")
-            val candidates = marks.map { rest.lastIndexOf(it, limit) }.filter { it >= minCut }
-            val cut = candidates.maxOrNull()?.plus(1) ?: limit
-            out += rest.take(cut).trim()
-            rest = rest.drop(cut).trim()
-            first = false
+            val cut = marks.map { rest.lastIndexOf(it, limit) }.filter { it >= minCut }.maxOrNull()?.plus(1) ?: limit
+            out += rest.take(cut).trim(); rest = rest.drop(cut).trim(); first = false
         }
         return out
     }
@@ -80,11 +63,10 @@ class MobileSpeechService : Service() {
         val file = File(cacheDir, "jarvis-bg-$token-$index.mp3")
         return try {
             val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 4500; readTimeout = 30000
+                requestMethod = "POST"; doOutput = true; connectTimeout = 3500; readTimeout = 22000
                 setRequestProperty("Content-Type", "application/json")
             }
-            val payload = JSONObject().put("text", chunk).put("voice", voice)
-                .put("provider", if (voice == "openvoice") "openvoice" else "openai").put("speed", 0.94)
+            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", "auto").put("speed", 1.02)
             c.outputStream.use { it.write(payload.toString().toByteArray()) }
             if (c.responseCode !in 200..299) { file.delete(); null }
             else { c.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }; file }
@@ -94,16 +76,10 @@ class MobileSpeechService : Service() {
     private fun speakPipelined(text: String, voice: String, token: Int) {
         val parts = chunks(text)
         if (parts.isEmpty()) { if (token == generation.get()) stopSelf(); return }
-
-        var pending: Future<File?> = downloader.submit<File?> { downloadChunk(parts[0], voice, token, 0) }
+        val futures = parts.mapIndexed { index, part -> downloader.submit<File?> { downloadChunk(part, voice, token, index) } }
         for (i in parts.indices) {
             if (token != generation.get()) return
-            val file = runCatching { pending.get() }.getOrNull() ?: continue
-            // Start generating the next audio BEFORE current playback begins.
-            val next: Future<File?>? = if (i + 1 < parts.size) downloader.submit<File?> {
-                downloadChunk(parts[i + 1], voice, token, i + 1)
-            } else null
-
+            val file = runCatching { futures[i].get() }.getOrNull() ?: continue
             val lock = Object()
             try {
                 synchronized(lock) {
@@ -119,15 +95,11 @@ class MobileSpeechService : Service() {
                     runCatching { player?.release() }; player = null
                 }
             } finally { runCatching { file.delete() } }
-            if (next != null) pending = next
         }
         if (token == generation.get()) stopSelf()
     }
 
-    override fun onDestroy() {
-        generation.incrementAndGet(); runCatching { player?.release() }; player = null
-        super.onDestroy()
-    }
+    override fun onDestroy() { generation.incrementAndGet(); runCatching { player?.release() }; player = null; super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
