@@ -33,6 +33,7 @@
     </queries>
 
     <application android:allowBackup="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
+        <activity android:name=".GoogleHomeActivity" android:exported="false" />
         <activity android:name=".LibraryActivity" android:exported="false" />
         <activity android:name=".DeviceHubActivity" android:exported="false" />
         <activity android:name=".ChatActivity" android:exported="false" />
