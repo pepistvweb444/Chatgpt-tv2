@@ -100,6 +100,8 @@ jobs:
         run: python3 mobile/patch_tado_runtime.py
       - name: Fix Tado UI thread and show thermostat
         run: python3 mobile/patch_tado_ui_thread.py
+      - name: Add Tado device cards and controls
+        run: python3 mobile/patch_tado_devices_controls.py
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
       - name: Connect SMS WhatsApp RCS and call actions
@@ -128,6 +130,8 @@ jobs:
         run: python3 mobile/patch_persistent_wake_overlay.py
       - name: Route daily news questions to rich widgets
         run: python3 mobile/patch_today_news_widgets.py
+      - name: Render structured answers as rich widgets
+        run: python3 mobile/patch_universal_widgets.py
       - name: Keep quick cards and wire recent chats
         run: python3 mobile/patch_persistent_home_recents.py
       - name: Wire persistent artifact library
