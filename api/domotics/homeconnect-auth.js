@@ -22,21 +22,24 @@ export default async function handler(req, res) {
 
   const clientId = String(process.env.HOMECONNECT_CLIENT_ID || '').trim();
   const clientSecret = String(process.env.HOMECONNECT_CLIENT_SECRET || '').trim();
+  const redirectUri = String(process.env.HOMECONNECT_REDIRECT_URI || 'https://chatgpt-tv2.vercel.app/api/domotics/homeconnect-callback').trim();
   const scope = String(process.env.HOMECONNECT_SCOPE || 'IdentifyAppliance Monitor Control Settings').trim();
   if (!clientId) return res.status(503).json({ error: 'HOMECONNECT_CLIENT_ID_not_configured' });
 
   const action = String(req.body?.action || '').toLowerCase();
   try {
     if (action === 'start') {
-      const out = await postForm(`${HC}/security/oauth/device_authorization`, { client_id: clientId, scope });
-      return res.status(out.status).json(out.json);
+      const state = String(req.body?.state || Math.random().toString(36).slice(2));
+      const q = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope, state });
+      return res.status(200).json({ authorization_url: `${HC}/security/oauth/authorize?${q.toString()}`, state, redirect_uri: redirectUri });
     }
 
-    if (action === 'token') {
-      const deviceCode = String(req.body?.deviceCode || '');
-      if (!deviceCode) return res.status(400).json({ error: 'deviceCode_required' });
+    if (action === 'exchange') {
+      const code = String(req.body?.code || '');
+      if (!code) return res.status(400).json({ error: 'code_required' });
+      if (!clientSecret) return res.status(503).json({ error: 'HOMECONNECT_CLIENT_SECRET_not_configured' });
       const out = await postForm(`${HC}/security/oauth/token`, {
-        grant_type: 'device_code', device_code: deviceCode, client_id: clientId
+        grant_type: 'authorization_code', code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri
       });
       return res.status(out.status).json(out.json);
     }
@@ -46,7 +49,7 @@ export default async function handler(req, res) {
       if (!refreshToken) return res.status(400).json({ error: 'refreshToken_required' });
       if (!clientSecret) return res.status(503).json({ error: 'HOMECONNECT_CLIENT_SECRET_not_configured' });
       const out = await postForm(`${HC}/security/oauth/token`, {
-        grant_type: 'refresh_token', refresh_token: refreshToken, client_secret: clientSecret
+        grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret
       });
       return res.status(out.status).json(out.json);
     }
