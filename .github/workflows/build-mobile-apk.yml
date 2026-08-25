@@ -188,12 +188,12 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.8-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.8-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.9-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.9-debug.apk
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.8-debug
-          path: Jarvis-Mobile-v0.2.8-debug.apk
+          name: Jarvis-Mobile-v0.2.9-debug
+          path: Jarvis-Mobile-v0.2.9-debug.apk
           if-no-files-found: error
