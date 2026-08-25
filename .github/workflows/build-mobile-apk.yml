@@ -98,6 +98,8 @@ jobs:
         run: python3 mobile/patch_tado_oauth.py
       - name: Unify Tado OAuth state and climate queries
         run: python3 mobile/patch_tado_runtime.py
+      - name: Fix Tado UI thread and show thermostat
+        run: python3 mobile/patch_tado_ui_thread.py
       - name: Add MCP and phone permissions settings
         run: python3 mobile/patch_mcp_permissions.py
       - name: Connect SMS WhatsApp RCS and call actions
@@ -106,6 +108,8 @@ jobs:
         run: python3 mobile/patch_direct_calls.py
       - name: Wire multi-step phone agent
         run: python3 mobile/patch_phone_agent.py
+      - name: Discover all installed launcher apps
+        run: python3 mobile/patch_all_apps_catalog.py
       - name: Add authenticated Remote control
         run: python3 mobile/patch_remote_control.py
       - name: Add four-digit TV pairing PIN
@@ -120,6 +124,8 @@ jobs:
         run: python3 mobile/patch_unread_inbox.py
       - name: Enable continuous hands-free voice
         run: python3 mobile/patch_handsfree_voice.py
+      - name: Enable persistent wake word overlay
+        run: python3 mobile/patch_persistent_wake_overlay.py
       - name: Route daily news questions to rich widgets
         run: python3 mobile/patch_today_news_widgets.py
       - name: Keep quick cards and wire recent chats
