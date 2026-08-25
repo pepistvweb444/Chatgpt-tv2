@@ -31,6 +31,28 @@ class PhoneAgentController(private val activity: Activity) {
         return verbs.any { s.contains(it) } && (targets.any { s.contains(it) } || s.contains(" en ") || s.contains(" por internet"))
     }
 
+    private fun looksLikeShoppingTask(task: String): Boolean {
+        val s = canonical(task)
+        return listOf("compra", "comprar", "anade", "agrega", "carrito", "cesta", "pedido", "glovo", "amazon", "aliexpress", "dia").any { s.contains(it) }
+    }
+
+    private fun hasCartEvidence(ui: JSONArray): Boolean {
+        val evidence = listOf("carrito", "cesta", "ver cesta", "ver carrito", "subtotal", "articulo", "artículos", "items", "producto añadido", "añadido", "checkout")
+        for (i in 0 until ui.length()) {
+            val item = ui.optJSONObject(i) ?: continue
+            val text = buildString {
+                append(item.optString("text")); append(' ')
+                append(item.optString("contentDescription")); append(' ')
+                append(item.optString("hint")); append(' ')
+                append(item.optString("viewId"))
+            }.lowercase()
+            if (evidence.any { text.contains(it) }) return true
+            val numeric = Regex("\\b[1-9]\\d?\\b").find(text)?.value?.toIntOrNull()
+            if (numeric != null && (text.contains("carrito") || text.contains("cesta") || text.contains("artículo") || text.contains("item"))) return true
+        }
+        return false
+    }
+
     fun run(task: String, onUpdate: (String) -> Unit, onDone: (String) -> Unit) {
         cancelled = false
         val resolved = resolveTask(task)
@@ -58,7 +80,6 @@ class PhoneAgentController(private val activity: Activity) {
                 "open_app" -> {
                     val app = action.optString("app"); onUpdate("Abriendo $app…")
                     if (!openApp(app)) {
-                        // If the requested app cannot be launched, continue in the browser instead of aborting.
                         onUpdate("No encuentro $app; continúo en el navegador…")
                         openWebSearch("$app ${task.take(180)}")
                     }
@@ -73,7 +94,14 @@ class PhoneAgentController(private val activity: Activity) {
                 "home" -> send(JarvisAccessibilityService.ACTION_HOME)
                 "wait" -> Thread.sleep(action.optLong("ms", 900).coerceIn(250, 4000))
                 "confirm" -> { requestConfirmation(task, step, action.optString("message"), onUpdate, onDone); return }
-                "done" -> return finish(onDone, action.optString("message").ifBlank { "Tarea completada." }, true)
+                "done" -> {
+                    if (looksLikeShoppingTask(task) && !hasCartEvidence(ui)) {
+                        onUpdate("Todavía no puedo confirmar que el producto esté en el carrito; verificando…")
+                        step++
+                        continue
+                    }
+                    return finish(onDone, action.optString("message").ifBlank { "Tarea completada." }, true)
+                }
                 "fail" -> return finish(onDone, action.optString("message").ifBlank { "No he podido completar la tarea." }, false)
                 else -> return finish(onDone, "El agente del teléfono recibió una acción no válida.", false)
             }
