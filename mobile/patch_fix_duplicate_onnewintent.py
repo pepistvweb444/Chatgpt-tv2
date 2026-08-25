@@ -4,15 +4,32 @@ import re
 p = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s = p.read_text()
 
-pattern = re.compile(r'(?m)^(?P<indent>\s*)override\s+fun\s+onNewIntent\s*\(\s*intent\s*:\s*(?:android\.content\.)?Intent\s*\)\s*\{')
+# Match every Android onNewIntent override variant that compiles to the same JVM
+# signature, including Intent, Intent?, android.content.Intent and annotations/spacing.
+pattern = re.compile(
+    r'(?m)^(?P<indent>\s*)override\s+fun\s+onNewIntent\s*\(\s*intent\s*:\s*(?:android\.content\.)?Intent\??\s*\)\s*\{'
+)
+generic = re.compile(r'(?m)^\s*override\s+fun\s+onNewIntent\s*\(')
 matches = list(pattern.finditer(s))
 
-if len(matches) <= 1:
+if len(matches) == 0:
+    # If a future patch emits a syntax variant we do not understand, fail early
+    # instead of letting Kotlin reach a JVM signature clash later.
+    raw_count = len(generic.findall(s))
+    if raw_count:
+        raise SystemExit(f'onNewIntent override(s) found but signature parser matched none: {raw_count}')
+    print('No onNewIntent override present')
+    raise SystemExit(0)
+
+if len(matches) == 1:
+    raw_count = len(generic.findall(s))
+    if raw_count != 1:
+        raise SystemExit(f'Expected one onNewIntent override, raw source contains {raw_count}')
     print('onNewIntent already unique')
     raise SystemExit(0)
 
-# Rename duplicate overrides after the first to private helper methods.
-# Work backwards so offsets do not invalidate earlier match positions.
+# Rename duplicate overrides after the first to private helper methods. Work
+# backwards so offsets do not invalidate earlier match positions.
 helper_names = []
 for idx in range(len(matches) - 1, 0, -1):
     m = matches[idx]
@@ -23,22 +40,21 @@ for idx in range(len(matches) - 1, 0, -1):
     s = s[:m.start()] + replacement + s[m.end():]
 helper_names.reverse()
 
-# Find the one remaining override and call helpers exactly once.
+# Find the single remaining override and call each helper exactly once.
 primary = pattern.search(s)
 if not primary:
     raise SystemExit('primary onNewIntent not found after merge')
 body_start = primary.end()
 anchor = 'super.onNewIntent(intent)'
 pos = s.find(anchor, body_start)
+calls = ''.join(f'\n        {name}(intent)' for name in helper_names)
 if pos < 0:
-    calls = ''.join(f'\n        {name}(intent)' for name in helper_names)
-    s = s[:body_start] + calls + s[body_start:]
+    s = s[:body_start] + '\n        super.onNewIntent(intent)' + calls + s[body_start:]
 else:
     insert_at = pos + len(anchor)
-    calls = ''.join(f'\n        {name}(intent)' for name in helper_names)
     s = s[:insert_at] + calls + s[insert_at:]
 
-# Remove super.onNewIntent from helper bodies only, using brace matching.
+# Helpers must not invoke the superclass callback again.
 def block_bounds(text, header_pos):
     open_brace = text.find('{', header_pos)
     if open_brace < 0:
@@ -73,16 +89,16 @@ for name in helper_names:
         continue
     bounds = block_bounds(s, h)
     if not bounds:
-        continue
-    a, b = bounds
+        raise SystemExit(f'Could not find body for {name}')
+    _, b = bounds
     block = s[h:b]
     block = re.sub(r'(?m)^\s*super\.onNewIntent\(intent\)\s*\n?', '', block)
     s = s[:h] + block + s[b:]
 
-# Hard assertion: compilation must see exactly one JVM override.
-remaining = list(pattern.finditer(s))
-if len(remaining) != 1:
-    raise SystemExit(f'expected exactly one onNewIntent override, found {len(remaining)}')
+# Final source-level guard independent of parameter nullability/qualification.
+raw_remaining = len(generic.findall(s))
+if raw_remaining != 1:
+    raise SystemExit(f'expected exactly one onNewIntent override after merge, found {raw_remaining}')
 
 p.write_text(s)
 print(f'Merged {len(matches)} onNewIntent handlers into one override + {len(helper_names)} helper(s)')
