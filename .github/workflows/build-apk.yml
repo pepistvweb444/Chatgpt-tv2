@@ -3,10 +3,12 @@ name: Build Jarvis TV APK
 on:
   push:
     branches: [ main, jarvis-write-test ]
-    paths-ignore:
-      - 'Jarvis-TV-v0.6.6-debug.apk.b64'
-      - 'LATEST_TV_RUN_ID.txt'
-      - 'BUILD_FAILURE_LOG.txt'
+    paths:
+      - 'app/**'
+      - 'scripts/**'
+      - '.github/workflows/build-apk.yml'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
   workflow_dispatch:
 
 permissions:
