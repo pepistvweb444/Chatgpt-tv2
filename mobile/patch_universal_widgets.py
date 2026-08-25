@@ -53,6 +53,11 @@ methods = r'''    private fun widgetGroupTitle(kind: String): String = when (kin
         else -> "Información"
     }
 
+    private fun revealWidgetHost() {
+        widgetHost.visibility = View.VISIBLE
+        scroll.postDelayed({ scroll.smoothScrollTo(0, widgetHost.top.coerceAtLeast(0)) }, 120L)
+    }
+
     private fun addRichInfoWidget(kind: String, title: String, description: String, imageUrl: String? = null, openUrl: String? = null) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -114,7 +119,7 @@ methods = r'''    private fun widgetGroupTitle(kind: String): String = when (kin
                 addRichInfoWidget(kind, title.ifBlank { "Resultado ${i + 1}" }, body, images.getOrNull(i) ?: images.firstOrNull(), videos.getOrNull(i))
             }
         }
-        scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+        revealWidgetHost()
     }
 
     private fun shouldRenderAsWidget(kind: String?, reply: String, images: List<String>, videos: List<String>): Boolean {
@@ -137,11 +142,13 @@ s = s.replace(
                     saveHistory("assistant", reply, visual, images, videos)
                     if (visual) {
                         val kind = widgetKind ?: "results"
-                        if (kind == "weather" || kind == "home" || kind == "day") renderReplyAsWidgets(kind, reply)
-                        else renderUniversalWidgets(kind, reply, images, videos)
+                        if (kind == "weather" || kind == "home" || kind == "day") {
+                            renderReplyAsWidgets(kind, reply)
+                            revealWidgetHost()
+                        } else renderUniversalWidgets(kind, reply, images, videos)
                     } else renderMessageCard("assistant", reply, images, videos)
                     status.text = "Jarvis listo"'''
 )
 
 p.write_text(s)
-print('Universal rich widget renderer applied with TV/streaming detection')
+print('Universal rich widget renderer applied with automatic reveal')
