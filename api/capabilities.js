@@ -23,8 +23,10 @@ export default async function handler(req, res) {
     mcpConfigured: mcps.length > 0,
     mcps,
     aiProviders,
-    aiProviderOrder: String(process.env.JARVIS_AI_PROVIDER_ORDER || 'openai,qwen,gemini,groq,openrouter').split(',').map(x => x.trim()).filter(Boolean),
-    transcriptionOrder: ['groq', 'openai'],
-    groqTranscriptionConfigured: Boolean(process.env.GROQ_API_KEY)
+    aiProviderOrder: String(process.env.JARVIS_AI_PROVIDER_ORDER || 'qwen,gemini,groq,openrouter,openai').split(',').map(x => x.trim()).filter(Boolean),
+    automaticProviderOrder: ['qwen','gemini','groq','openrouter','openai'],
+    transcriptionOrder: ['groq','gemini','openai'],
+    groqTranscriptionConfigured: Boolean(process.env.GROQ_API_KEY),
+    geminiTranscriptionConfigured: Boolean(process.env.GEMINI_API_KEY)
   });
 }
