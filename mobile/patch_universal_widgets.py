@@ -3,7 +3,6 @@ from pathlib import Path
 p = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s = p.read_text()
 
-# Expand visual intent recognition well beyond the four original categories.
 old = '''    private fun classifyVisualRequest(text: String): String? {
         val s = text.lowercase()
         return when {
@@ -22,7 +21,13 @@ new = '''    private fun classifyVisualRequest(text: String): String? {
             s.contains("tiempo") || s.contains("previsión") || s.contains("meteorolog") -> "weather"
             s.contains("domótica") || s.contains("luces") || s.contains("persianas") || s.contains("termostato") || s.contains("tado") -> "home"
             s.contains("agenda") || s.contains("resumen del día") || s.contains("recordatorio") || s.contains("cita") || s.contains("calendario") -> "day"
-            s.contains("televisión") || s.contains("television") || s.contains("programación") || s.contains("programacion") || s.contains("qué echan") || s.contains("que echan") || s.contains("canal") || s.contains("película") || s.contains("pelicula") || s.contains("serie") -> "media"
+            s.contains("televisión") || s.contains("television") || s.contains("la tele") || s.contains(" tv ") || s.startsWith("tv ") ||
+                s.contains("programación") || s.contains("programacion") || s.contains("qué echan") || s.contains("que echan") ||
+                s.contains("qué hay en la tele") || s.contains("que hay en la tele") || s.contains("está en la tele") || s.contains("esta en la tele") ||
+                s.contains("canal") || s.contains("película") || s.contains("pelicula") || s.contains("serie") || s.contains("streaming") ||
+                s.contains("netflix") || s.contains("prime video") || s.contains("amazon prime") || s.contains("disney+") || s.contains("disney plus") ||
+                s.contains("hbo") || s.contains("max") || s.contains("movistar plus") || s.contains("rtve") || s.contains("antena 3") ||
+                s.contains("telecinco") || s.contains("la 1") || s.contains("la 2") || s.contains("cuatro") || s.contains("la sexta") -> "media"
             s.contains("mensaje") || s.contains("whatsapp") || s.contains("instagram") || s.contains("tiktok") || s.contains("correo") || s.contains("email") -> "messages"
             s.contains("busca") || s.contains("buscar") || s.contains("recomienda") || s.contains("recomendación") || s.contains("recomendacion") || s.contains("precio") || s.contains("comprar") || s.contains("compra") || s.contains("producto") -> "results"
             else -> null
@@ -31,15 +36,18 @@ new = '''    private fun classifyVisualRequest(text: String): String? {
 '''
 if old in s:
     s = s.replace(old, new)
+elif 's.contains("streaming")' not in s:
+    marker='''            s.contains("televisión") || s.contains("television")'''
+    if marker in s:
+        s=s.replace(marker, '''            s.contains("televisión") || s.contains("television") || s.contains("la tele") || s.contains("streaming") || s.contains("netflix") || s.contains("prime video") || s.contains("disney+") || s.contains("hbo") || s.contains("movistar plus")''',1)
 
-# Add a rich generic card: thumbnail on the left, title + description on the right.
 marker = '    private fun renderReplyAsWidgets(kind: String, reply: String) {'
 methods = r'''    private fun widgetGroupTitle(kind: String): String = when (kind) {
         "weather" -> "Tiempo · tu ubicación"
         "home" -> "Domótica"
         "day" -> "Resumen del día"
         "news" -> "Noticias"
-        "media" -> "Televisión y entretenimiento"
+        "media" -> "TV y streaming · hoy"
         "messages" -> "Mensajes"
         "results" -> "Resultados"
         else -> "Información"
@@ -121,7 +129,6 @@ methods = r'''    private fun widgetGroupTitle(kind: String): String = when (kin
 if 'private fun renderUniversalWidgets' not in s and marker in s:
     s = s.replace(marker, methods + marker, 1)
 
-# Keep legacy weather/home/day renderer but use rich cards for all new/general structured answers.
 s = s.replace(
 '''                    saveHistory("assistant", reply, widgetKind != null, images, videos)
                     if (widgetKind != null) renderReplyAsWidgets(widgetKind, reply) else renderMessageCard("assistant", reply, images, videos)
@@ -137,4 +144,4 @@ s = s.replace(
 )
 
 p.write_text(s)
-print('Universal rich widget renderer applied')
+print('Universal rich widget renderer applied with TV/streaming detection')
