@@ -40,13 +40,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK 35
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android platform
+      - name: Install Android platforms
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -154,6 +154,8 @@ jobs:
         run: python3 mobile/patch_domotics_rooms.py
       - name: Enrich Domotics quick card and room organizer
         run: python3 mobile/patch_domotics_quickcard.py
+      - name: Add Google Home lights to Domotics quick card
+        run: python3 mobile/patch_google_home_quickcard.py
       - name: Merge duplicate Android intent handlers
         run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - name: Normalize generated Kotlin
@@ -167,12 +169,12 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.6-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.6-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.7-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.7-debug.apk
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.6-debug
-          path: Jarvis-Mobile-v0.2.6-debug.apk
+          name: Jarvis-Mobile-v0.2.7-debug
+          path: Jarvis-Mobile-v0.2.7-debug.apk
           if-no-files-found: error
