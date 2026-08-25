@@ -43,6 +43,12 @@ val prepareVoskSpanishModel = tasks.register<Exec>("prepareVoskSpanishModel") {
     commandLine("python3", "prepare_vosk_model.py")
 }
 
+val validateJarvisFeatures = tasks.register<Exec>("validateJarvisFeatures") {
+    workingDir(rootDir)
+    commandLine("python3", "mobile/validate_required_features.py")
+}
+
 tasks.named("preBuild").configure {
     dependsOn(prepareVoskSpanishModel)
+    dependsOn(validateJarvisFeatures)
 }
