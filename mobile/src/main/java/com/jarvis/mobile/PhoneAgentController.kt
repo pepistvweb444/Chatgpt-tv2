@@ -2,6 +2,7 @@ package com.jarvis.mobile
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.appcompat.app.AlertDialog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -69,7 +70,7 @@ class PhoneAgentController(private val activity: Activity) {
                     val app = action.optString("app")
                     onUpdate("Abriendo $app…")
                     if (!openApp(app)) return finish(onDone, "No encuentro la aplicación «$app». Puedes corregirme solo con el nombre, por ejemplo: «es Glovo».", false)
-                    Thread.sleep(1100)
+                    Thread.sleep(1200)
                 }
                 "click" -> {
                     onUpdate("Pulsando ${action.optString("text")}…")
@@ -132,7 +133,10 @@ class PhoneAgentController(private val activity: Activity) {
         s = s.replace(Regex("^(el|la|los|las|app|aplicacion|aplicación)\\s+"), "")
         val aliases = mapOf(
             "globo" to "glovo",
-            "glovo app" to "glovo"
+            "glovo app" to "glovo",
+            "amazon shopping" to "amazon",
+            "amazon compras" to "amazon",
+            "amazon app" to "amazon"
         )
         return aliases[s] ?: s
     }
@@ -153,19 +157,39 @@ class PhoneAgentController(private val activity: Activity) {
         return prev[b.length]
     }
 
+    private fun launchPackage(packageName: String): Boolean {
+        val pm = activity.packageManager
+        val launch = pm.getLaunchIntentForPackage(packageName) ?: return false
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching {
+            activity.runOnUiThread { activity.startActivity(launch) }
+            true
+        }.getOrDefault(false)
+    }
+
     private fun openApp(name: String): Boolean {
         val wanted = canonical(name)
         if (wanted.isBlank()) return false
+
+        val knownPackages = mapOf(
+            "glovo" to listOf("com.glovo"),
+            "amazon" to listOf("com.amazon.mShop.android.shopping")
+        )
+        knownPackages[wanted]?.forEach { pkg ->
+            if (launchPackage(pkg)) return true
+        }
+
         val pm = activity.packageManager
-        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val activities = pm.queryIntentActivities(launcher, 0)
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val activities = pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
         val scored = activities.map { ri ->
             val label = canonical(ri.loadLabel(pm)?.toString().orEmpty())
-            val pkg = canonical(ri.activityInfo.packageName.substringAfterLast('.'))
+            val pkgName = ri.activityInfo.packageName
+            val pkgTail = canonical(pkgName.substringAfterLast('.'))
             val score = when {
                 label == wanted -> 0
                 label.contains(wanted) || wanted.contains(label) -> 1
-                pkg == wanted || pkg.contains(wanted) -> 2
+                pkgTail == wanted || pkgTail.contains(wanted) -> 2
                 else -> 3 + distance(label.take(32), wanted.take(32))
             }
             Triple(score, ri, label)
@@ -174,11 +198,18 @@ class PhoneAgentController(private val activity: Activity) {
         val best = scored.firstOrNull() ?: return false
         val acceptable = best.first <= 2 || distance(best.third, wanted) <= 2
         if (!acceptable) return false
+
         val pkgName = best.second.activityInfo.packageName
-        val launch = pm.getLaunchIntentForPackage(pkgName) ?: Intent(launcher).setClassName(pkgName, best.second.activityInfo.name)
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        activity.runOnUiThread { activity.startActivity(launch) }
-        return true
+        if (launchPackage(pkgName)) return true
+
+        val explicit = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(pkgName, best.second.activityInfo.name)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching {
+            activity.runOnUiThread { activity.startActivity(explicit) }
+            true
+        }.getOrDefault(false)
     }
 
     private fun plan(task: String, ui: JSONArray, pkg: String, step: Int): JSONObject {
