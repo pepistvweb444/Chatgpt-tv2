@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.mobile.stable"
         minSdk = 28
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.2.8"
+        versionCode = 9
+        versionName = "0.2.9"
     }
 
     compileOptions {
@@ -33,8 +33,8 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
 
-    // Google Home APIs Android SDK is distributed by Google as local AAR files,
-    // not from Google Maven. Drop the authenticated SDK AARs in mobile/libs/.
+    // Google Home APIs Android SDK is optional. Homey Cloud is now the preferred
+    // lighting/device integration, so missing Google Home AARs never block Jarvis.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 }
 
