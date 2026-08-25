@@ -140,6 +140,8 @@ jobs:
         run: python3 mobile/patch_chat_order.py
       - name: Enable compound requests and widget speech
         run: python3 mobile/patch_multitask_orchestrator.py
+      - name: Route direct Tado commands before LLM
+        run: python3 mobile/patch_direct_tado_commands.py
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
