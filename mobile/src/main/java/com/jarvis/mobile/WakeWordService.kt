@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
@@ -46,6 +47,8 @@ class WakeWordService : Service() {
         } else stopSelf()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
     private fun loop() {
         while (running) {
             val f = File(cacheDir, "wake-${System.currentTimeMillis()}.m4a")
@@ -64,8 +67,10 @@ class WakeWordService : Service() {
                 if (f.exists() && f.length() > 256) {
                     val text = transcribe(f).lowercase()
                     val wake = text.contains("hola jarvis") || text.contains("oye jarvis") ||
-                        text.contains("hola ale") || text.contains("oye ale") || text.contains("alé jarvis")
+                        text.contains("hola ale") || text.contains("oye ale") || text.contains("ale jarvis") ||
+                        text.contains("alé jarvis")
                     if (wake) {
+                        showOverlay()
                         val i = Intent(this, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                             putExtra("wake_word_triggered", true)
@@ -79,6 +84,17 @@ class WakeWordService : Service() {
                 runCatching { recorder?.release() }; recorder = null
                 try { Thread.sleep(1200) } catch (_: Exception) {}
             } finally { f.delete() }
+        }
+    }
+
+    private fun showOverlay() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            runCatching {
+                startService(Intent(this, JarvisOverlayService::class.java).apply {
+                    action = JarvisOverlayService.ACTION_SHOW
+                    putExtra(JarvisOverlayService.EXTRA_TEXT, "Te escucho…")
+                })
+            }
         }
     }
 
