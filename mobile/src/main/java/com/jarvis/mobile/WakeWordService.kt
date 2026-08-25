@@ -7,22 +7,24 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.RecognitionListener
+import org.vosk.android.SpeechService
+import org.vosk.android.StorageService
 import java.text.Normalizer
 
 class WakeWordService : Service() {
-    @Volatile private var running = false
-    private var recorder: MediaRecorder? = null
-    private val backend = "https://chatgpt-tv2.vercel.app"
+    private var model: Model? = null
+    private var speechService: SpeechService? = null
+    private var armedUntil = 0L
+    private var ignoreUntil = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -42,101 +44,126 @@ class WakeWordService : Service() {
                 .setContentIntent(open)
                 .build()
         )
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            running = true
-            Thread { loop() }.start()
-        } else stopSelf()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            stopSelf(); return
+        }
+        StorageService.unpack(
+            this,
+            "model-es",
+            "vosk-wake-model",
+            { m -> model = m; startListening() },
+            { stopSelf() }
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
-    private fun normalizeSpeech(value: String): String {
-        return Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-            .replace(Regex("[^a-z0-9 ]+"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-
-    private fun isWakePhrase(raw: String): Boolean {
-        val text = normalizeSpeech(raw)
-        if (text.isBlank()) return false
-
-        val jarvisVariants = listOf("jarvis", "yarvis", "yervis", "yerviz", "jervis", "jerviz", "harvis")
-        val aleVariants = listOf("ale", "hale", "alé")
-        val prefixes = listOf("hola", "oye", "hey", "ey")
-
-        if (jarvisVariants.any { v -> prefixes.any { p -> text.contains("$p $v") } }) return true
-        if (aleVariants.any { v -> prefixes.any { p -> text.contains("$p $v") } }) return true
-
-        // Tolerate short ASR fragments such as "hola ... yerviz".
-        val hasGreeting = prefixes.any { p -> text.contains(p) }
-        val hasJarvisLike = jarvisVariants.any { text.contains(it) }
-        val hasAleLike = aleVariants.any { v -> Regex("(^| )${Regex.escape(v)}( |$)").containsMatchIn(text) }
-        return hasGreeting && (hasJarvisLike || hasAleLike)
-    }
-
-    private fun loop() {
-        while (running) {
-            val f = File(cacheDir, "wake-${System.currentTimeMillis()}.m4a")
-            try {
-                val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
-                recorder = r
-                r.setAudioSource(MediaRecorder.AudioSource.MIC)
-                r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                r.setAudioSamplingRate(16000)
-                r.setAudioEncodingBitRate(32000)
-                r.setOutputFile(f.absolutePath)
-                r.prepare(); r.start()
-                Thread.sleep(1600)
-                runCatching { r.stop() }; runCatching { r.release() }; recorder = null
-                if (f.exists() && f.length() > 256) {
-                    val text = transcribe(f)
-                    if (isWakePhrase(text)) {
-                        showOverlay()
-                        val i = Intent(this, MainActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            putExtra("wake_word_triggered", true)
-                            putExtra("hands_free", true)
-                        }
-                        runCatching { startActivity(i) }
-                        Thread.sleep(3200)
-                    }
+    private fun startListening() {
+        val m = model ?: return
+        runCatching { speechService?.shutdown() }
+        val recognizer = Recognizer(m, 16000.0f)
+        speechService = SpeechService(recognizer, 16000.0f).also { service ->
+            service.startListening(object : RecognitionListener {
+                override fun onPartialResult(hypothesis: String?) {
+                    val text = parse(hypothesis, "partial")
+                    if (text.isNotBlank()) handle(text, false)
                 }
-            } catch (_: Exception) {
-                runCatching { recorder?.release() }; recorder = null
-                try { Thread.sleep(700) } catch (_: Exception) {}
-            } finally { f.delete() }
+                override fun onResult(hypothesis: String?) {
+                    val text = parse(hypothesis, "text")
+                    if (text.isNotBlank()) handle(text, true)
+                }
+                override fun onFinalResult(hypothesis: String?) {
+                    val text = parse(hypothesis, "text")
+                    if (text.isNotBlank()) handle(text, true)
+                }
+                override fun onError(exception: Exception?) {
+                    android.os.Handler(mainLooper).postDelayed({ if (model != null) startListening() }, 1200L)
+                }
+                override fun onTimeout() {
+                    android.os.Handler(mainLooper).postDelayed({ if (model != null) startListening() }, 600L)
+                }
+            })
         }
     }
 
-    private fun showOverlay() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
-            runCatching {
-                startService(Intent(this, JarvisOverlayService::class.java).apply {
-                    action = JarvisOverlayService.ACTION_SHOW
-                    putExtra(JarvisOverlayService.EXTRA_TEXT, "Te escucho…")
-                })
+    private fun parse(raw: String?, key: String): String = runCatching {
+        JSONObject(raw.orEmpty()).optString(key).trim()
+    }.getOrDefault("")
+
+    private fun normalizeSpeech(value: String): String = Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .replace(Regex("[^a-z0-9 ]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    private fun isWakePhrase(raw: String): Boolean {
+        val text = normalizeSpeech(raw)
+        val jarvisVariants = listOf("jarvis", "yarvis", "yervis", "yerviz", "jervis", "jerviz", "harvis")
+        val aleVariants = listOf("ale", "hale")
+        val prefixes = listOf("hola", "oye", "hey", "ey")
+        val greeting = prefixes.any { text.contains(it) }
+        val jarvis = jarvisVariants.any { text.contains(it) }
+        val ale = aleVariants.any { Regex("(^| )${Regex.escape(it)}( |$)").containsMatchIn(text) }
+        return greeting && (jarvis || ale)
+    }
+
+    private fun stripWakePhrase(raw: String): String {
+        var text = raw
+        val patterns = listOf(
+            "hola jarvis", "hola yarvis", "hola yervis", "hola yerviz", "hola jervis", "hola jerviz", "hola harvis",
+            "oye jarvis", "hey jarvis", "hola ale", "hola hale", "oye ale", "hey ale"
+        )
+        patterns.forEach { p -> text = text.replace(Regex(Regex.escape(p), RegexOption.IGNORE_CASE), " ") }
+        return text.replace(Regex("\\s+"), " ").trim()
+    }
+
+    private fun handle(raw: String, finalChunk: Boolean) {
+        val now = System.currentTimeMillis()
+        if (now < ignoreUntil) return
+        if (armedUntil > now) {
+            if (!finalChunk) return
+            val command = stripWakePhrase(raw)
+            if (command.isBlank() || isWakePhrase(command)) return
+            armedUntil = 0L
+            ignoreUntil = now + 9000L
+            showOverlayCommand(command)
+            return
+        }
+        if (isWakePhrase(raw)) {
+            val inlineCommand = stripWakePhrase(raw)
+            showOverlay("Te escucho…")
+            if (inlineCommand.isNotBlank()) {
+                ignoreUntil = now + 9000L
+                showOverlayCommand(inlineCommand)
+            } else {
+                armedUntil = now + 8000L
             }
         }
     }
 
-    private fun transcribe(file: File): String {
-        val c = (URL("$backend/api/transcribe").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 6000; readTimeout = 14000
-            setRequestProperty("Content-Type", "audio/mp4"); setRequestProperty("X-Filename", "wake.m4a")
+    private fun showOverlay(text: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            startService(Intent(this, JarvisOverlayService::class.java).apply {
+                action = JarvisOverlayService.ACTION_SHOW
+                putExtra(JarvisOverlayService.EXTRA_TEXT, text)
+            })
         }
-        c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
-        val code = c.responseCode
-        val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) return ""
-        return runCatching { JSONObject(body).optString("text") }.getOrDefault("")
+    }
+
+    private fun showOverlayCommand(command: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            startService(Intent(this, JarvisOverlayService::class.java).apply {
+                action = JarvisOverlayService.ACTION_COMMAND
+                putExtra(JarvisOverlayService.EXTRA_COMMAND, command)
+            })
+        }
     }
 
     override fun onDestroy() {
-        running = false
-        runCatching { recorder?.stop() }; runCatching { recorder?.release() }; recorder = null
+        runCatching { speechService?.shutdown() }
+        speechService = null
+        runCatching { model?.close() }
+        model = null
         super.onDestroy()
     }
 
