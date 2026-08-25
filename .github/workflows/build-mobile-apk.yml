@@ -86,7 +86,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Apply main UI voice transcription
+      - name: Apply main UI native voice recognition
         run: python3 mobile/patch_main_voice.py
       - name: Apply complete weather widget
         run: python3 mobile/patch_weather_widget.py
@@ -163,6 +163,22 @@ jobs:
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
+      - name: Prepare private Google Home SDK when configured
+        shell: bash
+        env:
+          GOOGLE_HOME_SDK_FRAMEWORK_B64: ${{ secrets.GOOGLE_HOME_SDK_FRAMEWORK_B64 }}
+          GOOGLE_HOME_SDK_TYPES_B64: ${{ secrets.GOOGLE_HOME_SDK_TYPES_B64 }}
+        run: |
+          mkdir -p mobile/libs
+          if [ -n "$GOOGLE_HOME_SDK_FRAMEWORK_B64" ] && [ -n "$GOOGLE_HOME_SDK_TYPES_B64" ]; then
+            printf '%s' "$GOOGLE_HOME_SDK_FRAMEWORK_B64" | base64 -d > mobile/libs/play-services-home.aar
+            printf '%s' "$GOOGLE_HOME_SDK_TYPES_B64" | base64 -d > mobile/libs/play-services-home-types.aar
+            cp mobile/google-home-sdk/GoogleHomeActivity.kt.template mobile/src/main/java/com/jarvis/mobile/GoogleHomeActivity.kt
+            echo "Google Home SDK AARs installed; real OAuth activity enabled"
+          else
+            echo "Google Home SDK AAR secrets not configured; building safe fallback activity"
+          fi
+
       - name: Build mobile APK
         shell: bash
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
@@ -171,12 +187,12 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.7-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.7-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.8-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.8-debug.apk
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.7-debug
-          path: Jarvis-Mobile-v0.2.7-debug.apk
+          name: Jarvis-Mobile-v0.2.8-debug
+          path: Jarvis-Mobile-v0.2.8-debug.apk
           if-no-files-found: error
