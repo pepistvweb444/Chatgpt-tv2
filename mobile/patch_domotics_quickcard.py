@@ -7,7 +7,18 @@ marker = '    private fun jsonArrayStrings(a: JSONArray?): List<String> {'
 if marker not in s:
     raise SystemExit('jsonArrayStrings marker not found')
 
-methods = r'''    private fun refreshDomoticsQuickCard() {
+methods = r'''    private fun showDomoticsActionResult(deviceKey: String, deviceName: String, icon: String, stateText: String) {
+        val room = roomForDevice(deviceKey)
+        beginWidgetGroup("Domótica · ${if (room == "Sin asignar") "Casa" else room}")
+        addTextWidget("home", "$icon  $deviceName", buildString {
+            if (room != "Sin asignar") append("$room · ")
+            append(stateText)
+        })
+        refreshDomoticsQuickCard()
+        status.text = "Jarvis listo"
+    }
+
+    private fun refreshDomoticsQuickCard() {
         Thread {
             val lines = mutableListOf<String>()
             runCatching {
@@ -61,14 +72,10 @@ methods = r'''    private fun refreshDomoticsQuickCard() {
 if 'private fun refreshDomoticsQuickCard()' not in s:
     s = s.replace(marker, methods + marker, 1)
 
-# Refresh the top quick card at startup and every time the Domotica card is opened.
 listener = 'findViewById<View>(R.id.homeAutomation).setOnClickListener { showUnifiedDomoticsWidget() }'
 if listener in s:
     s = s.replace(listener, listener + '\n        refreshDomoticsQuickCard()', 1)
 
-# Keep the quick card in sync after any full domotics refresh.
-needle = 'status.text = "Jarvis listo"\n            }\n        }.start()\n    }'
-# Only patch the unified domotics function region to avoid touching unrelated functions.
 start = s.find('    private fun showUnifiedDomoticsWidget()')
 if start >= 0:
     end = s.find('    private fun ', start + 20)
@@ -109,5 +116,27 @@ if start >= 0:
         block = block.replace(old, new, 1)
     s = s[:start] + block + s[end:]
 
+# Replace provider success refreshes with a single confirmation widget for the affected device.
+s = s.replace(
+    'Toast.makeText(this, if (on) "${z.name} encendido" else "${z.name} apagado", Toast.LENGTH_SHORT).show(); showTadoDevicesWidget()',
+    'Toast.makeText(this, if (on) "${z.name} encendido" else "${z.name} apagado", Toast.LENGTH_SHORT).show(); showDomoticsActionResult("tado:${z.id}", z.name, if (on) "●" else "○", if (on) "Encendido" else "Apagado")'
+)
+s = s.replace(
+    'Toast.makeText(this, "${z.name}: ${String.format(Locale.getDefault(), "%.0f", target)} °C", Toast.LENGTH_SHORT).show(); showTadoDevicesWidget()',
+    'Toast.makeText(this, "${z.name}: ${String.format(Locale.getDefault(), "%.0f", target)} °C", Toast.LENGTH_SHORT).show(); showDomoticsActionResult("tado:${z.id}", z.name, "🌡", "Objetivo ${String.format(Locale.getDefault(), "%.1f", target)} °C")'
+)
+s = s.replace(
+    'Toast.makeText(this, "${z.name}: programación automática", Toast.LENGTH_SHORT).show(); showTadoDevicesWidget()',
+    'Toast.makeText(this, "${z.name}: programación automática", Toast.LENGTH_SHORT).show(); showDomoticsActionResult("tado:${z.id}", z.name, "↻", "Programación automática")'
+)
+s = s.replace(
+    'Toast.makeText(this, "${d.name} actualizado", Toast.LENGTH_SHORT).show(); showUnifiedDomoticsWidget()',
+    'Toast.makeText(this, "${d.name} actualizado", Toast.LENGTH_SHORT).show(); showDomoticsActionResult("sensibo:${d.id}", d.name, if (action == "power" && value == false) "○" else if (action == "temperature") "🌡" else "●", when (action) { "power" -> if (value == true) "Encendido" else "Apagado"; "temperature" -> "Objetivo ${value} °C"; "mode" -> "Modo ${value}"; "fan" -> "Ventilador ${value}"; else -> "Actualizado" })'
+)
+s = s.replace(
+    'Toast.makeText(this, "${d.name} ${if(on) "encendido" else "apagado"}", Toast.LENGTH_SHORT).show(); showHomeConnectDevicesWidget()',
+    'Toast.makeText(this, "${d.name} ${if(on) "encendido" else "apagado"}", Toast.LENGTH_SHORT).show(); showDomoticsActionResult("homeconnect:${d.haId}", d.name, if (on) "●" else "○", if (on) "Encendido" else "Apagado")'
+)
+
 p.write_text(s)
-print('Domotics quick card + actionable room organizer applied')
+print('Domotics quick card + actionable rooms + single action result widgets applied')
