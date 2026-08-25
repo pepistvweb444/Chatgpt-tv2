@@ -24,7 +24,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Configure AndroidX
         shell: bash
         run: |
@@ -34,136 +33,83 @@ jobs:
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Install Android platforms
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
-
       - name: Set up Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-
       - name: Restore stable Jarvis signing key
         uses: actions/cache@v4
         with:
           path: ~/.jarvis-signing/jarvis-debug.keystore
           key: jarvis-debug-keystore-v1
-
       - name: Create signing key if needed
         shell: bash
         run: |
           mkdir -p ~/.jarvis-signing
           if [ ! -f ~/.jarvis-signing/jarvis-debug.keystore ]; then
-            keytool -genkeypair -v \
-              -keystore ~/.jarvis-signing/jarvis-debug.keystore \
-              -storepass jarvis123 -keypass jarvis123 -alias jarvis \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
+            keytool -genkeypair -v -keystore ~/.jarvis-signing/jarvis-debug.keystore -storepass jarvis123 -keypass jarvis123 -alias jarvis -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
           fi
-
       - name: Apply Jarvis Mobile voice fixes
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('mobile/src/main/java/com/jarvis/mobile/ChatActivity.kt')
-          s = p.read_text()
-          old = """val first = text.trim().let { t -> val cut = listOf(t.indexOf('.'), t.indexOf('?'), t.indexOf('!')).filter { it in 60..420 }.minOrNull(); if (cut != null) t.take(cut + 1) else t.take(360) }"""
-          new = """val first = text.replace(Regex("https?://\\\\S+"), "").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\\\s+"), " ").trim()"""
-          s = s.replace(old, new)
-          s = s.replace('.put("speed", 1.2)', '.put("speed", 0.94)')
-          s = s.replace('connectTimeout=7000; readTimeout=25000', 'connectTimeout=7000; readTimeout=45000')
-          p.write_text(s)
+          p=Path('mobile/src/main/java/com/jarvis/mobile/ChatActivity.kt'); s=p.read_text()
+          old="""val first = text.trim().let { t -> val cut = listOf(t.indexOf('.'), t.indexOf('?'), t.indexOf('!')).filter { it in 60..420 }.minOrNull(); if (cut != null) t.take(cut + 1) else t.take(360) }"""
+          new="""val first = text.replace(Regex("https?://\\\\S+"), "").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\\\s+"), " ").trim()"""
+          s=s.replace(old,new).replace('.put("speed", 1.2)', '.put("speed", 0.94)').replace('connectTimeout=7000; readTimeout=25000','connectTimeout=7000; readTimeout=45000'); p.write_text(s)
           PY
-
-      - name: Apply main UI embedded Vosk recognition
-        run: python3 mobile/patch_main_voice.py
-      - name: Apply complete weather widget
-        run: python3 mobile/patch_weather_widget.py
-      - name: Fix Programadas menu crash
-        run: python3 mobile/patch_scheduled_menu.py
-      - name: Restore agents and Tado settings
-        run: python3 mobile/patch_agents_tado.py
-      - name: Add official Tado account login
-        run: python3 mobile/patch_tado_oauth.py
-      - name: Unify Tado OAuth state and climate queries
-        run: python3 mobile/patch_tado_runtime.py
-      - name: Fix Tado UI thread and show thermostat
-        run: python3 mobile/patch_tado_ui_thread.py
-      - name: Add Tado device cards and controls
-        run: python3 mobile/patch_tado_devices_controls.py
-      - name: Add MCP and phone permissions settings
-        run: python3 mobile/patch_mcp_permissions.py
-      - name: Connect SMS WhatsApp RCS and call actions
-        run: python3 mobile/patch_phone_actions.py
-      - name: Enable direct contact calls
-        run: python3 mobile/patch_direct_calls.py
-      - name: Wire multi-step phone agent
-        run: python3 mobile/patch_phone_agent.py
-      - name: Discover all installed launcher apps
-        run: python3 mobile/patch_all_apps_catalog.py
-      - name: Add authenticated Remote control
-        run: python3 mobile/patch_remote_control.py
-      - name: Add four-digit TV pairing PIN
-        run: python3 mobile/patch_pairing_pin.py
-      - name: Expose unread inbox to Jarvis TV
-        run: python3 mobile/patch_tv_sync.py
-      - name: Expose synchronized chats to Jarvis TV
-        run: python3 mobile/patch_chat_sync_bridge.py
-      - name: Add messaging and agenda widgets
-        run: python3 mobile/patch_messaging_agenda.py
-      - name: Harden agenda sources and calendar diagnostics
-        run: python3 mobile/patch_agenda_hardening.py
-      - name: Build unified unread inbox
-        run: python3 mobile/patch_unread_inbox.py
-      - name: Enable continuous hands-free voice
-        run: python3 mobile/patch_handsfree_voice.py
-      - name: Enable persistent wake word overlay
-        run: python3 mobile/patch_persistent_wake_overlay.py
-      - name: Route daily news questions to rich widgets
-        run: python3 mobile/patch_today_news_widgets.py
-      - name: Render structured answers as rich widgets
-        run: python3 mobile/patch_universal_widgets.py
-      - name: Keep quick cards and wire recent chats
-        run: python3 mobile/patch_persistent_home_recents.py
-      - name: Wire persistent artifact library
-        run: python3 mobile/patch_library_main.py
-      - name: Keep assistant replies below user messages
-        run: python3 mobile/patch_chat_order.py
-      - name: Enable compound requests and widget speech
-        run: python3 mobile/patch_multitask_orchestrator.py
-      - name: Route direct Tado commands before LLM
-        run: python3 mobile/patch_direct_tado_commands.py
-      - name: Add direct Home Connect devices and controls
-        run: python3 mobile/patch_homeconnect_direct.py
-      - name: Fix Home Connect authorization code login
-        run: python3 mobile/patch_homeconnect_authcode.py
-      - name: Add unified Domotics hub and Sensibo controls
-        run: python3 mobile/patch_domotics_hub.py
-      - name: Group Domotics devices by configurable rooms
-        run: python3 mobile/patch_domotics_rooms.py
-      - name: Enrich Domotics quick card and room organizer
-        run: python3 mobile/patch_domotics_quickcard.py
-      - name: Add Homey Cloud, persistent wake and room settings
-        run: python3 mobile/patch_homey_cloud.py
-      - name: Add selectable LLM provider
-        run: python3 mobile/patch_ai_provider_picker.py
-      - name: Merge duplicate Android intent handlers
-        run: python3 mobile/patch_fix_duplicate_onnewintent.py
-      - name: Normalize generated Kotlin
-        run: python3 mobile/fix_generated_kotlin.py
-
+      - run: python3 mobile/patch_main_voice.py
+      - run: python3 mobile/patch_weather_widget.py
+      - run: python3 mobile/patch_scheduled_menu.py
+      - run: python3 mobile/patch_agents_tado.py
+      - run: python3 mobile/patch_tado_oauth.py
+      - run: python3 mobile/patch_tado_runtime.py
+      - run: python3 mobile/patch_tado_ui_thread.py
+      - run: python3 mobile/patch_tado_devices_controls.py
+      - run: python3 mobile/patch_mcp_permissions.py
+      - run: python3 mobile/patch_phone_actions.py
+      - run: python3 mobile/patch_direct_calls.py
+      - run: python3 mobile/patch_phone_agent.py
+      - run: python3 mobile/patch_all_apps_catalog.py
+      - run: python3 mobile/patch_remote_control.py
+      - run: python3 mobile/patch_pairing_pin.py
+      - run: python3 mobile/patch_tv_sync.py
+      - run: python3 mobile/patch_chat_sync_bridge.py
+      - run: python3 mobile/patch_messaging_agenda.py
+      - run: python3 mobile/patch_agenda_hardening.py
+      - run: python3 mobile/patch_unread_inbox.py
+      - run: python3 mobile/patch_handsfree_voice.py
+      - run: python3 mobile/patch_persistent_wake_overlay.py
+      - run: python3 mobile/patch_today_news_widgets.py
+      - run: python3 mobile/patch_universal_widgets.py
+      - run: python3 mobile/patch_persistent_home_recents.py
+      - run: python3 mobile/patch_library_main.py
+      - run: python3 mobile/patch_chat_order.py
+      - run: python3 mobile/patch_multitask_orchestrator.py
+      - run: python3 mobile/patch_direct_tado_commands.py
+      - run: python3 mobile/patch_homeconnect_direct.py
+      - run: python3 mobile/patch_homeconnect_authcode.py
+      - run: python3 mobile/patch_domotics_hub.py
+      - run: python3 mobile/patch_domotics_rooms.py
+      - run: python3 mobile/patch_domotics_quickcard.py
+      - run: python3 mobile/patch_homey_cloud.py
+      - name: Add Domótica to main drawer
+        run: python3 mobile/patch_drawer_domotics.py
+      - run: python3 mobile/patch_ai_provider_picker.py
+      - run: python3 mobile/patch_fix_duplicate_onnewintent.py
+      - run: python3 mobile/fix_generated_kotlin.py
       - name: Prepare private Google Home SDK when configured
         shell: bash
         env:
@@ -175,39 +121,27 @@ jobs:
             printf '%s' "$GOOGLE_HOME_SDK_FRAMEWORK_B64" | base64 -d > mobile/libs/play-services-home.aar
             printf '%s' "$GOOGLE_HOME_SDK_TYPES_B64" | base64 -d > mobile/libs/play-services-home-types.aar
             cp mobile/google-home-sdk/GoogleHomeActivity.kt.template mobile/src/main/java/com/jarvis/mobile/GoogleHomeActivity.kt
-            echo "Google Home SDK AARs installed; real OAuth activity enabled"
-          else
-            echo "Google Home SDK AAR secrets not configured; building safe fallback activity"
           fi
-
       - name: Build mobile APK
-        shell: bash
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-
       - name: Verify APK is Jarvis Mobile 0.2.11
         shell: bash
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
           echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='11' versionName='0.2.11'"
-          if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then
-            echo "ERROR: TV package detected in mobile workflow" >&2
-            exit 1
-          fi
-
+          if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then exit 1; fi
       - name: Sign and verify mobile APK
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.11-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.11-debug.apk
-
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
           name: MOBILE-ONLY-Jarvis-v0.2.11
           path: Jarvis-Mobile-v0.2.11-debug.apk
           if-no-files-found: error
-
       - name: Record successful MOBILE run ID
         if: success()
         continue-on-error: true
