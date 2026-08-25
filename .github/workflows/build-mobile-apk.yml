@@ -150,6 +150,8 @@ jobs:
         run: python3 mobile/patch_homeconnect_authcode.py
       - name: Add unified Domotics hub and Sensibo controls
         run: python3 mobile/patch_domotics_hub.py
+      - name: Merge duplicate Android intent handlers
+        run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
