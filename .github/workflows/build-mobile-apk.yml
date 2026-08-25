@@ -118,6 +118,8 @@ jobs:
         run: python3 mobile/patch_pairing_pin.py
       - name: Expose unread inbox to Jarvis TV
         run: python3 mobile/patch_tv_sync.py
+      - name: Expose synchronized chats to Jarvis TV
+        run: python3 mobile/patch_chat_sync_bridge.py
       - name: Add messaging and agenda widgets
         run: python3 mobile/patch_messaging_agenda.py
       - name: Harden agenda sources and calendar diagnostics
