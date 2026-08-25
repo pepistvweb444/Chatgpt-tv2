@@ -1,0 +1,1 @@
+Trigger mobile build with latest fixes: TV/streaming widgets, visible phone-agent results, continuous TTS, Domótica drawer, Homey Cloud, Vosk wake overlay.
