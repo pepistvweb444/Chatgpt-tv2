@@ -156,6 +156,8 @@ jobs:
         run: python3 mobile/patch_domotics_quickcard.py
       - name: Add Google Home lights to Domotics quick card
         run: python3 mobile/patch_google_home_quickcard.py
+      - name: Add selectable LLM provider
+        run: python3 mobile/patch_ai_provider_picker.py
       - name: Merge duplicate Android intent handlers
         run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - name: Normalize generated Kotlin
