@@ -68,7 +68,7 @@ jobs:
           p=Path('mobile/src/main/java/com/jarvis/mobile/ChatActivity.kt'); s=p.read_text()
           old="""val first = text.trim().let { t -> val cut = listOf(t.indexOf('.'), t.indexOf('?'), t.indexOf('!')).filter { it in 60..420 }.minOrNull(); if (cut != null) t.take(cut + 1) else t.take(360) }"""
           new="""val first = text.replace(Regex("https?://\\\\S+"), "").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\\\s+"), " ").trim()"""
-          s=s.replace(old,new).replace('.put("speed", 1.2)', '.put("speed", 0.94)').replace('connectTimeout=7000; readTimeout=25000','connectTimeout=7000; readTimeout=45000'); p.write_text(s)
+          s=s.replace(old,new).replace('.put("speed", 1.2)', '.put("speed", 1.02)').replace('connectTimeout=7000; readTimeout=25000','connectTimeout=7000; readTimeout=45000'); p.write_text(s)
           PY
       - run: python3 mobile/patch_main_voice.py
       - run: python3 mobile/patch_weather_widget.py
@@ -82,6 +82,7 @@ jobs:
       - run: python3 mobile/patch_phone_actions.py
       - run: python3 mobile/patch_direct_calls.py
       - run: python3 mobile/patch_phone_agent.py
+      - run: python3 mobile/patch_phone_agent_cart_verification.py
       - run: python3 mobile/patch_all_apps_catalog.py
       - run: python3 mobile/patch_remote_control.py
       - run: python3 mobile/patch_pairing_pin.py
@@ -112,6 +113,16 @@ jobs:
       - run: python3 mobile/patch_ai_provider_picker.py
       - run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - run: python3 mobile/fix_generated_kotlin.py
+      - name: Preserve final Domótica drawer wiring
+        run: python3 mobile/patch_drawer_domotics.py
+      - name: Verify required final UI hooks
+        shell: bash
+        run: |
+          grep -q 'R.id.menuDomotics).setOnClickListener' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'showUnifiedDomoticsWidget()' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'openMediaGuide(message)' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'revealWidgetHost()' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'hasCartEvidence' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
       - name: Prepare private Google Home SDK when configured
         shell: bash
         env:
