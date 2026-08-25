@@ -6,10 +6,87 @@ async function openai(key, payload) {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.error?.message || 'openai_error');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.error?.message || `openai_http_${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
   const text = data.output_text || (data.output || []).flatMap(item => item.content || []).map(part => part.text || '').join('').trim();
-  return { data, text };
+  return { data, text, provider: 'openai' };
+}
+
+function toChatMessages(input = []) {
+  return input.map(m => ({ role: m.role === 'developer' ? 'system' : m.role, content: String(m.content || '') }));
+}
+
+async function openAICompatible({ provider, key, baseUrl, model, input }) {
+  const response = await fetch(`${String(baseUrl).replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.JARVIS_PUBLIC_BASE_URL || 'https://chatgpt-tv2.vercel.app', 'X-Title': 'Jarvis AI Companion' } : {})
+    },
+    body: JSON.stringify({ model, messages: toChatMessages(input), temperature: 0.3 })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || `${provider}_http_${response.status}`);
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text) throw new Error(`${provider}_empty_response`);
+  return { data, text: String(text).trim(), provider };
+}
+
+async function gemini(key, model, input) {
+  const system = input.filter(m => m.role === 'developer').map(m => String(m.content || '')).join('\n\n');
+  const contents = input.filter(m => m.role !== 'developer').map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: String(m.content || '') }]
+  }));
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      contents,
+      generationConfig: { temperature: 0.3 }
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `gemini_http_${response.status}`);
+  const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+  if (!text) throw new Error('gemini_empty_response');
+  return { data, text, provider: 'gemini' };
+}
+
+async function providerFallback(input, openaiPayload) {
+  const order = String(process.env.JARVIS_AI_PROVIDER_ORDER || 'openai,qwen,gemini,groq,openrouter')
+    .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+  const errors = [];
+  for (const provider of order) {
+    try {
+      if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+        return await openai(process.env.OPENAI_API_KEY, openaiPayload);
+      }
+      if (provider === 'qwen' && process.env.DASHSCOPE_API_KEY) {
+        return await openAICompatible({ provider, key: process.env.DASHSCOPE_API_KEY, baseUrl: process.env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: process.env.QWEN_MODEL || 'qwen-plus', input });
+      }
+      if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+        return await gemini(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-2.5-flash', input);
+      }
+      if (provider === 'groq' && process.env.GROQ_API_KEY && process.env.GROQ_MODEL) {
+        return await openAICompatible({ provider, key: process.env.GROQ_API_KEY, baseUrl: 'https://api.groq.com/openai/v1', model: process.env.GROQ_MODEL, input });
+      }
+      if (provider === 'openrouter' && process.env.OPENROUTER_API_KEY) {
+        return await openAICompatible({ provider, key: process.env.OPENROUTER_API_KEY, baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1', model: process.env.OPENROUTER_MODEL || 'openrouter/free', input });
+      }
+    } catch (e) {
+      errors.push(`${provider}: ${e?.message || 'error'}`);
+    }
+  }
+  const err = new Error(errors.length ? `Todos los proveedores de IA fallaron (${errors.join(' | ')})` : 'No hay ningún proveedor de IA configurado');
+  err.providerErrors = errors;
+  throw err;
 }
 
 function esc(s=''){return String(s).replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>')}
@@ -42,8 +119,6 @@ async function newsMedia(query) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return res.status(503).json({ error: 'OPENAI_API_KEY_not_configured' });
 
   const {
     message,
@@ -100,7 +175,7 @@ export default async function handler(req, res) {
     : '';
 
   const isNews = /(noticia|noticias|actualidad|últim[ao]s?|hoy|ahora|prensa|titulares|news)/i.test(message);
-  const isHome = /(tado|aire acondicionado|climatiz|temperatura de casa|domótica|luces|persianas|termostato)/i.test(message);
+  const isHome = /(tado|sensibo|home connect|aire acondicionado|climatiz|temperatura de casa|domótica|luces|persianas|termostato)/i.test(message);
   const researchRequested = message.length > 180 || /(investiga|compara|analiza|planifica|busca|revisa todo)/i.test(message);
   const needsAgents = Boolean(agentsEnabled) && ((agentCfg.news && isNews) || (agentCfg.research && researchRequested));
   const model = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
@@ -108,16 +183,18 @@ export default async function handler(req, res) {
   const specialistContext = [];
 
   try {
-    if (needsAgents) {
+    // Specialist agents remain an optimization. If OpenAI is unavailable or out of
+    // credit they are skipped; the final answer still uses the provider router.
+    if (needsAgents && process.env.OPENAI_API_KEY) {
       const jobs = [];
       if (agentCfg.research && (researchRequested || isNews)) {
-        jobs.push(openai(key, {
+        jobs.push(openai(process.env.OPENAI_API_KEY, {
           model, tools:[{ type:'web_search' }], tool_choice:'auto',
           input:[{ role:'developer', content:'Eres el agente investigador de Jarvis. Investiga hechos actuales, verifica fuentes y devuelve un informe breve en español para otro agente, no para el usuario final.' }, { role:'user', content:message }]
         }).then(r => { agentsUsed.push('research'); specialistContext.push(`AGENTE INVESTIGADOR:\n${r.text}`); }).catch(() => {}));
       }
       if (agentCfg.news && isNews) {
-        jobs.push(openai(key, {
+        jobs.push(openai(process.env.OPENAI_API_KEY, {
           model, tools:[{ type:'web_search' }], tool_choice:'auto',
           input:[{ role:'developer', content:'Eres el agente de noticias de Jarvis. Selecciona las novedades más relevantes, evita duplicados, indica por qué importan y prioriza información reciente. Devuelve notas para el orquestador.' }, { role:'user', content:message }]
         }).then(r => { agentsUsed.push('news'); specialistContext.push(`AGENTE DE NOTICIAS:\n${r.text}`); }).catch(() => {}));
@@ -127,11 +204,11 @@ export default async function handler(req, res) {
 
     const selectedContext = selected.length ? ` Herramientas seleccionadas por el usuario: ${selected.join(', ')}.` : '';
     const homeContext = isHome && agentCfg.home
-      ? ' Para domótica y climatización, usa el MCP apropiado cuando esté disponible. Si Tado está entre las herramientas/MCP, priorízalo para el aire acondicionado y el termostato. No afirmes haber cambiado un dispositivo si la herramienta no confirma la acción.'
+      ? ' Para domótica y climatización, las acciones directas deben ejecutarse en la app/API del proveedor antes de usar un LLM. No afirmes haber cambiado un dispositivo si la herramienta no confirma la acción.'
       : '';
     const developer = {
       role: 'developer',
-      content: `Eres ${assistantName}, orquestador principal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta. Habla de forma natural y fácil de leer en voz alta: frases completas, puntuación clara, sin leer URLs largas. Usa búsqueda web para información actual y MCP cuando ayude. Si recibes informes de agentes especialistas, intégralos, comprueba coherencia y entrega una única respuesta final. Para noticias, menciona titulares y contexto; la interfaz mostrará aparte imágenes o vídeos disponibles. Cliente: ${client}. Conversación: ${conversationId}.${locationContext}${selectedContext}${homeContext}`
+      content: `Eres ${assistantName}, orquestador principal de Jarvis para móvil y televisión. Responde en español salvo petición contraria. Mantén continuidad estricta. Habla de forma natural y fácil de leer en voz alta: frases completas, puntuación clara, sin leer URLs largas. Si dispones de búsqueda o herramientas úsalas cuando ayuden. Si recibes informes de agentes especialistas, intégralos y entrega una única respuesta final. Cliente: ${client}. Conversación: ${conversationId}.${locationContext}${selectedContext}${homeContext}`
     };
 
     const input = previousResponseId && typeof previousResponseId === 'string'
@@ -141,19 +218,20 @@ export default async function handler(req, res) {
     const payload = { model, tools, tool_choice:'auto', input };
     if (previousResponseId && typeof previousResponseId === 'string') payload.previous_response_id = previousResponseId;
 
-    const final = await openai(key, payload);
+    const final = await providerFallback(input, payload);
     const news = isNews ? await newsMedia(message) : [];
     return res.status(200).json({
-      reply:final.text,
+      reply: final.text,
       conversationId,
-      responseId:final.data.id || null,
-      tools:{ webSearch:true, mcp:mcpLabels, selected },
+      responseId: final.provider === 'openai' ? (final.data.id || null) : null,
+      provider: final.provider,
+      tools:{ webSearch:final.provider === 'openai', mcp:final.provider === 'openai' ? mcpLabels : [], selected },
       agents:{ enabled:Boolean(agentsEnabled), config:agentCfg, used:agentsUsed },
       news,
       images:news.map(n => n.image).filter(Boolean),
       videos:news.map(n => n.video).filter(Boolean)
     });
   } catch (error) {
-    return res.status(500).json({ error:error?.message || 'backend_error' });
+    return res.status(503).json({ error:'ai_provider_unavailable', message:'Jarvis no ha podido conectar con ningún proveedor de IA disponible.', details:error?.providerErrors || [] });
   }
 }
