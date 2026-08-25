@@ -35,12 +35,14 @@ methods = r'''    private val domoticsDefaultRooms = listOf(
                                 prefs.edit().putStringSet("domotics_custom_rooms", next).putString(domoticsRoomKey(deviceKey), name).apply()
                                 Toast.makeText(this, "$deviceName · $name", Toast.LENGTH_SHORT).show()
                                 showUnifiedDomoticsWidget()
+                                refreshDomoticsQuickCard()
                             }
                         }.setNegativeButton("Cancelar", null).show()
                 } else {
                     prefs.edit().putString(domoticsRoomKey(deviceKey), selected).apply()
                     Toast.makeText(this, "$deviceName · $selected", Toast.LENGTH_SHORT).show()
                     showUnifiedDomoticsWidget()
+                    refreshDomoticsQuickCard()
                 }
             }.setNegativeButton("Cancelar", null).show()
     }
@@ -53,7 +55,7 @@ methods = r'''    private val domoticsDefaultRooms = listOf(
 if 'private val domoticsDefaultRooms' not in s:
     s = s.replace(marker, methods + marker, 1)
 
-# Add explicit room assignment controls to each provider card.
+# Add explicit room assignment controls to each provider card when matching controls exist.
 s = s.replace(
     'button("Auto") { resetTadoZone(z) }',
     'button("Auto") { resetTadoZone(z) }\n        button("Ubicar") { showRoomAssignmentDialog("tado:${z.id}", z.name) }'
@@ -67,36 +69,24 @@ s = s.replace(
     'b("Estado") { showHomeConnectDeviceDetails(d) }\n        b("Ubicar") { showRoomAssignmentDialog("homeconnect:${d.haId}", d.name) }'
 )
 
-# Replace the unified renderer so devices are grouped by configured room, regardless of provider.
 def replace_function(text: str, signature: str, replacement: str) -> str:
     start = text.find(signature)
     if start < 0:
         raise SystemExit(f'{signature} not found')
     brace = text.find('{', start)
-    if brace < 0:
-        raise SystemExit('opening brace not found')
-    depth = 0
-    in_string = False
-    escape = False
-    i = brace
+    depth = 0; in_string = False; escape = False; i = brace
     while i < len(text):
         ch = text[i]
         if in_string:
-            if escape:
-                escape = False
-            elif ch == '\\':
-                escape = True
-            elif ch == '"':
-                in_string = False
+            if escape: escape = False
+            elif ch == '\\': escape = True
+            elif ch == '"': in_string = False
         else:
-            if ch == '"':
-                in_string = True
-            elif ch == '{':
-                depth += 1
+            if ch == '"': in_string = True
+            elif ch == '{': depth += 1
             elif ch == '}':
                 depth -= 1
-                if depth == 0:
-                    return text[:start] + replacement + text[i+1:]
+                if depth == 0: return text[:start] + replacement + text[i+1:]
         i += 1
     raise SystemExit('function end not found')
 
@@ -122,25 +112,41 @@ replacement = r'''    private fun showUnifiedDomoticsWidget() {
                     tadoZones = fetchTadoZones(token, homeId)
                 }.onFailure { errors += "Tado: ${it.message}" }
             }
-
             if (prefs.getString("homeconnect_refresh_token", "").orEmpty().isNotBlank()) {
                 runCatching {
                     val token = refreshHomeConnectTokenIfNeeded(); if (token.isBlank()) error("sesión no válida")
                     hcDevices = fetchHomeConnectDevices(token)
                 }.onFailure { errors += "Home Connect: ${it.message}" }
             }
-
             runCatching { sensiboDevices = fetchSensiboDevices() }
                 .onFailure { if (!it.message.orEmpty().contains("no configurada", true)) errors += "Sensibo: ${it.message}" }
 
             runOnUiThread {
                 beginWidgetGroup("Domótica · Casa")
-
-                data class RoomEntry(val room: String, val provider: String, val key: String, val item: Any)
+                data class RoomEntry(val room: String, val provider: String, val key: String, val name: String, val item: Any)
                 val entries = mutableListOf<RoomEntry>()
-                tadoZones.forEach { entries += RoomEntry(roomForDevice("tado:${it.id}"), "tado", "tado:${it.id}", it) }
-                sensiboDevices.forEach { entries += RoomEntry(roomForDevice("sensibo:${it.id}"), "sensibo", "sensibo:${it.id}", it) }
-                hcDevices.forEach { entries += RoomEntry(roomForDevice("homeconnect:${it.haId}"), "homeconnect", "homeconnect:${it.haId}", it) }
+                tadoZones.forEach { entries += RoomEntry(roomForDevice("tado:${it.id}"), "tado", "tado:${it.id}", it.name, it) }
+                sensiboDevices.forEach { entries += RoomEntry(roomForDevice("sensibo:${it.id}"), "sensibo", "sensibo:${it.id}", it.name, it) }
+                hcDevices.forEach { entries += RoomEntry(roomForDevice("homeconnect:${it.haId}"), "homeconnect", "homeconnect:${it.haId}", it.name, it) }
+
+                if (entries.isNotEmpty()) {
+                    val organizer = TextView(this).apply {
+                        text = "⌂  CONFIGURAR ESTANCIAS\nPulsa aquí para asignar o cambiar la habitación de cada equipo"
+                        textSize = 15f
+                        setTextColor(Color.WHITE)
+                        setPadding(dp(18), dp(15), dp(18), dp(15))
+                        background = cardBackground("home")
+                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) }
+                        setOnClickListener {
+                            val names = entries.map { "${it.name} · ${if (it.room == "Sin asignar") "Sin asignar" else it.room}" }.toTypedArray()
+                            AlertDialog.Builder(this@MainActivity).setTitle("Dispositivo a ubicar").setItems(names) { _, index ->
+                                val e = entries[index]
+                                showRoomAssignmentDialog(e.key, e.name)
+                            }.setNegativeButton("Cerrar", null).show()
+                        }
+                    }
+                    widgetHost.addView(organizer)
+                }
 
                 val configured = domoticsDefaultRooms.dropLast(1) + prefs.getStringSet("domotics_custom_rooms", emptySet()).orEmpty().sorted() + "Sin asignar"
                 val grouped = entries.groupBy { it.room }
@@ -157,20 +163,14 @@ replacement = r'''    private fun showUnifiedDomoticsWidget() {
                         }
                     }
                 }
-
-                if (entries.isEmpty()) {
-                    addTextWidget("home", "Domótica", "No hay dispositivos disponibles todavía. Abre Conexiones para autorizar tus servicios.")
-                } else if (grouped["Sin asignar"].orEmpty().isNotEmpty()) {
-                    addTextWidget("home", "Organiza tu casa", "Pulsa Ubicar en cada dispositivo para asignarlo a Salón, Dormitorio, Cocina, Hall, Paso, baños u otra estancia.")
-                }
+                if (entries.isEmpty()) addTextWidget("home", "Domótica", "No hay dispositivos disponibles todavía. Abre Conexiones para autorizar tus servicios.")
                 errors.take(3).forEach { addTextWidget("home", "Aviso de conexión", it) }
                 status.text = "Jarvis listo"
+                refreshDomoticsQuickCard()
             }
         }.start()
     }
 '''
-
 s = replace_function(s, '    private fun showUnifiedDomoticsWidget()', replacement)
-
 p.write_text(s)
-print('Domotics room grouping and persistent assignment applied')
+print('Domotics room grouping + always-visible room organizer applied')
