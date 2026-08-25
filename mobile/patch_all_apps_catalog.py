@@ -18,17 +18,18 @@ replacement = r'''    private fun openApp(name: String): Boolean {
         if (wanted.isBlank()) return false
         val pm = activity.packageManager
 
-        // Small compatibility shortcuts only; normal discovery below handles all apps.
         val knownPackages = mapOf(
             "glovo" to listOf("com.glovo"),
-            "amazon" to listOf("com.amazon.mShop.android.shopping")
+            "amazon" to listOf("com.amazon.mShop.android.shopping"),
+            "chrome" to listOf("com.android.chrome"),
+            "aliexpress" to listOf("com.alibaba.aliexpresshd"),
+            "booking" to listOf("com.booking")
         )
         knownPackages[wanted]?.forEach { if (launchPackage(it)) return true }
 
         data class Candidate(val score: Int, val label: String, val packageName: String, val className: String?)
         val candidates = mutableListOf<Candidate>()
 
-        // MAIN/LAUNCHER catalogue available through PackageManager.
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL).forEach { ri ->
             val label = canonical(ri.loadLabel(pm)?.toString().orEmpty())
@@ -43,7 +44,6 @@ replacement = r'''    private fun openApp(name: String): Boolean {
             candidates += Candidate(score, label, pkg, ri.activityInfo.name)
         }
 
-        // LauncherApps is a second source for the current user's actual launcher apps.
         runCatching {
             val launcherApps = activity.getSystemService(LauncherApps::class.java)
             launcherApps.getActivityList(null, Process.myUserHandle()).forEach { info ->
@@ -69,7 +69,28 @@ replacement = r'''    private fun openApp(name: String): Boolean {
         return runCatching { activity.runOnUiThread { activity.startActivity(explicit) }; true }.getOrDefault(false)
     }
 
+    private fun openUrl(raw: String): Boolean {
+        val url = raw.trim()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+        return runCatching {
+            activity.runOnUiThread {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun openWebSearch(query: String): Boolean {
+        val uri = Uri.parse("https://www.google.com/search?q=" + Uri.encode(query.take(500)))
+        return runCatching {
+            activity.runOnUiThread {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            true
+        }.getOrDefault(false)
+    }
+
 '''
 s = s[:start] + replacement + s[end:]
 p.write_text(s)
-print('Universal installed-app catalogue enabled')
+print('Universal installed-app catalogue enabled with browser helpers preserved')
