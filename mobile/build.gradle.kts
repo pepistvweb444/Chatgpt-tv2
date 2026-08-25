@@ -37,3 +37,12 @@ dependencies {
     // not from Google Maven. Drop the authenticated SDK AARs in mobile/libs/.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 }
+
+val prepareVoskSpanishModel = tasks.register<Exec>("prepareVoskSpanishModel") {
+    workingDir(projectDir)
+    commandLine("python3", "prepare_vosk_model.py")
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(prepareVoskSpanishModel)
+}
