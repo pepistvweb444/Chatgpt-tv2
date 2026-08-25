@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jarvis-mobile-apk-main
@@ -155,7 +155,7 @@ jobs:
         run: python3 mobile/patch_domotics_rooms.py
       - name: Enrich Domotics quick card and room organizer
         run: python3 mobile/patch_domotics_quickcard.py
-      - name: Add Homey Cloud devices to Domotics
+      - name: Add Homey Cloud, persistent wake and room settings
         run: python3 mobile/patch_homey_cloud.py
       - name: Add selectable LLM provider
         run: python3 mobile/patch_ai_provider_picker.py
@@ -184,21 +184,37 @@ jobs:
         shell: bash
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
 
-      - name: Verify APK version
+      - name: Verify APK is Jarvis Mobile 0.2.11
         shell: bash
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk | grep "versionCode='10' versionName='0.2.10'"
+          BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='11' versionName='0.2.11'"
+          if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then
+            echo "ERROR: TV package detected in mobile workflow" >&2
+            exit 1
+          fi
 
       - name: Sign and verify mobile APK
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.10-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.10-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.11-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.11-debug.apk
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.10-debug
-          path: Jarvis-Mobile-v0.2.10-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.11
+          path: Jarvis-Mobile-v0.2.11-debug.apk
           if-no-files-found: error
+
+      - name: Record successful MOBILE run ID
+        if: success()
+        shell: bash
+        run: |
+          echo "${{ github.run_id }}" > LATEST_MOBILE_RUN_ID.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LATEST_MOBILE_RUN_ID.txt
+          git commit -m "ci: record signed Jarvis Mobile 0.2.11 APK [skip ci]" || true
+          git push
