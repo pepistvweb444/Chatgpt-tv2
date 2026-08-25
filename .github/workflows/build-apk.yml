@@ -5,7 +5,7 @@ on:
     branches: [ main, jarvis-write-test ]
     paths-ignore:
       - 'Jarvis-TV-v0.6.6-debug.apk.b64'
-      - 'LATEST_RUN_ID.txt'
+      - 'LATEST_TV_RUN_ID.txt'
       - 'BUILD_FAILURE_LOG.txt'
   workflow_dispatch:
 
@@ -131,14 +131,14 @@ jobs:
           path: Jarvis-TV-v0.6.7-debug.apk
           if-no-files-found: error
 
-      - name: Record successful run ID
+      - name: Record successful TV run ID
         if: success()
         shell: bash
         run: |
-          echo "${{ github.run_id }}" > LATEST_RUN_ID.txt
+          echo "${{ github.run_id }}" > LATEST_TV_RUN_ID.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add LATEST_RUN_ID.txt
+          git add LATEST_TV_RUN_ID.txt
           git commit -m "ci: record signed Jarvis TV APK [skip ci]" || true
           git push
 
