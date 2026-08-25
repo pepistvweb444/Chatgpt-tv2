@@ -144,6 +144,10 @@ jobs:
         run: python3 mobile/patch_direct_tado_commands.py
       - name: Add direct Home Connect devices and controls
         run: python3 mobile/patch_homeconnect_direct.py
+      - name: Fix Home Connect authorization code login
+        run: python3 mobile/patch_homeconnect_authcode.py
+      - name: Add unified Domotics hub and Sensibo controls
+        run: python3 mobile/patch_domotics_hub.py
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
@@ -155,12 +159,12 @@ jobs:
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.5-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.5-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.6-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.6-debug.apk
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-Mobile-v0.2.5-debug
-          path: Jarvis-Mobile-v0.2.5-debug.apk
+          name: Jarvis-Mobile-v0.2.6-debug
+          path: Jarvis-Mobile-v0.2.6-debug.apk
           if-no-files-found: error
