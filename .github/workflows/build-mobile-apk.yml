@@ -152,6 +152,8 @@ jobs:
         run: python3 mobile/patch_domotics_hub.py
       - name: Group Domotics devices by configurable rooms
         run: python3 mobile/patch_domotics_rooms.py
+      - name: Enrich Domotics quick card and room organizer
+        run: python3 mobile/patch_domotics_quickcard.py
       - name: Merge duplicate Android intent handlers
         run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - name: Normalize generated Kotlin
