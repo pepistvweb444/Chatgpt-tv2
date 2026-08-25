@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.Normalizer
 
 class WakeWordService : Service() {
     @Volatile private var running = false
@@ -49,6 +50,32 @@ class WakeWordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
+    private fun normalizeSpeech(value: String): String {
+        return Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9 ]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun isWakePhrase(raw: String): Boolean {
+        val text = normalizeSpeech(raw)
+        if (text.isBlank()) return false
+
+        val jarvisVariants = listOf("jarvis", "yarvis", "yervis", "yerviz", "jervis", "jerviz", "harvis")
+        val aleVariants = listOf("ale", "hale", "alé")
+        val prefixes = listOf("hola", "oye", "hey", "ey")
+
+        if (jarvisVariants.any { v -> prefixes.any { p -> text.contains("$p $v") } }) return true
+        if (aleVariants.any { v -> prefixes.any { p -> text.contains("$p $v") } }) return true
+
+        // Tolerate short ASR fragments such as "hola ... yerviz".
+        val hasGreeting = prefixes.any { p -> text.contains(p) }
+        val hasJarvisLike = jarvisVariants.any { text.contains(it) }
+        val hasAleLike = aleVariants.any { v -> Regex("(^| )${Regex.escape(v)}( |$)").containsMatchIn(text) }
+        return hasGreeting && (hasJarvisLike || hasAleLike)
+    }
+
     private fun loop() {
         while (running) {
             val f = File(cacheDir, "wake-${System.currentTimeMillis()}.m4a")
@@ -62,14 +89,11 @@ class WakeWordService : Service() {
                 r.setAudioEncodingBitRate(32000)
                 r.setOutputFile(f.absolutePath)
                 r.prepare(); r.start()
-                Thread.sleep(2300)
+                Thread.sleep(1600)
                 runCatching { r.stop() }; runCatching { r.release() }; recorder = null
                 if (f.exists() && f.length() > 256) {
-                    val text = transcribe(f).lowercase()
-                    val wake = text.contains("hola jarvis") || text.contains("oye jarvis") ||
-                        text.contains("hola ale") || text.contains("oye ale") || text.contains("ale jarvis") ||
-                        text.contains("alé jarvis")
-                    if (wake) {
+                    val text = transcribe(f)
+                    if (isWakePhrase(text)) {
                         showOverlay()
                         val i = Intent(this, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -77,12 +101,12 @@ class WakeWordService : Service() {
                             putExtra("hands_free", true)
                         }
                         runCatching { startActivity(i) }
-                        Thread.sleep(4500)
+                        Thread.sleep(3200)
                     }
                 }
             } catch (_: Exception) {
                 runCatching { recorder?.release() }; recorder = null
-                try { Thread.sleep(1200) } catch (_: Exception) {}
+                try { Thread.sleep(700) } catch (_: Exception) {}
             } finally { f.delete() }
         }
     }
@@ -100,7 +124,7 @@ class WakeWordService : Service() {
 
     private fun transcribe(file: File): String {
         val c = (URL("$backend/api/transcribe").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 20000
+            requestMethod = "POST"; doOutput = true; connectTimeout = 6000; readTimeout = 14000
             setRequestProperty("Content-Type", "audio/mp4"); setRequestProperty("X-Filename", "wake.m4a")
         }
         c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
