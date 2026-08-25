@@ -116,6 +116,7 @@ jobs:
 
       - name: Persist failure log
         if: failure() && steps.build_apk.outputs.exit_code != '0'
+        continue-on-error: true
         shell: bash
         run: |
           cp build-last-300-lines.txt BUILD_FAILURE_LOG.txt
@@ -123,7 +124,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add BUILD_FAILURE_LOG.txt
           git commit -m "ci: persist latest TV build failure [skip ci]" || true
-          git push
+          git pull --rebase origin main || true
+          git push || true
 
       - name: Upload TV APK
         if: success()
@@ -135,6 +137,7 @@ jobs:
 
       - name: Record successful TV run ID
         if: success()
+        continue-on-error: true
         shell: bash
         run: |
           echo "${{ github.run_id }}" > LATEST_TV_RUN_ID.txt
@@ -142,10 +145,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_TV_RUN_ID.txt
           git commit -m "ci: record signed Jarvis TV APK [skip ci]" || true
-          git push
+          git pull --rebase origin main || true
+          git push || true
 
       - name: Publish APK payload for ChatGPT
         if: success()
+        continue-on-error: true
         shell: bash
         run: |
           base64 -w 0 Jarvis-TV-v0.6.7-debug.apk > Jarvis-TV-v0.6.7-debug.apk.b64
@@ -153,4 +158,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Jarvis-TV-v0.6.7-debug.apk.b64
           git commit -m "build: publish signed Jarvis TV 0.6.7 APK payload [skip ci]" || true
-          git push
+          git pull --rebase origin main || true
+          git push || true
