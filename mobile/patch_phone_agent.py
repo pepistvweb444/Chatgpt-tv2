@@ -9,17 +9,17 @@ if 'private val phoneAgent by lazy' not in s:
         raise SystemExit('lastLocation field marker not found')
     s = s.replace(field, field + '    private val phoneAgent by lazy { PhoneAgentController(this) }\n', 1)
 
-# patch_phone_actions.py runs before this script and adds the LocalActionRouter block.
-# Insert the multi-step agent immediately before the visual/chat routing. Keep this
-# tolerant to earlier UI patches instead of matching the whole sendMessage method.
+# patch_phone_actions.py runs before this script and adds LocalActionRouter.
+# Multi-step tasks MUST run before the simple local router, otherwise a phrase like
+# "abre Glovo y haz un pedido" is incorrectly consumed by the generic "abre ..." rule.
 if 'phoneAgent.looksLikePhoneTask(message)' not in s:
-    marker = '''        when (val kind = classifyVisualRequest(message)) {'''
+    marker = '''        val local = runCatching { actionRouter.handle(message) }.getOrNull()'''
     idx_send = s.find('    private fun sendMessage() {')
     if idx_send == -1:
         raise SystemExit('sendMessage function not found')
     idx_marker = s.find(marker, idx_send)
     if idx_marker == -1:
-        raise SystemExit('visual routing marker not found')
+        raise SystemExit('local action router marker not found')
 
     block = '''        if (phoneAgent.looksLikePhoneTask(message)) {
             val enabled = prefs.getBoolean("accessibility_connected", false)
@@ -46,4 +46,4 @@ if 'phoneAgent.looksLikePhoneTask(message)' not in s:
     s = s[:idx_marker] + block + s[idx_marker:]
 
 p.write_text(s)
-print('Phone agent wired into MainActivity')
+print('Phone agent wired before LocalActionRouter')
