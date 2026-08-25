@@ -43,15 +43,28 @@ class DeviceHubActivity : Activity() {
         add("Reiniciar lector de mensajes") { runCatching { NotificationListenerService.requestRebind(ComponentName(this, JarvisNotificationListener::class.java)) }; refreshStatus() }
         add("Probar WhatsApp / RCS capturados") {
             val feed = runCatching { JSONArray(getSharedPreferences("jarvis_mobile", MODE_PRIVATE).getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
-            val lines = mutableListOf<String>(); for (i in feed.length()-1 downTo 0) { val o=feed.optJSONObject(i)?:continue; val pkg=o.optString("package"); if(pkg.contains("whatsapp",true)||pkg.contains("messag",true)||pkg.contains("sms",true)){lines += "${o.optString("title")}: ${o.optString("text").take(220)}"; if(lines.size>=5)break} }
-            Toast.makeText(this, if(lines.isEmpty())"No hay mensajes capturados todavía." else lines.joinToString("\n\n"), Toast.LENGTH_LONG).show()
+            val lines = mutableListOf<String>()
+            for (i in feed.length()-1 downTo 0) {
+                val o = feed.optJSONObject(i) ?: continue
+                val pkg = o.optString("package")
+                if (pkg.contains("whatsapp", true) || pkg.contains("messag", true) || pkg.contains("sms", true)) {
+                    lines += "${o.optString("title")}: ${o.optString("text").take(220)}"
+                    if (lines.size >= 5) break
+                }
+            }
+            Toast.makeText(this, if (lines.isEmpty()) "No hay mensajes capturados todavía." else lines.joinToString("\n\n"), Toast.LENGTH_LONG).show()
         }
         add("Probar lectura de SMS") {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS), 51)
-            else { var preview=""; runCatching { contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("address","body"), null, null, "date DESC")?.use { c -> if(c.moveToFirst())preview="${c.getString(0)}: ${c.getString(1).orEmpty().take(220)}" } }; Toast.makeText(this,if(preview.isBlank())"No hay SMS visibles" else preview,Toast.LENGTH_LONG).show() }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS), 51)
+            } else {
+                var preview = ""
+                runCatching { contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("address","body"), null, null, "date DESC")?.use { c -> if (c.moveToFirst()) preview = "${c.getString(0)}: ${c.getString(1).orEmpty().take(220)}" } }
+                Toast.makeText(this, if (preview.isBlank()) "No hay SMS visibles" else preview, Toast.LENGTH_LONG).show()
+            }
         }
-        add("Probar llamadas") { if(ContextCompat.checkSelfPermission(this,Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED)ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CALL_PHONE),52) else startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"))) }
-        add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this,"Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}",Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this,"No se pudo iniciar el puente TV",Toast.LENGTH_LONG).show() } }
+        add("Probar llamadas") { if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CALL_PHONE), 52) else startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:"))) }
+        add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this, "Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}", Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this, "No se pudo iniciar el puente TV", Toast.LENGTH_LONG).show() } }
         add("Detener puente con TV") { stopService(Intent(this, PhoneBridgeService::class.java)) }
         add("Homey Cloud · luces y dispositivos") { startActivity(Intent(this, HomeyActivity::class.java)) }
         add("Acceso a notificaciones") { openNotificationListenerSettings() }
@@ -68,7 +81,24 @@ class DeviceHubActivity : Activity() {
     override fun onResume() { super.onResume(); if (::permissionStatus.isInitialized) refreshStatus() }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); refreshStatus() }
     private fun openNotificationListenerSettings() { runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }.onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
-    private fun notificationAccessGranted(): Boolean { val enabled=Settings.Secure.getString(contentResolver,"enabled_notification_listeners").orEmpty(); val mine=ComponentName(this,JarvisNotificationListener::class.java).flattenToString(); return enabled.contains(mine,true)||enabled.contains(packageName,true) }
-    private fun refreshStatus() { fun granted(p:String)=ContextCompat.checkSelfPermission(this,p)==PackageManager.PERMISSION_GRANTED; val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE); val listenerConnected=prefs.getBoolean("notification_listener_connected",false); val homey=prefs.getString("homey_session","").orEmpty().isNotBlank(); permissionStatus.text="Contactos ${if(granted(Manifest.permission.READ_CONTACTS))"✓" else "✗"}   Teléfono ${if(granted(Manifest.permission.CALL_PHONE))"✓" else "✗"}\nSMS lectura ${if(granted(Manifest.permission.READ_SMS))"✓" else "✗"}   SMS envío ${if(granted(Manifest.permission.SEND_SMS))"✓" else "✗"}\nWhatsApp/RCS ${if(notificationAccessGranted())"✓" else "✗"} · lector ${if(listenerConnected)"CONECTADO" else "NO CONECTADO"}\nHomey Cloud ${if(homey)"CONECTADO" else "NO CONECTADO"}" }
+    private fun notificationAccessGranted(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+        val mine = ComponentName(this, JarvisNotificationListener::class.java).flattenToString()
+        return enabled.contains(mine, true) || enabled.contains(packageName, true)
+    }
+    private fun refreshStatus() {
+        fun granted(permission: String) = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+        val listenerConnected = prefs.getBoolean("notification_listener_connected", false)
+        val homeyConnected = prefs.getString("homey_session", "").orEmpty().isNotBlank()
+        val contacts = if (granted(Manifest.permission.READ_CONTACTS)) "✓" else "✗"
+        val phone = if (granted(Manifest.permission.CALL_PHONE)) "✓" else "✗"
+        val smsRead = if (granted(Manifest.permission.READ_SMS)) "✓" else "✗"
+        val smsSend = if (granted(Manifest.permission.SEND_SMS)) "✓" else "✗"
+        val notifications = if (notificationAccessGranted()) "✓" else "✗"
+        val listener = if (listenerConnected) "CONECTADO" else "NO CONECTADO"
+        val homey = if (homeyConnected) "CONECTADO" else "NO CONECTADO"
+        permissionStatus.text = "Contactos $contacts   Teléfono $phone\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/RCS $notifications · lector $listener\nHomey Cloud $homey"
+    }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
 }
