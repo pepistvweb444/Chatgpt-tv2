@@ -126,6 +126,10 @@ jobs:
         run: python3 mobile/patch_persistent_home_recents.py
       - name: Wire persistent artifact library
         run: python3 mobile/patch_library_main.py
+      - name: Keep assistant replies below user messages
+        run: python3 mobile/patch_chat_order.py
+      - name: Enable compound requests and widget speech
+        run: python3 mobile/patch_multitask_orchestrator.py
       - name: Normalize generated Kotlin
         run: python3 mobile/fix_generated_kotlin.py
 
