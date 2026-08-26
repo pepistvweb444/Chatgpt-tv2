@@ -41,7 +41,8 @@ class DeviceHubActivity : Activity() {
             if (permissions.isNotEmpty()) ActivityCompat.requestPermissions(this, permissions, 50) else Toast.makeText(this, "Permisos ya concedidos", Toast.LENGTH_SHORT).show()
         }
         add("Activar Jarvis para identificar llamadas") { requestCallScreeningRole() }
-        add("Activar acceso a WhatsApp / RCS") { openNotificationListenerSettings(); Toast.makeText(this, "Activa Jarvis en Acceso a notificaciones.", Toast.LENGTH_LONG).show() }
+        add("Contactos prioritarios / favoritos") { startActivity(Intent(this, FavoriteContactsActivity::class.java)) }
+        add("Activar acceso a WhatsApp / RCS / redes / correo") { openNotificationListenerSettings(); Toast.makeText(this, "Activa Jarvis en Acceso a notificaciones.", Toast.LENGTH_LONG).show() }
         add("Reiniciar lector de mensajes") { runCatching { NotificationListenerService.requestRebind(ComponentName(this, JarvisNotificationListener::class.java)) }; refreshStatus() }
         add("Probar WhatsApp / RCS capturados") {
             val feed = runCatching { JSONArray(getSharedPreferences("jarvis_mobile", MODE_PRIVATE).getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
@@ -108,6 +109,7 @@ class DeviceHubActivity : Activity() {
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
         val listenerConnected = prefs.getBoolean("notification_listener_connected", false)
         val homeyConnected = prefs.getString("homey_session", "").orEmpty().isNotBlank()
+        val priorityCount = runCatching { JSONArray(prefs.getString("priority_contacts_json","[]")).length() }.getOrDefault(0)
         val contacts = if (granted(Manifest.permission.READ_CONTACTS)) "✓" else "✗"
         val phone = if (granted(Manifest.permission.CALL_PHONE)) "✓" else "✗"
         val smsRead = if (granted(Manifest.permission.READ_SMS)) "✓" else "✗"
@@ -116,7 +118,7 @@ class DeviceHubActivity : Activity() {
         val listener = if (listenerConnected) "CONECTADO" else "NO CONECTADO"
         val homey = if (homeyConnected) "CONECTADO" else "NO CONECTADO"
         val screening = if (callScreeningEnabled()) "ACTIVO" else "INACTIVO"
-        permissionStatus.text = "Contactos $contacts   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/RCS $notifications · lector $listener\nHomey Cloud $homey"
+        permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nHomey Cloud $homey"
     }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
 }
