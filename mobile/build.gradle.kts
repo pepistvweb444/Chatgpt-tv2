@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.mobile.stable"
         minSdk = 28
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.2.14"
+        versionCode = 13
+        versionName = "0.2.13"
     }
 
     compileOptions {
@@ -27,10 +27,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("com.google.android.gms:play-services-auth:21.6.0")
-
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
-
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 }
 
