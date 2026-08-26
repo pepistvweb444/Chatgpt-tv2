@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.telecom.TelecomManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
@@ -38,18 +39,12 @@ class PhoneBridgeService : Service() {
                 .setContentTitle("Jarvis · puente con TV")
                 .setContentText("Llamadas, SMS y notificaciones para Jarvis TV")
                 .setOngoing(true).setContentIntent(open).build())
-            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
-                .putBoolean("bridge_running", true)
-                .remove("bridge_start_error")
-                .apply()
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", true).remove("bridge_start_error").apply()
             running = true
             Thread { serve() }.start()
         } catch (e: Throwable) {
             running = false
-            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
-                .putBoolean("bridge_running", false)
-                .putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
-                .apply()
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}").apply()
             stopSelf()
         }
     }
@@ -75,16 +70,24 @@ class PhoneBridgeService : Service() {
                 }.start()
             }
         } catch (e: Exception) {
-            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit()
-                .putBoolean("bridge_running", false)
-                .putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
-                .apply()
+            getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}").apply()
         }
     }
 
     private fun handle(path: String): Pair<Int,String> {
         if (path.startsWith("/ping")) return 200 to JSONObject().put("ok", true).put("device", "jarvis-phone").toString()
         if (path.startsWith("/permissions")) return 200 to permissionStatus().toString()
+        if (path.startsWith("/incoming-call-action")) {
+            val action = URLDecoder.decode(path.substringAfter("action=", "leave").substringBefore("&"), StandardCharsets.UTF_8.name()).lowercase()
+            return controlIncomingCall(action)
+        }
+        if (path.startsWith("/incoming-call")) {
+            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+            val raw = prefs.getString("incoming_call_card", "").orEmpty()
+            val card = runCatching { JSONObject(raw) }.getOrElse { JSONObject() }
+            card.put("lastIncomingAt", prefs.getLong("last_incoming_call_at", 0L))
+            return 200 to JSONObject().put("ok", true).put("call", card).toString()
+        }
         if (path.startsWith("/messages")) {
             val source = URLDecoder.decode(path.substringAfter("source=", "all").substringBefore("&"), StandardCharsets.UTF_8.name())
             return 200 to recentMessages(source).toString()
@@ -102,32 +105,41 @@ class PhoneBridgeService : Service() {
         return 404 to JSONObject().put("error", "not-found").toString()
     }
 
+    @Suppress("DEPRECATION") private fun controlIncomingCall(action:String): Pair<Int,String> {
+        if (action == "leave") return 200 to JSONObject().put("ok", true).put("status", "ringing").toString()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "answer-phone-calls-permission-required").toString()
+        val telecom=getSystemService(TelecomManager::class.java)
+        return try {
+            when(action){
+                "answer","accept" -> telecom.acceptRingingCall()
+                "reject","decline" -> telecom.endCall()
+                else -> return 400 to JSONObject().put("error","unknown-action").toString()
+            }
+            200 to JSONObject().put("ok",true).put("status",action).toString()
+        } catch(e:Throwable){ 500 to JSONObject().put("error",e.message ?: "call-action-failed").toString() }
+    }
+
     private fun permissionStatus(): JSONObject = JSONObject()
         .put("readSms", ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED)
         .put("receiveSms", ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED)
         .put("sendSms", ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED)
         .put("contacts", ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED)
         .put("callPhone", ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED)
+        .put("answerCalls", ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED)
 
     private fun recentMessages(source: String): JSONObject {
         val out = JSONArray()
         val normalized = source.lowercase()
-
         if (normalized == "all" || normalized == "sms") {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
                 runCatching {
                     contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("address","body","date"), null, null, "date DESC")?.use { c ->
                         val ai = c.getColumnIndex("address"); val bi = c.getColumnIndex("body"); val di = c.getColumnIndex("date")
-                        while (c.moveToNext() && out.length() < 15) {
-                            out.put(JSONObject().put("source","sms").put("from", if (ai >= 0) c.getString(ai).orEmpty() else "")
-                                .put("text", if (bi >= 0) c.getString(bi).orEmpty() else "")
-                                .put("time", if (di >= 0) c.getLong(di) else 0L))
-                        }
+                        while (c.moveToNext() && out.length() < 15) out.put(JSONObject().put("source","sms").put("from", if (ai >= 0) c.getString(ai).orEmpty() else "").put("text", if (bi >= 0) c.getString(bi).orEmpty() else "").put("time", if (di >= 0) c.getLong(di) else 0L))
                     }
                 }
             }
         }
-
         if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
             val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
             val feed = runCatching { JSONArray(prefs.getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
@@ -138,26 +150,13 @@ class PhoneBridgeService : Service() {
                 val isWhatsApp = pkg.contains("whatsapp", true)
                 if (normalized == "whatsapp" && !isWhatsApp) continue
                 if (normalized == "all" && !isWhatsApp && !pkg.contains("messag", true)) continue
-                out.put(JSONObject().put("source", if (isWhatsApp) "whatsapp" else "notification")
-                    .put("from", n.optString("conversation").ifBlank { n.optString("title") })
-                    .put("text", n.optString("text"))
-                    .put("time", n.optLong("time")))
+                out.put(JSONObject().put("source", if (isWhatsApp) "whatsapp" else "notification").put("from", n.optString("conversation").ifBlank { n.optString("title") }).put("text", n.optString("text")).put("time", n.optLong("time")))
             }
         }
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
 
-    override fun onDestroy() {
-        running = false
-        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).apply()
-        runCatching { server?.close() }
-        super.onDestroy()
-    }
-
+    override fun onDestroy() { running = false; getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).apply(); runCatching { server?.close() }; super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
-
-    companion object {
-        const val PORT = 8765
-        private const val CHANNEL = "jarvis_phone_bridge"
-    }
+    companion object { const val PORT = 8765; private const val CHANNEL = "jarvis_phone_bridge" }
 }
