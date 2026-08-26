@@ -87,9 +87,25 @@ jobs:
         run: python3 scripts/apply_tv_rich_news_widgets.py
       - name: Synchronize chats with Jarvis Mobile
         run: python3 scripts/apply_tv_chat_sync.py
+      - name: Mirror incoming calls from Jarvis Mobile
+        run: python3 scripts/apply_tv_calls.py
+
+      - name: Verify TV call bridge hooks
+        shell: bash
+        run: |
+          grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          grep -q 'fun callAction' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          grep -q 'pollIncomingCall' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'Videollamada' app/src/main/java/com/jarvis/tv/MainActivity.kt
 
       - name: Build TV APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK is Jarvis TV 0.6.8
+        shell: bash
+        run: |
+          BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='15' versionName='0.6.8'"
 
       - name: Sign and verify TV APK
         shell: bash
@@ -97,12 +113,12 @@ jobs:
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
             --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 \
-            --out Jarvis-TV-v0.6.7-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.7-debug.apk
+            --out Jarvis-TV-v0.6.8-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.8-debug.apk
 
       - name: Upload TV APK
         uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Jarvis-v0.6.7
-          path: Jarvis-TV-v0.6.7-debug.apk
+          name: TV-ONLY-Jarvis-v0.6.8
+          path: Jarvis-TV-v0.6.8-debug.apk
           if-no-files-found: error
