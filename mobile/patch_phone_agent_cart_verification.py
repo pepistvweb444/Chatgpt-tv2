@@ -1,17 +1,36 @@
 from pathlib import Path
+import re
+
 p=Path('mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt')
 s=p.read_text()
-old='''                "done" -> return finish(onDone, action.optString("message").ifBlank { "Tarea completada." }, true)'''
-new='''                "done" -> {
+
+replacement='''                "done" -> {
                     val msg = action.optString("message").ifBlank { "Tarea completada." }
                     if (looksLikeShoppingTask(task) && !hasCartEvidence(ui)) {
                         onUpdate("Todavía no puedo confirmar que el producto esté en el carrito; verificando…")
                         Thread.sleep(900)
                     } else return finish(onDone, msg, true)
                 }'''
-if old not in s:
-    raise SystemExit('done action anchor not found')
-s=s.replace(old,new,1)
+
+if 'looksLikeShoppingTask(task) && !hasCartEvidence(ui)' not in s:
+    patterns = [
+        r'(?m)^\s*"done"\s*->\s*return\s+finish\(onDone,\s*action\.optString\("message"\)\.ifBlank\s*\{\s*"Tarea completada\."\s*\},\s*true\)\s*$',
+        r'(?m)^\s*"done"\s*->\s*\{[^\n]*finish\(onDone,[^\n]*true\)[^\n]*\}\s*$'
+    ]
+    changed=False
+    for pat in patterns:
+        s2,n=re.subn(pat,replacement,s,count=1)
+        if n:
+            s=s2; changed=True; break
+    if not changed:
+        # Fallback: inject a guard immediately before the next action case after "done".
+        m=re.search(r'(?m)^\s*"done"\s*->.*$',s)
+        if not m:
+            raise SystemExit('done action case not found')
+        line=m.group(0)
+        indent=re.match(r'\s*',line).group(0)
+        s=s[:m.start()]+replacement+s[m.end():]
+
 anchor='''    private fun plan(task: String, ui: JSONArray, pkg: String, step: Int): JSONObject {'''
 helpers=r'''    private fun looksLikeShoppingTask(task: String): Boolean {
         val t = task.lowercase()
@@ -32,5 +51,6 @@ helpers=r'''    private fun looksLikeShoppingTask(task: String): Boolean {
 if 'private fun hasCartEvidence' not in s:
     if anchor not in s: raise SystemExit('plan anchor not found')
     s=s.replace(anchor,helpers+anchor,1)
+
 p.write_text(s)
-print('Phone agent cart verification guard applied')
+print('Phone agent cart verification guard applied safely')
