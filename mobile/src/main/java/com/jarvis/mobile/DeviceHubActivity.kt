@@ -2,6 +2,7 @@ package com.jarvis.mobile
 
 import android.Manifest
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -39,6 +40,7 @@ class DeviceHubActivity : Activity() {
             val permissions = wanted.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
             if (permissions.isNotEmpty()) ActivityCompat.requestPermissions(this, permissions, 50) else Toast.makeText(this, "Permisos ya concedidos", Toast.LENGTH_SHORT).show()
         }
+        add("Activar Jarvis para identificar llamadas") { requestCallScreeningRole() }
         add("Activar acceso a WhatsApp / RCS") { openNotificationListenerSettings(); Toast.makeText(this, "Activa Jarvis en Acceso a notificaciones.", Toast.LENGTH_LONG).show() }
         add("Reiniciar lector de mensajes") { runCatching { NotificationListenerService.requestRebind(ComponentName(this, JarvisNotificationListener::class.java)) }; refreshStatus() }
         add("Probar WhatsApp / RCS capturados") {
@@ -78,14 +80,29 @@ class DeviceHubActivity : Activity() {
         setContentView(root)
     }
 
+    private fun requestCallScreeningRole() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val rm = getSystemService(RoleManager::class.java)
+            if (rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)) {
+                if (rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) Toast.makeText(this, "Jarvis ya identifica las llamadas entrantes.", Toast.LENGTH_LONG).show()
+                else startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING), 54)
+                return
+            }
+        }
+        Toast.makeText(this, "Abre Ajustes > Apps predeterminadas > Identificador y spam y selecciona Jarvis.", Toast.LENGTH_LONG).show()
+        runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+    }
+
     override fun onResume() { super.onResume(); if (::permissionStatus.isInitialized) refreshStatus() }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); refreshStatus() }
+    @Deprecated("Deprecated in Java") override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) { super.onActivityResult(requestCode,resultCode,data); if(requestCode==54){ Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() } }
     private fun openNotificationListenerSettings() { runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }.onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
     private fun notificationAccessGranted(): Boolean {
         val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
         val mine = ComponentName(this, JarvisNotificationListener::class.java).flattenToString()
         return enabled.contains(mine, true) || enabled.contains(packageName, true)
     }
+    private fun callScreeningEnabled(): Boolean = if (Build.VERSION.SDK_INT >= 29) runCatching { getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING) }.getOrDefault(false) else false
     private fun refreshStatus() {
         fun granted(permission: String) = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
@@ -98,7 +115,8 @@ class DeviceHubActivity : Activity() {
         val notifications = if (notificationAccessGranted()) "✓" else "✗"
         val listener = if (listenerConnected) "CONECTADO" else "NO CONECTADO"
         val homey = if (homeyConnected) "CONECTADO" else "NO CONECTADO"
-        permissionStatus.text = "Contactos $contacts   Teléfono $phone\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/RCS $notifications · lector $listener\nHomey Cloud $homey"
+        val screening = if (callScreeningEnabled()) "ACTIVO" else "INACTIVO"
+        permissionStatus.text = "Contactos $contacts   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/RCS $notifications · lector $listener\nHomey Cloud $homey"
     }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
 }
