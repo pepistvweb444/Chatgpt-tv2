@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.mobile.stable"
         minSdk = 28
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.2.12"
+        versionCode = 13
+        versionName = "0.2.13"
     }
 
     compileOptions {
@@ -28,13 +28,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("com.google.android.gms:play-services-auth:21.6.0")
 
-    // Fully embedded/offline Spanish speech recognition. No Android/Google
-    // SpeechRecognizer service and no paid transcription API are required.
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
 
-    // Google Home APIs Android SDK is optional. Homey Cloud is now the preferred
-    // lighting/device integration, so missing Google Home AARs never block Jarvis.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 }
 
