@@ -2,6 +2,7 @@ package com.jarvis.mobile
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
@@ -14,6 +15,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -24,29 +26,45 @@ class IncomingCallActivity : Activity() {
     private lateinit var nameView: TextView
     private lateinit var photo: ImageView
     private var number: String = ""
+    private var source: String = "phone"
+    private var notificationKey: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         number = intent.getStringExtra("number").orEmpty()
+        source = intent.getStringExtra("source").orEmpty().ifBlank { "phone" }
+        notificationKey = intent.getStringExtra("notificationKey").orEmpty()
+        val suppliedName = intent.getStringExtra("name").orEmpty()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(36, 48, 36, 36)
             setBackgroundColor(Color.rgb(8, 11, 16))
         }
-        root.addView(TextView(this).apply { text = "Llamada entrante"; textSize = 18f; setTextColor(Color.rgb(160,180,255)) })
+        root.addView(TextView(this).apply { text = "Llamada entrante · ${sourceLabel()}"; textSize = 18f; setTextColor(Color.rgb(160,180,255)) })
         photo = ImageView(this).apply { layoutParams = LinearLayout.LayoutParams(180,180).apply { topMargin=28; bottomMargin=18 }; scaleType=ImageView.ScaleType.CENTER_CROP; setBackgroundColor(Color.rgb(35,42,58)) }
         root.addView(photo)
-        nameView = TextView(this).apply { text = number.ifBlank { "Número oculto" }; textSize=28f; gravity=Gravity.CENTER; setTextColor(Color.WHITE) }
+        nameView = TextView(this).apply { text = suppliedName.ifBlank { number.ifBlank { "Llamada entrante" } }; textSize=28f; gravity=Gravity.CENTER; setTextColor(Color.WHITE) }
         root.addView(nameView)
-        subtitle = TextView(this).apply { text = "Comprobando contacto…"; textSize=15f; gravity=Gravity.CENTER; setTextColor(Color.rgb(205,213,225)); setPadding(0,10,0,24) }
+        subtitle = TextView(this).apply { text = if(number.isBlank()) "Esperando tu decisión" else "Comprobando contacto…"; textSize=15f; gravity=Gravity.CENTER; setTextColor(Color.rgb(205,213,225)); setPadding(0,10,0,24) }
         root.addView(subtitle)
         fun action(label:String, fn:()->Unit) = root.addView(Button(this).apply { text=label; layoutParams=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply{bottomMargin=10}; setOnClickListener{fn()} })
         action("Contestar") { answerCall() }
         action("Rechazar") { rejectCall() }
         action("Dejar sonar") { finish() }
         setContentView(root)
-        resolveContactAndReputation()
+        if (source == "phone") resolveContactAndReputation() else persistCallCard("voip", nameView.text.toString(), "", false, emptyList())
+    }
+
+    private fun sourceLabel():String = when {
+        source.contains("whatsapp",true) -> "WhatsApp"
+        source.contains("instagram",true) -> "Instagram"
+        source.contains("facebook",true) || source.contains("messenger",true) -> "Messenger/Facebook"
+        source.contains("zoom",true) -> "Zoom"
+        source.contains("telegram",true) -> "Telegram"
+        source.contains("teams",true) -> "Teams"
+        source.contains("meet",true) -> "Google Meet"
+        else -> "Teléfono"
     }
 
     private fun resolveContactAndReputation() {
@@ -68,8 +86,8 @@ class IncomingCallActivity : Activity() {
                 val sourceList = (0 until (sources?.length() ?: 0)).map { sources?.optString(it).orEmpty() }.filter { it.isNotBlank() }
                 val spam = cls == "spam_probable"
                 subtitle.text = when (cls) {
-                    "spam_probable" -> "Spam probable · ${sourceList.joinToString(", ").ifBlank { "varias fuentes" }}"
-                    "possible_spam" -> "Posible spam · una fuente pública"
+                    "spam_probable" -> "⚠ Spam probable · ${sourceList.joinToString(", ").ifBlank { "varias fuentes" }}"
+                    "possible_spam", "suspicious" -> "⚠ Posible spam · una fuente pública"
                     else -> "Número desconocido · sin señales suficientes de spam"
                 }
                 persistCallCard(cls.ifBlank { "unknown" }, number, "", spam, sourceList)
@@ -99,14 +117,22 @@ class IncomingCallActivity : Activity() {
     }
 
     @Suppress("DEPRECATION") private fun answerCall() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED) runCatching { getSystemService(TelecomManager::class.java).acceptRingingCall() }
-        finish()
+        if (source == "phone") {
+            val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED && runCatching { getSystemService(TelecomManager::class.java).acceptRingingCall(); true }.getOrDefault(false)
+            if (!ok) Toast.makeText(this,"Android no permitió contestar",Toast.LENGTH_SHORT).show() else finish()
+        } else {
+            sendBroadcast(Intent(JarvisNotificationListener.ACTION_CALL_NOTIFICATION).setPackage(packageName).putExtra("key",notificationKey).putExtra("callAction","answer")); finish()
+        }
     }
     @Suppress("DEPRECATION") private fun rejectCall() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED) runCatching { getSystemService(TelecomManager::class.java).endCall() }
-        finish()
+        if (source == "phone") {
+            val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED && runCatching { getSystemService(TelecomManager::class.java).endCall() }.getOrDefault(false)
+            if (!ok) Toast.makeText(this,"Android no permitió rechazar",Toast.LENGTH_SHORT).show() else finish()
+        } else {
+            sendBroadcast(Intent(JarvisNotificationListener.ACTION_CALL_NOTIFICATION).setPackage(packageName).putExtra("key",notificationKey).putExtra("callAction","reject")); finish()
+        }
     }
     private fun persistCallCard(classification:String,name:String,photoUri:String,spam:Boolean,sources:List<String>) {
-        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putString("incoming_call_card", JSONObject().put("number",number).put("name",name).put("photoUri",photoUri).put("classification",classification).put("spam",spam).put("sources",org.json.JSONArray(sources)).put("time",System.currentTimeMillis()).toString()).apply()
+        getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putString("incoming_call_card", JSONObject().put("source",sourceLabel()).put("number",number).put("name",name).put("photoUri",photoUri).put("classification",classification).put("spam",spam).put("sources",org.json.JSONArray(sources)).put("notificationKey",notificationKey).put("time",System.currentTimeMillis()).toString()).apply()
     }
 }
