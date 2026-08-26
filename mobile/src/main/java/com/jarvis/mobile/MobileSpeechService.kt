@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class MobileSpeechService : Service() {
     private var player: MediaPlayer? = null
     private val generation = AtomicInteger(0)
-    private val downloader = Executors.newFixedThreadPool(4)
+    private val downloader = Executors.newFixedThreadPool(5)
 
     override fun onCreate() {
         super.onCreate()
@@ -48,8 +48,8 @@ class MobileSpeechService : Service() {
         if (clean.isBlank()) return emptyList()
         val out = mutableListOf<String>(); var rest = clean; var first = true
         while (rest.isNotBlank()) {
-            val max = if (first) 95 else 620
-            val minCut = if (first) 28 else 180
+            val max = if (first) 55 else 420
+            val minCut = if (first) 18 else 120
             val limit = minOf(max, rest.length)
             val marks = listOf(". ", "? ", "! ", "; ", ", ")
             val cut = marks.map { rest.lastIndexOf(it, limit) }.filter { it >= minCut }.maxOrNull()?.plus(1) ?: limit
@@ -63,10 +63,11 @@ class MobileSpeechService : Service() {
         val file = File(cacheDir, "jarvis-bg-$token-$index.mp3")
         return try {
             val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 3500; readTimeout = 22000
+                requestMethod = "POST"; doOutput = true; connectTimeout = 2800; readTimeout = 18000
                 setRequestProperty("Content-Type", "application/json")
             }
-            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", "auto").put("speed", 1.02)
+            val provider = when (voice.lowercase()) { "openvoice" -> "openvoice"; "noiz", "my_voice", "mi_voz" -> "noiz"; else -> "auto" }
+            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", provider).put("speed", 1.02)
             c.outputStream.use { it.write(payload.toString().toByteArray()) }
             if (c.responseCode !in 200..299) { file.delete(); null }
             else { c.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }; file }
