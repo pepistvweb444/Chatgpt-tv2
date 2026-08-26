@@ -15,8 +15,6 @@ method=r'''    private fun readNewMessagesSinceLastCheck(limit: Int): Result {
         val now = System.currentTimeMillis()
         val connectedAt = prefs.getLong("notification_listener_connected_at", 0L)
         val previous = prefs.getLong("jarvis_new_messages_last_check", 0L)
-        // On the first explicit check, use at most the last 24 h of captured history,
-        // but never before the notification listener was connected.
         val cutoff = if (previous > 0L) previous else maxOf(connectedAt, now - 24L * 60L * 60L * 1000L)
         val feed = notificationFeed()
         val rows = mutableListOf<Triple<Long,String,String>>()
@@ -61,7 +59,6 @@ p.write_text(s)
 # MainActivity: render new-message payloads as widgets in conversation order.
 p=Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s=p.read_text()
-needle='''            if (local.message.startsWith("__MESSAGES__|")) {'''
 block=r'''            if (local.message.startsWith("__NEW_MESSAGES__|")) {
                 beginWidgetGroup("Mensajes nuevos")
                 val entries = local.message.substringAfter("__NEW_MESSAGES__|").lines().filter { it.isNotBlank() }
@@ -69,15 +66,26 @@ block=r'''            if (local.message.startsWith("__NEW_MESSAGES__|")) {
                     val p = line.split("|", limit = 2)
                     addTextWidget("day", p.getOrElse(0){"Mensaje nuevo"}, p.getOrElse(1){""})
                 }
-                speakReply("Tienes ${entries.size} mensaje${if(entries.size==1) "" else "s"} nuevo${if(entries.size==1) "" else "s"}.")
+                safeSpeak("Tienes ${entries.size} mensaje${if(entries.size==1) "" else "s"} nuevo${if(entries.size==1) "" else "s"}.")
                 status.text = "Jarvis listo"
             } else if (local.message.startsWith("__NEW_MESSAGES_EMPTY__|")) {
                 beginWidgetGroup("Mensajes nuevos")
                 addTextWidget("day", "Sin novedades", local.message.substringAfter("|"))
                 status.text = "Jarvis listo"
-            } else if (local.message.startsWith("__MESSAGES__|")) {'''
+            } else '''
 if '__NEW_MESSAGES__|' not in s:
-    if needle not in s: raise SystemExit('MainActivity messages render anchor not found')
-    s=s.replace(needle,block,1)
+    # Current renderer starts with __MESSAGES_WIDGET__. Older generated variants may use __MESSAGES__.
+    anchors = [
+        '            if (local.message.startsWith("__MESSAGES_WIDGET__")) {',
+        '            if (local.message.startsWith("__MESSAGES__|")) {',
+    ]
+    found = next((a for a in anchors if a in s), None)
+    if not found:
+        # Fallback: insert immediately after the generic local-handled branch opens.
+        found = '        if (local?.handled == true) {\n'
+        if found not in s: raise SystemExit('MainActivity local render branch not found')
+        s=s.replace(found, found+block.replace('            } else ','',1), 1)
+    else:
+        s=s.replace(found, block+found.strip(), 1)
 p.write_text(s)
 print('New messages since last Jarvis check applied')
