@@ -85,6 +85,8 @@ jobs:
       - run: python3 mobile/patch_phone_agent_cart_verification.py
       - name: Improve Makro product search and cart automation
         run: python3 mobile/patch_makro_shopping.py
+      - name: Require clarification before ambiguous shopping
+        run: python3 mobile/patch_shopping_clarification.py
       - run: python3 mobile/patch_all_apps_catalog.py
       - run: python3 mobile/patch_remote_control.py
       - run: python3 mobile/patch_pairing_pin.py
@@ -129,6 +131,7 @@ jobs:
           grep -q 'openMediaGuide(message)' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'conversationHost.addView' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'hasCartEvidence' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
+          grep -q 'shoppingClarification' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
           grep -q 'hintText' mobile/src/main/java/com/jarvis/mobile/JarvisAccessibilityService.kt
           grep -q 'Makro · buscando' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
           grep -q 'readNewMessagesSinceLastCheck' mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt
