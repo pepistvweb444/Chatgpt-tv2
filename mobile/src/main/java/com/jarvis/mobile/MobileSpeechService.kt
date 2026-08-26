@@ -17,8 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MobileSpeechService : Service() {
     private var player: MediaPlayer? = null
+    private var nextPlayer: MediaPlayer? = null
     private val generation = AtomicInteger(0)
-    private val downloader = Executors.newFixedThreadPool(5)
+    private val downloader = Executors.newFixedThreadPool(8)
 
     override fun onCreate() {
         super.onCreate()
@@ -30,32 +31,38 @@ class MobileSpeechService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = runCatching {
         if (intent?.action == ACTION_STOP) {
-            generation.incrementAndGet(); runCatching { player?.release() }; player = null; stopSelf(); return@runCatching START_NOT_STICKY
+            stopPlayback(); stopSelf(); return@runCatching START_NOT_STICKY
         }
         val text = intent?.getStringExtra("text").orEmpty().trim()
         val voice = intent?.getStringExtra("voice").orEmpty().ifBlank { "coral" }
         if (text.isBlank()) return@runCatching START_NOT_STICKY
         val token = generation.incrementAndGet()
+        runCatching { player?.release() }; runCatching { nextPlayer?.release() }; player = null; nextPlayer = null
         startForeground(4406, NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Jarvis está hablando").setContentText(text.take(80)).setOngoing(true).build())
-        Thread { speakPipelined(text, voice, token) }.start()
+        Thread { speakGapless(text, voice, token) }.start()
         START_NOT_STICKY
     }.getOrElse { stopSelf(); START_NOT_STICKY }
 
     private fun chunks(text: String): List<String> {
-        val clean = text.replace(Regex("https?://\\S+"), " ").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\s+"), " ").trim()
+        val clean = text.replace(Regex("https?://\\S+"), " ")
+            .replace(Regex("[*_`#>|]+"), " ")
+            .replace(Regex("\\s+"), " ").trim()
         if (clean.isBlank()) return emptyList()
         val out = mutableListOf<String>(); var rest = clean; var first = true
         while (rest.isNotBlank()) {
-            val max = if (first) 55 else 420
-            val minCut = if (first) 18 else 120
+            // Tiny first phrase: begin speaking as soon as possible. Later phrases are
+            // long enough to avoid audible paragraph gaps.
+            val max = if (first) 34 else 700
+            val minCut = if (first) 10 else 180
             val limit = minOf(max, rest.length)
-            val marks = listOf(". ", "? ", "! ", "; ", ", ")
-            val cut = marks.map { rest.lastIndexOf(it, limit) }.filter { it >= minCut }.maxOrNull()?.plus(1) ?: limit
+            val marks = listOf(". ", "? ", "! ", "; ", ", ", ": ")
+            val cut = marks.map { rest.lastIndexOf(it, limit) }
+                .filter { it >= minCut }.maxOrNull()?.plus(1) ?: limit
             out += rest.take(cut).trim(); rest = rest.drop(cut).trim(); first = false
         }
-        return out
+        return out.filter { it.isNotBlank() }
     }
 
     private fun downloadChunk(chunk: String, voice: String, token: Int, index: Int): File? {
@@ -63,44 +70,74 @@ class MobileSpeechService : Service() {
         val file = File(cacheDir, "jarvis-bg-$token-$index.mp3")
         return try {
             val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 2800; readTimeout = 18000
+                requestMethod = "POST"; doOutput = true; connectTimeout = 1800; readTimeout = 12000
                 setRequestProperty("Content-Type", "application/json")
             }
             val provider = when (voice.lowercase()) { "openvoice" -> "openvoice"; "noiz", "my_voice", "mi_voz" -> "noiz"; else -> "auto" }
-            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", provider).put("speed", 1.02)
+            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", provider).put("speed", 1.03)
             c.outputStream.use { it.write(payload.toString().toByteArray()) }
             if (c.responseCode !in 200..299) { file.delete(); null }
             else { c.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }; file }
         } catch (_: Throwable) { runCatching { file.delete() }; null }
     }
 
-    private fun speakPipelined(text: String, voice: String, token: Int) {
+    private fun media(file: File): MediaPlayer? = runCatching {
+        MediaPlayer().apply { setDataSource(file.absolutePath); prepare() }
+    }.getOrNull()
+
+    private fun speakGapless(text: String, voice: String, token: Int) {
         val parts = chunks(text)
         if (parts.isEmpty()) { if (token == generation.get()) stopSelf(); return }
         val futures = parts.mapIndexed { index, part -> downloader.submit<File?> { downloadChunk(part, voice, token, index) } }
-        for (i in parts.indices) {
-            if (token != generation.get()) return
-            val file = runCatching { futures[i].get() }.getOrNull() ?: continue
-            val lock = Object()
-            try {
-                synchronized(lock) {
-                    if (token != generation.get()) return
-                    runCatching { player?.release() }
-                    player = MediaPlayer().apply {
-                        setDataSource(file.absolutePath)
-                        setOnCompletionListener { synchronized(lock) { lock.notifyAll() } }
-                        setOnErrorListener { _, _, _ -> synchronized(lock) { lock.notifyAll() }; true }
-                        prepare(); start()
-                    }
-                    lock.wait(180000)
-                    runCatching { player?.release() }; player = null
+        val files = arrayOfNulls<File>(parts.size)
+        files[0] = runCatching { futures[0].get() }.getOrNull()
+        if (token != generation.get()) return
+        val firstFile = files[0] ?: run { stopSelf(); return }
+        val first = media(firstFile) ?: run { firstFile.delete(); stopSelf(); return }
+        player = first
+
+        fun prepareAndChain(index: Int, current: MediaPlayer) {
+            if (index >= parts.size || token != generation.get()) {
+                current.setOnCompletionListener {
+                    runCatching { it.release() }; files.forEach { f -> runCatching { f?.delete() } }
+                    if (token == generation.get()) stopSelf()
                 }
-            } finally { runCatching { file.delete() } }
+                return
+            }
+            downloader.submit {
+                files[index] = runCatching { futures[index].get() }.getOrNull()
+                val f = files[index]
+                val np = if (f != null) media(f) else null
+                if (token != generation.get()) { runCatching { np?.release() }; return@submit }
+                if (np == null) {
+                    current.setOnCompletionListener {
+                        runCatching { it.release() }
+                        prepareAndChain(index + 1, it)
+                    }
+                    return@submit
+                }
+                nextPlayer = np
+                runCatching { current.setNextMediaPlayer(np) }
+                current.setOnCompletionListener { finished ->
+                    runCatching { finished.release() }
+                    player = np; nextPlayer = null
+                    prepareAndChain(index + 1, np)
+                }
+            }
         }
-        if (token == generation.get()) stopSelf()
+
+        prepareAndChain(1, first)
+        first.start()
     }
 
-    override fun onDestroy() { generation.incrementAndGet(); runCatching { player?.release() }; player = null; super.onDestroy() }
+    private fun stopPlayback() {
+        generation.incrementAndGet()
+        runCatching { player?.stop() }; runCatching { player?.release() }
+        runCatching { nextPlayer?.release() }
+        player = null; nextPlayer = null
+    }
+
+    override fun onDestroy() { stopPlayback(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
