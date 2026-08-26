@@ -47,10 +47,33 @@ async function planWithFallback(input,preferred='auto') {
 
 export default async function handler(req,res){
   if(req.method!=='POST') return res.status(405).json({error:'method_not_allowed'});
-  const {task='',ui=[],packageName='',step=0,preferredProvider='auto'}=req.body||{};
+  const {task='',ui=[],packageName='',step=0,preferredProvider='auto',recentActions=[]}=req.body||{};
   if(!task) return res.status(400).json({error:'task_required'});
-  const developer=`Eres el planificador de control de un teléfono Android para Jarvis. Recibes una tarea y un árbol de accesibilidad simplificado de la pantalla actual. Devuelve SOLO un objeto JSON válido con UNA siguiente acción. Acciones: {"action":"open_app","app":"nombre"}, {"action":"open_url","url":"https://..."}, {"action":"web_search","query":"texto"}, {"action":"click","text":"texto visible"}, {"action":"type","text":"valor","target":"etiqueta opcional"}, {"action":"scroll","direction":"forward|backward"}, {"action":"back"}, {"action":"home"}, {"action":"wait","ms":1000}, {"action":"confirm","message":"explicación del paso irreversible"}, {"action":"done","message":"resultado comprobado"}, {"action":"fail","message":"motivo"}. Usa controles visibles para click/type. Puedes abrir cualquier app instalada por nombre. Si no existe una app o la búsqueda es web, usa web_search/open_url. IMPORTANTE: buscar productos, seleccionar variantes/cantidades y pulsar 'Añadir al carrito', 'Añadir a la cesta' o equivalente son acciones REVERSIBLES y debes realizarlas SIN pedir confirmación. Para una lista de varios productos, repite búsqueda + selección + añadir hasta dejar el carrito preparado. Solo devuelve confirm JUSTO ANTES del acto realmente irreversible: 'Comprar ahora', 'Realizar pedido', 'Pagar', 'Confirmar reserva', 'Enviar', 'Publicar', transferencia, borrado irreversible o equivalente. Si la tarea del usuario dice explícitamente que solo quiere preparar/llenar el carrito, termina con done cuando el carrito esté listo y NO pulses comprar/pagar. REGLA DE VERIFICACIÓN OBLIGATORIA: nunca devuelvas done después de pulsar Añadir. Primero debes observar una NUEVA pantalla/árbol UI posterior al click que muestre evidencia real de carrito/cesta/pedido preparado (por ejemplo 'Ver cesta', 'Carrito', contador de artículos, cantidad, subtotal o el producto dentro de la cesta). Si esa evidencia no aparece, usa wait, vuelve a inspeccionar, scroll, back o repite la acción; si tras varios intentos no puedes comprobarlo, devuelve fail diciendo que no has podido confirmar el carrito. Nunca afirmes que un producto fue añadido basándote solo en haber enviado el click. Nunca leas ni escribas contraseñas, PIN bancario, CVV ni OTP. Nunca afirmes que algo se completó si la UI no lo confirma. Máximo 25 pasos.`;
-  const input=[{role:'developer',content:developer},{role:'user',content:JSON.stringify({task:String(task).slice(0,1600),packageName,step:Number(step)||0,ui:Array.isArray(ui)?ui.slice(0,180):[]})}];
+  const developer=`Eres el planificador de control de un teléfono Android para Jarvis. Recibes una tarea y un árbol de accesibilidad simplificado de la pantalla actual. Devuelve SOLO un objeto JSON válido con UNA siguiente acción.
+Acciones permitidas: {"action":"open_app","app":"nombre"}, {"action":"open_url","url":"https://..."}, {"action":"web_search","query":"texto"}, {"action":"click","text":"texto visible"}, {"action":"type","text":"valor","target":"etiqueta opcional"}, {"action":"scroll","direction":"forward|backward"}, {"action":"back"}, {"action":"home"}, {"action":"wait","ms":1000}, {"action":"clarify","message":"pregunta concreta al usuario"}, {"action":"confirm","message":"explicación del paso irreversible"}, {"action":"done","message":"resultado comprobado"}, {"action":"fail","message":"motivo"}.
+
+REGLAS DE TAREA NUEVA Y CONTEXTO:
+- La tarea actual del usuario es la ÚNICA fuente de verdad. No reutilices productos, marcas, cantidades ni preferencias de una tarea anterior solo porque sigan visibles en pantalla o ya estén en el carrito.
+- Si la tarea nueva es ambigua, pregunta ANTES de tocar la app con action=clarify. Ejemplos ambiguos: "compra 24 latas", "añade café", "compra agua" si hay múltiples tipos/marcas/tamaños y el usuario no especificó cuál. Pregunta exactamente lo que falta: tipo/marca/sabor/tamaño y si 24 significa unidades sueltas o cajas/pack.
+- No inventes el producto a partir de lo que ya está seleccionado en Makro, Glovo, Amazon, Día o cualquier otra app.
+
+REGLAS DE COMPRA:
+- Buscar productos, seleccionar variantes/cantidades y pulsar 'Añadir al carrito', 'Añadir a la cesta' o equivalente son acciones REVERSIBLES y debes realizarlas SIN confirmación.
+- Solo devuelve confirm JUSTO ANTES del acto irreversible: Comprar ahora, Realizar pedido, Pagar, Confirmar reserva, Enviar, Publicar, transferencia, borrado irreversible o equivalente.
+- Si el usuario solo quiere preparar/llenar el carrito, NO pulses comprar/pagar.
+- Antes de pulsar Añadir, comprueba si el producto objetivo y la cantidad solicitada YA aparecen en carrito. Si ya están, no vuelvas a añadirlos: devuelve done.
+- Nunca consideres suficiente que exista "Carrito" o "Subtotal": la evidencia debe corresponder al producto/variante y cantidad solicitados en la tarea actual.
+- Después de pulsar Añadir debes observar una pantalla/árbol UI posterior que confirme producto/variante/cantidad o un cambio de contador coherente. Si no puedes verificarlo tras varios intentos, fail; no inventes éxito.
+- En Makro, prioriza campos editables/hints/viewIds con palabras Producto, Buscar, Search. Tras escribir, pulsa el resultado que coincida con la tarea actual; no el producto anterior.
+
+REGLAS DE BUCLE:
+- recentActions contiene acciones recientes. Si ves la misma acción repetida sin cambio útil de UI, NO la repitas indefinidamente. Usa back/scroll/otra estrategia, o fail/clarify.
+- Nunca repitas "Añadir" si ya hay evidencia de que el objetivo actual está satisfecho.
+
+REGLAS DE PRIVACIDAD:
+- Nunca leas ni escribas contraseñas, PIN bancario, CVV ni OTP.
+- Nunca afirmes que algo se completó si la UI no lo confirma.`;
+  const input=[{role:'developer',content:developer},{role:'user',content:JSON.stringify({task:String(task).slice(0,1800),packageName,step:Number(step)||0,recentActions:Array.isArray(recentActions)?recentActions.slice(-8):[],ui:Array.isArray(ui)?ui.slice(0,180):[]})}];
   try { const r=await planWithFallback(input,preferredProvider); const action=cleanJson(r.text); action.provider=r.provider; return res.status(200).json(action); }
   catch(e){ return res.status(503).json({action:'fail',error:'phone_agent_provider_unavailable',message:'No hay un motor disponible para controlar el teléfono.',details:e?.details||[e?.message||'planner_error']}); }
 }
