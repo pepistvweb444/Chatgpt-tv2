@@ -108,20 +108,18 @@ jobs:
       - run: python3 mobile/patch_domotics_rooms.py
       - run: python3 mobile/patch_domotics_quickcard.py
       - run: python3 mobile/patch_homey_cloud.py
-      - name: Add Domótica to main drawer
-        run: python3 mobile/patch_drawer_domotics.py
       - run: python3 mobile/patch_ai_provider_picker.py
       - run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - run: python3 mobile/fix_generated_kotlin.py
-      - name: Preserve final Domótica drawer wiring
-        run: python3 mobile/patch_drawer_domotics.py
+      - name: Final inline widgets and Domótica wiring
+        run: python3 mobile/patch_inline_widgets_domotics.py
       - name: Verify required final UI hooks
         shell: bash
         run: |
           grep -q 'R.id.menuDomotics).setOnClickListener' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'showUnifiedDomoticsWidget()' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'openMediaGuide(message)' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'revealWidgetHost()' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'conversationHost.addView' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'hasCartEvidence' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
       - name: Prepare private Google Home SDK when configured
         shell: bash
@@ -137,23 +135,23 @@ jobs:
           fi
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.12
+      - name: Verify APK is Jarvis Mobile 0.2.13
         shell: bash
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='12' versionName='0.2.12'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='13' versionName='0.2.13'"
           if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then exit 1; fi
       - name: Sign and verify mobile APK
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.12-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.12-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.13-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.13-debug.apk
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.12
-          path: Jarvis-Mobile-v0.2.12-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.13
+          path: Jarvis-Mobile-v0.2.13-debug.apk
           if-no-files-found: error
       - name: Record successful MOBILE run ID
         if: success()
@@ -164,6 +162,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_MOBILE_RUN_ID.txt
-          git commit -m "ci: record signed Jarvis Mobile 0.2.12 APK [skip ci]" || true
+          git commit -m "ci: record signed Jarvis Mobile 0.2.13 APK [skip ci]" || true
           git pull --rebase origin main || true
           git push || true
