@@ -89,4 +89,10 @@ remote = '''            } else if (local.message.startsWith("__MESSAGES_REMOTE__
 if needle in s and '__MESSAGES_REMOTE__|' not in s:
     s = s.replace(needle, remote, 1)
 p.write_text(s)
+
+# Apply final real Android permission check after the unread-inbox transformations.
+real_patch = Path('mobile/patch_real_notification_access.py')
+if real_patch.exists():
+    exec(compile(real_patch.read_text(), str(real_patch), 'exec'))
+
 print('Unified unread inbox patch applied')
