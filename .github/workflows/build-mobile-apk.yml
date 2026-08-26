@@ -93,6 +93,8 @@ jobs:
       - run: python3 mobile/patch_messaging_agenda.py
       - run: python3 mobile/patch_agenda_hardening.py
       - run: python3 mobile/patch_unread_inbox.py
+      - name: Track truly new messages since last Jarvis check
+        run: python3 mobile/patch_new_messages_since_last_check.py
       - run: python3 mobile/patch_handsfree_voice.py
       - run: python3 mobile/patch_persistent_wake_overlay.py
       - run: python3 mobile/patch_today_news_widgets.py
@@ -106,6 +108,8 @@ jobs:
       - run: python3 mobile/patch_direct_tado_commands.py
       - run: python3 mobile/patch_homeconnect_direct.py
       - run: python3 mobile/patch_homeconnect_authcode.py
+      - name: Enforce real Home Connect API devices only
+        run: python3 mobile/patch_homeconnect_strict_real.py
       - run: python3 mobile/patch_domotics_hub.py
       - run: python3 mobile/patch_domotics_rooms.py
       - run: python3 mobile/patch_domotics_quickcard.py
@@ -115,6 +119,8 @@ jobs:
       - run: python3 mobile/fix_generated_kotlin.py
       - name: Final inline widgets and Domótica wiring
         run: python3 mobile/patch_inline_widgets_domotics.py
+      - name: Prevent duplicate assistant responses
+        run: python3 mobile/patch_dedupe_responses.py
       - name: Verify required final UI hooks
         shell: bash
         run: |
@@ -124,7 +130,10 @@ jobs:
           grep -q 'conversationHost.addView' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'hasCartEvidence' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
           grep -q 'hintText' mobile/src/main/java/com/jarvis/mobile/JarvisAccessibilityService.kt
-          grep -qi 'makro' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
+          grep -q 'Makro · buscando' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
+          grep -q 'readNewMessagesSinceLastCheck' mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt
+          grep -q 'Home Connect API' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'lastRenderedAssistantKey' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
       - name: Prepare private Google Home SDK when configured
         shell: bash
         env:
