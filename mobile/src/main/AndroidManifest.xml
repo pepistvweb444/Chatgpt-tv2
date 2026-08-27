@@ -26,6 +26,10 @@
         <package android:name="com.instagram.android" />
         <package android:name="com.facebook.katana" />
         <package android:name="com.facebook.orca" />
+        <package android:name="us.zoom.videomeetings" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.microsoft.teams" />
+        <package android:name="com.google.android.apps.tachyon" />
         <package android:name="com.zhiliaoapp.musically" />
         <package android:name="com.google.android.gm" />
         <package android:name="com.microsoft.office.outlook" />
@@ -62,6 +66,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver android:name=".CallActionReceiver" android:exported="false" />
 
         <service android:name=".MobileSpeechService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <service android:name=".WakeWordService" android:exported="false" android:foregroundServiceType="microphone" />
