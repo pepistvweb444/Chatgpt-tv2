@@ -120,6 +120,8 @@ jobs:
       - run: python3 mobile/patch_domotics_rooms.py
       - run: python3 mobile/patch_domotics_quickcard.py
       - run: python3 mobile/patch_homey_cloud.py
+      - name: Add LG ThinQ connector entry
+        run: python3 mobile/patch_lg_thinq_ui.py
       - run: python3 mobile/patch_ai_provider_picker.py
       - run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - run: python3 mobile/fix_generated_kotlin.py
@@ -145,6 +147,8 @@ jobs:
             "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|/incoming-call"
             "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
             "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
+            "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|LgThinQActivity::class.java"
+            "mobile/src/main/java/com/jarvis/mobile/LgThinQActivity.kt|api-aic.lgthinq.com"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|saveDomoticsRoom"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|homeconnect_devices_cache_at"
           )
@@ -152,7 +156,7 @@ jobs:
             f="${c%%|*}"; q="${c#*|}"
             if grep -Fq "$q" "$f"; then echo "OK $q"; else echo "WARNING missing hook: $q in $f"; fi
           done
-          for f in IncomingCallActivity.kt FavoriteContactsActivity.kt CallStateStore.kt CallActionManager.kt; do
+          for f in IncomingCallActivity.kt FavoriteContactsActivity.kt CallStateStore.kt CallActionManager.kt LgThinQActivity.kt; do
             test -f "mobile/src/main/java/com/jarvis/mobile/$f" && echo "OK $f" || echo "WARNING missing $f"
           done
       - name: Prepare private Google Home SDK when configured
@@ -169,23 +173,23 @@ jobs:
           fi
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.14
+      - name: Verify APK is Jarvis Mobile 0.2.15
         shell: bash
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='14' versionName='0.2.14'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='15' versionName='0.2.15'"
           if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then exit 1; fi
       - name: Sign and verify mobile APK
         shell: bash
         run: |
           KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.14-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.14-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.15-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.15-debug.apk
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.14
-          path: Jarvis-Mobile-v0.2.14-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.15
+          path: Jarvis-Mobile-v0.2.15-debug.apk
           if-no-files-found: error
       - name: Record successful MOBILE run ID
         if: success()
@@ -196,6 +200,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_MOBILE_RUN_ID.txt
-          git commit -m "ci: record signed Jarvis Mobile 0.2.14 APK [skip ci]" || true
+          git commit -m "ci: record signed Jarvis Mobile 0.2.15 APK [skip ci]" || true
           git pull --rebase origin main || true
           git push || true
