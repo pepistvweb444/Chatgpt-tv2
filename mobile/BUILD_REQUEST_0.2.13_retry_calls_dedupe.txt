@@ -1,0 +1,1 @@
+Retry Jarvis Mobile 0.2.13 after making duplicate-response patch tolerant to generated renderer changes.
