@@ -1,0 +1,1 @@
+Rebuild Jarvis Mobile 0.2.14 after Home Connect canonical callback, tolerant dedupe patch, overlay widgets, incoming-call bridge, Makro shopping, new-message tracking, strict real Home Connect devices, inline conversation widgets, and call screening fixes.
