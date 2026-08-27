@@ -1,31 +1,8 @@
 const HC = 'https://api.home-connect.com';
+const HOMECONNECT_CALLBACK = 'https://chatgpt-tv2.vercel.app/api/domotics/homeconnect-callback';
 
 function form(data) {
   return new URLSearchParams(Object.entries(data).filter(([,v]) => v !== undefined && v !== null && String(v).length)).toString();
-}
-
-function publicBase(req) {
-  const configured = String(process.env.JARVIS_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
-  if (configured) return configured;
-  const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  return host ? `${proto}://${host}` : 'https://chatgpt-tv2.vercel.app';
-}
-
-function redirectUri(req) {
-  // Keep one canonical callback path. Older configuration used
-  // /api/domotics/homeconnect/callback, but this repository deploys the
-  // serverless function as /api/domotics/homeconnect-callback.
-  const canonical = `${publicBase(req)}/api/domotics/homeconnect-callback`;
-  const configured = String(process.env.HOMECONNECT_REDIRECT_URI || '').trim();
-  if (!configured) return canonical;
-  try {
-    const u = new URL(configured);
-    if (u.pathname === '/api/domotics/homeconnect/callback') return canonical;
-    return configured;
-  } catch {
-    return canonical;
-  }
 }
 
 async function postForm(url, data) {
@@ -46,7 +23,7 @@ export default async function handler(req, res) {
 
   const clientId = String(process.env.HOMECONNECT_CLIENT_ID || '').trim();
   const clientSecret = String(process.env.HOMECONNECT_CLIENT_SECRET || '').trim();
-  const redirect = redirectUri(req);
+  const redirect = HOMECONNECT_CALLBACK;
   const scope = String(process.env.HOMECONNECT_SCOPES || process.env.HOMECONNECT_SCOPE || 'IdentifyAppliance Monitor Control Settings').trim();
   if (!clientId) return res.status(503).json({ error: 'HOMECONNECT_CLIENT_ID_not_configured' });
 
