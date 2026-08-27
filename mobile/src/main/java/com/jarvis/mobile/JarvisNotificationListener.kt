@@ -103,7 +103,7 @@ class JarvisNotificationListener : NotificationListenerService() {
             source.packageName.contains("meet", true) -> "Google Meet"
             else -> source.packageName.substringAfterLast('.')
         }
-        val iconData = runCatching { CallStateStore.drawableToBase64(n.largeIcon?.loadDrawable(this)) }.getOrDefault("")
+        val iconData = runCatching { CallStateStore.drawableToBase64(n.getLargeIcon()?.loadDrawable(this)) }.getOrDefault("")
         val blob = "$title $body".lowercase()
         val call = JSONObject().put("id", UUID.randomUUID().toString()).put("active", true).put("state", "ringing")
             .put("source", "voip").put("app", app).put("package", source.packageName).put("notificationKey", source.key)
