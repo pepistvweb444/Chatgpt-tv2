@@ -114,4 +114,7 @@ if 'Makro · buscando $product' not in s:
     s=s.replace(needle,replacement,1)
 
 p.write_text(s)
-print('Makro deterministic search targeting, accessibility hints and extended shopping flow applied')
+
+# Apply the stricter state machine that submits the search, selects the result and then Add to cart.
+exec(Path('mobile/patch_makro_deterministic.py').read_text(), {'__name__':'__main__'})
+print('Makro deterministic search targeting, result selection and cart flow applied')
