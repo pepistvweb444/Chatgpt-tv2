@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 p=Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s=p.read_text()
@@ -34,7 +33,7 @@ s,ok=replace_fun(s,'beginHomeConnectLogin',new_begin)
 if not ok: raise SystemExit('beginHomeConnectLogin not found')
 
 new_complete=r'''    private fun completeHomeConnectLogin() {
-        Toast.makeText(this,"Termina el inicio de sesión en la página de Home Connect. Jarvis volverá automáticamente al finalizar.",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"Termina el inicio de sesión en Home Connect. Al autorizar, vuelve a Jarvis automáticamente; si el navegador muestra un botón Volver a Jarvis, púlsalo.",Toast.LENGTH_LONG).show()
     }'''
 s,_=replace_fun(s,'completeHomeConnectLogin',new_complete)
 
@@ -47,7 +46,8 @@ methods=r'''    private fun handleHomeConnectOAuthIntent(i: Intent?) {
         val state=u.getQueryParameter("state").orEmpty()
         val expected=prefs.getString("homeconnect_oauth_state","").orEmpty()
         if(expected.isNotBlank()&&state.isNotBlank()&&state!=expected){Toast.makeText(this,"Home Connect: respuesta OAuth no válida",Toast.LENGTH_LONG).show();return}
-        val code=u.getQueryParameter("code").orEmpty(); if(code.isBlank()) return
+        val code=u.getQueryParameter("code").orEmpty()
+        if(code.isBlank()){ Toast.makeText(this,"Home Connect no devolvió código de autorización",Toast.LENGTH_LONG).show(); return }
         status.text="Home Connect · completando autorización…"
         Thread{
             try{
@@ -69,20 +69,24 @@ methods=r'''    private fun handleHomeConnectOAuthIntent(i: Intent?) {
     }
 
 '''
-if 'handleHomeConnectOAuthIntent' not in s:
+if 'private fun handleHomeConnectOAuthIntent' not in s:
     if marker not in s: raise SystemExit('marker not found')
     s=s.replace(marker,methods+marker,1)
 
-# Process callback after views/prefs are initialized.
+# Always process OAuth callback on cold start after views are initialized.
 needle='        warmLocation()\n'
-if 'handleHomeConnectOAuthIntent(intent)' not in s and needle in s:
-    s=s.replace(needle,needle+'        handleHomeConnectOAuthIntent(intent)\n',1)
+if needle in s:
+    after=needle+'        handleHomeConnectOAuthIntent(intent)\n'
+    # Avoid duplicate immediately after warmLocation only.
+    if after not in s:
+        s=s.replace(needle,after,1)
 
-# Deep-link callback from Vercel.
-if 'android:scheme="jarvis"' not in ms:
+# Add Home Connect deep link specifically; existing jarvis://homey must not suppress this.
+if 'android:host="homeconnect"' not in ms:
     target='''            <intent-filter>\n                <action android:name="android.intent.action.MAIN" />\n                <category android:name="android.intent.category.LAUNCHER" />\n            </intent-filter>'''
     repl=target+'''\n            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="jarvis" android:host="homeconnect" />\n            </intent-filter>'''
+    if target not in ms: raise SystemExit('MainActivity launcher intent-filter not found')
     ms=ms.replace(target,repl,1)
 
 p.write_text(s);mp.write_text(ms)
-print('Home Connect authorization-code OAuth patch applied')
+print('Home Connect authorization-code OAuth callback fixed for deep link + cold start')
