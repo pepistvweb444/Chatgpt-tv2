@@ -43,4 +43,7 @@ if 'android.permission.WAKE_LOCK' not in s:
 if '.CallActionReceiver' not in s:
     s=s.replace('''        <service android:name=".MobileSpeechService"''', '''        <receiver android:name=".CallActionReceiver" android:exported="false" />\n\n        <service android:name=".MobileSpeechService"''')
 p.write_text(s)
-print('Authenticated mobile-to-TV call bridge applied')
+
+# Also force missed-call queries to use the real Android CallLog and request READ_CALL_LOG.
+exec(Path('mobile/patch_real_call_log.py').read_text(), {'__name__':'__main__'})
+print('Authenticated mobile-to-TV call bridge + real Android call log applied')
