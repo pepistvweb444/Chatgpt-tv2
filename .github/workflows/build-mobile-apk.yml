@@ -93,6 +93,8 @@ jobs:
       - run: python3 mobile/patch_remote_control.py
       - name: Add authenticated incoming-call bridge for Jarvis TV
         run: python3 mobile/patch_call_bridge.py
+      - name: Unify current incoming-call state for mobile and TV
+        run: python3 mobile/patch_unified_call_bridge.py
       - run: python3 mobile/patch_pairing_pin.py
       - run: python3 mobile/patch_tv_sync.py
       - run: python3 mobile/patch_chat_sync_bridge.py
@@ -148,7 +150,7 @@ jobs:
             "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt|recentAgentActions"
             "mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt|readNewMessagesSinceLastCheck"
             "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|ROLE_CALL_SCREENING"
-            "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|/incoming-call"
+            "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|CallStateStore.current(this)"
             "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
             "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
             "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|LgThinQActivity::class.java"
