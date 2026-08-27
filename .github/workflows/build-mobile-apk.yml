@@ -122,6 +122,10 @@ jobs:
       - run: python3 mobile/patch_homey_cloud.py
       - name: Add LG ThinQ connector entry
         run: python3 mobile/patch_lg_thinq_ui.py
+      - name: Add LG ThinQ devices to unified domotics
+        run: python3 mobile/patch_thinq_connect.py
+      - name: Route LG ThinQ UI through backend
+        run: python3 mobile/patch_thinq_backend_ui.py
       - run: python3 mobile/patch_ai_provider_picker.py
       - run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - run: python3 mobile/fix_generated_kotlin.py
@@ -148,7 +152,8 @@ jobs:
             "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
             "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
             "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|LgThinQActivity::class.java"
-            "mobile/src/main/java/com/jarvis/mobile/LgThinQActivity.kt|api-aic.lgthinq.com"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|fetchThinQDevices"
+            "mobile/src/main/java/com/jarvis/mobile/LgThinQActivity.kt|/api/domotics/thinq"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|saveDomoticsRoom"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|homeconnect_devices_cache_at"
           )
@@ -169,7 +174,12 @@ jobs:
           if [ -n "$GOOGLE_HOME_SDK_FRAMEWORK_B64" ] && [ -n "$GOOGLE_HOME_SDK_TYPES_B64" ]; then
             printf '%s' "$GOOGLE_HOME_SDK_FRAMEWORK_B64" | base64 -d > mobile/libs/play-services-home.aar
             printf '%s' "$GOOGLE_HOME_SDK_TYPES_B64" | base64 -d > mobile/libs/play-services-home-types.aar
+            test -s mobile/libs/play-services-home.aar
+            test -s mobile/libs/play-services-home-types.aar
             cp mobile/google-home-sdk/GoogleHomeActivity.kt.template mobile/src/main/java/com/jarvis/mobile/GoogleHomeActivity.kt
+            echo "Google Home SDK AARs installed into mobile APK build"
+          else
+            echo "Google Home SDK not injected: add GOOGLE_HOME_SDK_FRAMEWORK_B64 and GOOGLE_HOME_SDK_TYPES_B64 GitHub secrets"
           fi
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
