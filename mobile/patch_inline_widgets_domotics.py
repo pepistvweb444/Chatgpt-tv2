@@ -1,10 +1,10 @@
 from pathlib import Path
-p=Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
-s=p.read_text()
 
 # All dynamic response widgets belong to the conversation flow, directly after
 # the user's message. The old dedicated widgetHost lives above conversationHost
 # in the layout, which made results appear at the top of the chat.
+src = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
+s = src.read_text()
 s=s.replace('widgetHost.addView(', 'conversationHost.addView(')
 s=s.replace('widgetHost.removeAllViews(); widgetHost.visibility = View.VISIBLE; welcomePanel.visibility = View.GONE',
             'widgetHost.visibility = View.GONE; welcomePanel.visibility = View.GONE')
@@ -42,5 +42,28 @@ if needle in s:
 
     private fun addTextWidget''', 1)
 
-p.write_text(s)
-print('Inline conversation widgets + final Domótica drawer listener applied')
+# Expose Homey Cloud directly in the Connectors dialog. Previously HomeyActivity
+# existed but the connectors UI only showed a generic explanatory message.
+old='''    private fun showConnections() { AlertDialog.Builder(this).setTitle("Complementos y MCP").setMessage("Usa el botón + junto al campo de texto para elegir las aplicaciones y MCP con las que quieres hablar.").setPositiveButton("Aceptar", null).show() }'''
+new='''    private fun showConnections() {
+        val items = arrayOf("Homey Cloud", "Home Connect", "Google Home", "Otros MCP")
+        AlertDialog.Builder(this)
+            .setTitle("Conectores")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> startActivity(Intent(this, HomeyActivity::class.java))
+                    1 -> showHomeConnectSettings()
+                    2 -> runCatching { startActivity(Intent(this, GoogleHomeActivity::class.java)) }
+                    else -> showToolPicker()
+                }
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }'''
+if old in s:
+    s=s.replace(old,new,1)
+elif 'private fun showConnections()' in s and 'Homey Cloud' not in s[s.find('private fun showConnections()'):s.find('private fun showConnections()')+1200]:
+    raise SystemExit('showConnections exists but has an unexpected format')
+
+src.write_text(s)
+print('Inline conversation widgets + final Domótica drawer listener + Homey connector applied')
