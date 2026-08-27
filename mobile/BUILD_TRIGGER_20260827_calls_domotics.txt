@@ -1,0 +1,1 @@
+Retrigger Jarvis Mobile build after dedupe patch fix. Continue call-screening + cloud-only domotics integration. 2026-08-27
