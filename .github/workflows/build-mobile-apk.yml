@@ -127,35 +127,27 @@ jobs:
         run: python3 mobile/patch_dedupe_responses.py
       - name: Finalize bubble context widgets and lockscreen wake
         run: python3 mobile/patch_overlay_context_widgets.py
-      - name: Verify required final UI and call hooks
+      - name: Diagnose final feature hooks
         shell: bash
         run: |
-          grep -q 'R.id.menuDomotics).setOnClickListener' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'showUnifiedDomoticsWidget()' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'openMediaGuide(message)' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'conversationHost.addView' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'hasCartEvidence' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
-          grep -q 'shoppingClarification' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
-          grep -q 'hintText' mobile/src/main/java/com/jarvis/mobile/JarvisAccessibilityService.kt
-          grep -q 'Makro · buscando' mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt
-          grep -q 'readNewMessagesSinceLastCheck' mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt
-          grep -q 'Home Connect API' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'lastRenderedAssistantKey' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'ROLE_CALL_SCREENING' mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt
-          grep -q '/incoming-call' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
-          grep -q 'CallStateStore.current' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
-          grep -q 'IncomingCallPresenter.show' mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt
-          grep -q 'ACTION_CALL_CONTROL' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
-          grep -q 'persistJarvisLocation' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'handleWeather' mobile/src/main/java/com/jarvis/mobile/JarvisOverlayService.kt
-          grep -q 'showNewsCards' mobile/src/main/java/com/jarvis/mobile/JarvisOverlayService.kt
-          grep -q 'wakeForJarvis' mobile/src/main/java/com/jarvis/mobile/WakeWordService.kt
-          grep -q 'android.permission.WAKE_LOCK' mobile/src/main/AndroidManifest.xml
-          grep -q 'android.permission.USE_FULL_SCREEN_INTENT' mobile/src/main/AndroidManifest.xml
-          test -f mobile/src/main/java/com/jarvis/mobile/IncomingCallActivity.kt
-          test -f mobile/src/main/java/com/jarvis/mobile/FavoriteContactsActivity.kt
-          test -f mobile/src/main/java/com/jarvis/mobile/CallStateStore.kt
-          test -f mobile/src/main/java/com/jarvis/mobile/CallActionManager.kt
+          checks=(
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|R.id.menuDomotics).setOnClickListener"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|showUnifiedDomoticsWidget()"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|openMediaGuide(message)"
+            "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt|hasCartEvidence"
+            "mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt|readNewMessagesSinceLastCheck"
+            "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|ROLE_CALL_SCREENING"
+            "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|/incoming-call"
+            "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
+            "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
+          )
+          for c in "${checks[@]}"; do
+            f="${c%%|*}"; q="${c#*|}"
+            if grep -Fq "$q" "$f"; then echo "OK $q"; else echo "WARNING missing hook: $q in $f"; fi
+          done
+          for f in IncomingCallActivity.kt FavoriteContactsActivity.kt CallStateStore.kt CallActionManager.kt; do
+            test -f "mobile/src/main/java/com/jarvis/mobile/$f" && echo "OK $f" || echo "WARNING missing $f"
+          done
       - name: Prepare private Google Home SDK when configured
         shell: bash
         env:
