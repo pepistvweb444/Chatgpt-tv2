@@ -129,6 +129,8 @@ jobs:
         run: python3 mobile/patch_dedupe_responses.py
       - name: Finalize bubble context widgets and lockscreen wake
         run: python3 mobile/patch_overlay_context_widgets.py
+      - name: Persist room assignments and throttle Home Connect
+        run: python3 mobile/patch_domotics_persistence_rate_limit.py
       - name: Diagnose final feature hooks
         shell: bash
         run: |
@@ -143,6 +145,8 @@ jobs:
             "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|/incoming-call"
             "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
             "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|saveDomoticsRoom"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|homeconnect_devices_cache_at"
           )
           for c in "${checks[@]}"; do
             f="${c%%|*}"; q="${c#*|}"
