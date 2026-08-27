@@ -4,57 +4,46 @@ import re
 p=Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s=p.read_text()
 
-# State for short-window duplicate suppression.
+# This is a best-effort build-time guard. It must never abort the APK build
+# when another patch has renamed or reshaped the renderer.
 if 'lastRenderedAssistantKey' not in s:
-    anchors = [
-        '    private var lastLocation: Location? = null',
-        '    private lateinit var conversationHost:',
-        'class MainActivity :'
-    ]
-    inserted=False
-    for anchor in anchors:
-        if anchor in s:
-            if anchor.startswith('class MainActivity'):
-                m=re.search(r'class\s+MainActivity[^\{]*\{', s)
-                if m:
-                    pos=m.end()
-                    s=s[:pos]+'\n    private var lastRenderedAssistantKey: String = ""\n    private var lastRenderedAssistantAt: Long = 0L\n'+s[pos:]
-                    inserted=True
-                    break
-            else:
-                idx=s.index(anchor)
-                line_end=s.find('\n',idx)
-                s=s[:line_end+1]+'    private var lastRenderedAssistantKey: String = ""\n    private var lastRenderedAssistantAt: Long = 0L\n'+s[line_end+1:]
-                inserted=True
-                break
-    if not inserted:
-        raise SystemExit('dedupe state insertion point not found')
-
-# Locate renderMessageCard without assuming its exact parameter list/default values.
-if 'key == lastRenderedAssistantKey' not in s:
-    m = re.search(r'\bfun\s+renderMessageCard\s*\(', s)
-    if not m:
-        # Do not break an otherwise valid APK just because the renderer was renamed.
-        print('renderMessageCard not present; duplicate guard skipped safely')
+    m=re.search(r'class\s+MainActivity[^\{]*\{', s)
+    if m:
+        pos=m.end()
+        s=s[:pos]+'\n    private var lastRenderedAssistantKey: String = ""\n    private var lastRenderedAssistantAt: Long = 0L\n'+s[pos:]
+    else:
+        print('MainActivity class anchor not found; dedupe patch skipped safely')
         p.write_text(s)
         raise SystemExit(0)
-    start=m.start()
+
+if 'key == lastRenderedAssistantKey' not in s:
+    # Accept private/public/override renderer declarations and arbitrary signatures.
+    m=re.search(r'(?:private\s+|public\s+|protected\s+|override\s+)*fun\s+renderMessageCard\s*\(', s)
+    if not m:
+        print('renderMessageCard not present after generated patches; dedupe guard skipped safely')
+        p.write_text(s)
+        raise SystemExit(0)
     open_paren=s.find('(',m.start())
     depth=0; close_paren=-1
     for i in range(open_paren,len(s)):
-        ch=s[i]
-        if ch=='(': depth+=1
-        elif ch==')':
+        if s[i]=='(': depth+=1
+        elif s[i]==')':
             depth-=1
             if depth==0:
                 close_paren=i; break
     if close_paren < 0:
-        print('renderMessageCard signature incomplete; duplicate guard skipped safely')
+        print('renderMessageCard signature incomplete; dedupe guard skipped safely')
         p.write_text(s)
         raise SystemExit(0)
     brace=s.find('{',close_paren)
     if brace < 0:
-        print('renderMessageCard body not found; duplicate guard skipped safely')
+        print('renderMessageCard body not found; dedupe guard skipped safely')
+        p.write_text(s)
+        raise SystemExit(0)
+    # Only inject when conventional role/text parameters are present.
+    signature=s[m.start():close_paren+1]
+    if not re.search(r'\brole\s*:', signature) or not re.search(r'\btext\s*:', signature):
+        print('renderMessageCard has non-standard parameters; dedupe guard skipped safely')
         p.write_text(s)
         raise SystemExit(0)
     guard='''\n        if (role == "assistant") {\n            val now = System.currentTimeMillis()\n            val key = text.trim().replace(Regex("\\\\s+"), " ")\n            if (key.isNotBlank() && key == lastRenderedAssistantKey && now - lastRenderedAssistantAt < 6000L) return\n            lastRenderedAssistantKey = key\n            lastRenderedAssistantAt = now\n        }'''
