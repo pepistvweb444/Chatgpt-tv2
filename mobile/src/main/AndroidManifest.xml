@@ -49,6 +49,7 @@
     <application android:allowBackup="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
         <activity android:name=".IncomingCallActivity" android:exported="false" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" />
         <activity android:name=".FavoriteContactsActivity" android:exported="false" />
+        <activity android:name=".LgThinQActivity" android:exported="false" />
         <activity android:name=".GoogleHomeActivity" android:exported="false" />
         <activity android:name=".HomeyActivity" android:exported="true" android:launchMode="singleTask">
             <intent-filter>
