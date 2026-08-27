@@ -1,0 +1,6 @@
+Jarvis Mobile v0.2.14 clean build request
+- resilient duplicate-response patch
+- incoming call screening role
+- caller card / contact photo / spam classification
+- answer / reject / leave ringing
+- authenticated mobile-TV call bridge
