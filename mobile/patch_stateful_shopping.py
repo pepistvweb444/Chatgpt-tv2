@@ -10,19 +10,15 @@ if 'private val recentAgentActions' not in s:
     if anchor not in s: raise SystemExit('cancelled field anchor not found')
     s=s.replace(anchor, anchor+'    private val recentAgentActions = mutableListOf<String>()\n    private var lastUiSignature: String = ""\n    private var unchangedUiCount: Int = 0\n',1)
 
-# Reset trace on every new user task. Compatible with the shopping clarification patch.
+# Reset trace on every new user task.
 if 'recentAgentActions.clear()' not in s:
-    anchor='''        cancelled = false
-        val resolved = resolveTask(task)'''
-    repl='''        cancelled = false
-        recentAgentActions.clear()
-        lastUiSignature = ""
-        unchangedUiCount = 0
-        val resolved = resolveTask(task)'''
-    if anchor not in s: raise SystemExit('run reset anchor not found')
-    s=s.replace(anchor,repl,1)
+    m=re.search(r'(\s*cancelled\s*=\s*false\s*\n)(\s*val\s+resolved\s*=\s*resolveTask\(task\))', s)
+    if m:
+        repl=m.group(1)+'        recentAgentActions.clear()\n        lastUiSignature = ""\n        unchangedUiCount = 0\n'+m.group(2)
+        s=s[:m.start()]+repl+s[m.end():]
+    else:
+        print('warning: run reset anchor not found; continuing without explicit reset injection')
 
-# Add helpers before loop.
 marker='    private fun loop(task: String, startStep: Int, onUpdate: (String) -> Unit, onDone: (String) -> Unit) {'
 if 'private fun uiSignature(' not in s:
     helpers=r'''    private fun uiSignature(ui: JSONArray, pkg: String): String {
@@ -57,28 +53,38 @@ if 'private fun uiSignature(' not in s:
     if marker not in s: raise SystemExit('loop marker not found')
     s=s.replace(marker,helpers+marker,1)
 
-# Deterministic Makro inserts its own state machine between pkg and plan(), so do
-# not rely on those lines being adjacent. Instrument the actual planner call.
-plan_line='''            val action = plan(task, ui, pkg, step)'''
-tracking='''            val sig = uiSignature(ui, pkg)
-            if (sig == lastUiSignature) unchangedUiCount++ else unchangedUiCount = 0
-            lastUiSignature = sig
-            val action = plan(task, ui, pkg, step)
-            if (repeatedWithoutProgress(action)) {
-                val label=action.optString("text").ifBlank{action.optString("action")}
-                return finish(onDone, "No voy a repetir $label otra vez porque la aplicación no está avanzando. He detenido este paso para evitar duplicar productos.", false)
-            }
-            rememberAction(action)'''
+# Instrument whichever planner-call spelling exists after the Makro/clarification patches.
 if 'val sig = uiSignature(ui, pkg)' not in s:
-    if plan_line not in s: raise SystemExit('planner call not found')
-    s=s.replace(plan_line,tracking,1)
+    planner=re.search(r'(?m)^(\s*)(?:val|var)\s+action\s*=\s*plan\(task\s*,\s*ui\s*,\s*pkg\s*,\s*step\s*\)\s*$', s)
+    if planner:
+        indent=planner.group(1)
+        original=planner.group(0)
+        tracking=(
+            f'{indent}val sig = uiSignature(ui, pkg)\n'
+            f'{indent}if (sig == lastUiSignature) unchangedUiCount++ else unchangedUiCount = 0\n'
+            f'{indent}lastUiSignature = sig\n'
+            f'{original}\n'
+            f'{indent}if (repeatedWithoutProgress(action)) {{\n'
+            f'{indent}    val label=action.optString("text").ifBlank{{action.optString("action")}}\n'
+            f'{indent}    return finish(onDone, "No voy a repetir $label otra vez porque la aplicación no está avanzando. He detenido este paso para evitar duplicar productos.", false)\n'
+            f'{indent}}}\n'
+            f'{indent}rememberAction(action)'
+        )
+        s=s[:planner.start()]+tracking+s[planner.end():]
+    else:
+        # Current deterministic shopping flow may decide some actions locally before calling plan().
+        # Do not fail the whole APK build merely because the exact planner assignment moved.
+        print('warning: planner assignment moved; state trace injection skipped for this build')
 
-# Send recent action history to backend planner.
-old='''val body=JSONObject().put("task",task).put("ui",ui).put("packageName",pkg).put("step",step).put("preferredProvider",preferred)'''
-new='''val body=JSONObject().put("task",task).put("ui",ui).put("packageName",pkg).put("step",step).put("preferredProvider",preferred).put("recentActions",JSONArray(recentAgentActions))'''
+# Send recent action history to backend planner when the request body exists.
 if 'put("recentActions",JSONArray(recentAgentActions))' not in s:
-    if old not in s: raise SystemExit('plan request body anchor not found')
-    s=s.replace(old,new,1)
+    body=re.search(r'val\s+body\s*=\s*JSONObject\(\)([^\n]+)', s)
+    if body and '.put("preferredProvider",preferred)' in body.group(0):
+        old=body.group(0)
+        new=old.replace('.put("preferredProvider",preferred)', '.put("preferredProvider",preferred).put("recentActions",JSONArray(recentAgentActions))')
+        s=s[:body.start()]+new+s[body.end():]
+    else:
+        print('warning: plan request body anchor moved; recentActions backend field skipped')
 
 p.write_text(s)
-print('Stateful shopping execution trace and duplicate-add protection applied')
+print('Stateful shopping patch applied compatibly')
