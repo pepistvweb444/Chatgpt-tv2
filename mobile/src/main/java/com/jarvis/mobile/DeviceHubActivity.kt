@@ -18,8 +18,10 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.util.UUID
 
 class DeviceHubActivity : Activity() {
     private lateinit var permissionStatus: TextView
@@ -41,6 +43,25 @@ class DeviceHubActivity : Activity() {
             if (permissions.isNotEmpty()) ActivityCompat.requestPermissions(this, permissions, 50) else Toast.makeText(this, "Permisos ya concedidos", Toast.LENGTH_SHORT).show()
         }
         add("Activar Jarvis para identificar llamadas") { requestCallScreeningRole() }
+        add("Diagnóstico de llamadas entrantes") {
+            val screening = callScreeningEnabled()
+            val answer = ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED
+            val contacts = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            val notifications = if (Build.VERSION.SDK_INT < 33) true else ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            val bridge = getSharedPreferences("jarvis_mobile", MODE_PRIVATE).getBoolean("bridge_running", false)
+            Toast.makeText(this, "Identificador: ${if(screening) "ACTIVO" else "INACTIVO"}\nResponder llamadas: ${if(answer) "OK" else "FALTA"}\nContactos/fotos: ${if(contacts) "OK" else "FALTA"}\nNotificaciones Jarvis: ${if(notifications) "OK" else "FALTA"}\nPuente TV: ${if(bridge) "ACTIVO" else "INACTIVO"}", Toast.LENGTH_LONG).show()
+        }
+        add("Probar tarjeta de llamada entrante") {
+            val call = JSONObject()
+                .put("id", UUID.randomUUID().toString()).put("active", true).put("state", "ringing")
+                .put("source", "test").put("app", "Prueba Jarvis").put("number", "+34 600 000 000")
+                .put("name", "Llamada de prueba").put("knownContact", false).put("priority", false).put("recent", false)
+                .put("classification", "unknown").put("spamScore", 0).put("spamSources", "")
+                .put("publicLabel", "").put("publicSource", "").put("photoData", "").put("video", false)
+                .put("time", System.currentTimeMillis()).put("updatedAt", System.currentTimeMillis())
+            CallStateStore.save(this, call)
+            IncomingCallPresenter.show(this, call)
+        }
         add("Contactos prioritarios / favoritos") { startActivity(Intent(this, FavoriteContactsActivity::class.java)) }
         add("Activar acceso a WhatsApp / RCS / redes / correo") { openNotificationListenerSettings(); Toast.makeText(this, "Activa Jarvis en Acceso a notificaciones.", Toast.LENGTH_LONG).show() }
         add("Reiniciar lector de mensajes") { runCatching { NotificationListenerService.requestRebind(ComponentName(this, JarvisNotificationListener::class.java)) }; refreshStatus() }
