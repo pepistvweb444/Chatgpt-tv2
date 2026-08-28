@@ -21,13 +21,16 @@ methods = r'''    private fun maybeRequestCallScreeningRole() {
         if (Build.VERSION.SDK_INT < 29) return
         val rm = getSystemService(RoleManager::class.java) ?: return
         if (!rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING) || rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) return
-        val key = "call_screening_role_prompted_0216"
-        if (prefs.getBoolean(key, false)) return
-        prefs.edit().putBoolean(key, true).apply()
+        // Do not permanently suppress this after one dismissal. If Jarvis is not
+        // actually the screening app, remind again after a short cooldown.
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong("call_screening_role_last_prompt", 0L)
+        if (now - last < 6L * 60L * 60L * 1000L) return
+        prefs.edit().putLong("call_screening_role_last_prompt", now).apply()
         window.decorView.postDelayed({
             AlertDialog.Builder(this)
                 .setTitle("Activar llamadas Jarvis")
-                .setMessage("Para identificar una llamada entrante, mostrar el contacto/spam y permitir responder también desde Jarvis TV, Android debe autorizar a Jarvis como app de identificación y cribado de llamadas.")
+                .setMessage("Para que Jarvis detecte una llamada entrante, muestre el contacto/spam y permita responder también desde Jarvis TV, Android debe seleccionar Jarvis como app de identificación y cribado de llamadas.")
                 .setPositiveButton("ACTIVAR") { _, _ ->
                     runCatching { startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING), 5401) }
                 }
@@ -51,12 +54,12 @@ if 'private fun maybeRequestCallScreeningRole()' not in s:
         raise SystemExit('MainActivity dp marker not found')
     s = s.replace(marker, methods + marker, 1)
 
-# Extend the existing onActivityResult rather than adding a second override.
 profile = '''        if (requestCode == REQ_PROFILE_IMAGE && resultCode == RESULT_OK) {'''
 role_block = '''        if (requestCode == 5401) {
             if (Build.VERSION.SDK_INT >= 29) {
                 val held = runCatching { getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING) }.getOrDefault(false)
                 if (held) {
+                    prefs.edit().remove("call_screening_role_last_prompt").apply()
                     runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }
                     Toast.makeText(this, "Jarvis ya identifica llamadas y las comparte con Jarvis TV", Toast.LENGTH_LONG).show()
                 } else Toast.makeText(this, "El identificador de llamadas Jarvis sigue desactivado", Toast.LENGTH_LONG).show()
@@ -68,7 +71,6 @@ if 'requestCode == 5401' not in s:
         raise SystemExit('MainActivity onActivityResult anchor not found')
     s = s.replace(profile, role_block + profile, 1)
 
-# Keep connector dialog final and deterministic.
 start = s.find('    private fun showConnections()')
 if start >= 0:
     brace = s.find('{', start)
@@ -101,8 +103,6 @@ if start >= 0:
 
 p.write_text(s)
 
-# DeviceHub: explicit recovery buttons for both mandatory role and Android 14+
-# full-screen call notification permission.
 d = Path('mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt')
 t = d.read_text()
 needle = '        add("Activar Jarvis para identificar llamadas") { requestCallScreeningRole() }\n'
@@ -116,7 +116,7 @@ extra = needle + '''        add("Permitir aviso de llamada a pantalla completa")
 if 'Permitir aviso de llamada a pantalla completa' not in t and needle in t:
     t = t.replace(needle, extra, 1)
 old = 'if(requestCode==54){ Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
-new = 'if(requestCode==54){ if(resultCode==RESULT_OK) runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }; Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
+new = 'if(requestCode==54){ if(resultCode==RESULT_OK) { getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().remove("call_screening_role_last_prompt").apply(); runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) } }; Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
 t = t.replace(old, new)
 d.write_text(t)
-print('Reliable call-screening activation + immediate TV bridge + full-screen alerts applied')
+print('Persistent call-screening activation + immediate TV bridge + full-screen alerts applied')
