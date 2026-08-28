@@ -1,1 +1,1 @@
-Trigger mobile build with latest fixes: TV/streaming widgets, visible phone-agent results, continuous TTS, Domótica drawer, Homey Cloud, Vosk wake overlay.
+Trigger Jarvis Mobile 0.2.16 rebuild on 2026-08-28 22:03 Europe/Madrid with latest fixes: incoming call screening and TV bridge, WhatsApp/VoIP call state, Makro shopping, new messages since last check, real Home Connect devices, domotics rooms, inline widgets, continuous TTS, wake overlay, and duplicate-response suppression.
