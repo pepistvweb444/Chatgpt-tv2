@@ -6,7 +6,11 @@ s=p.read_text()
 if 'fun incomingCall()' not in s:
     s=s.replace('''    fun agenda(): JSONObject = get("/agenda", auth = true)''', '''    fun agenda(): JSONObject = get("/agenda", auth = true)
 
-    fun incomingCall(): JSONObject = get("/incoming-call", auth = true)
+    fun incomingCall(): JSONObject {
+        val raw = get("/incoming-call", auth = true)
+        val nested = raw.optJSONObject("call")
+        return if (nested != null) JSONObject(nested.toString()).put("kind", raw.optString("kind")) else raw
+    }
 
     fun callAction(action: String): JSONObject = get("/call-action?action=${URLEncoder.encode(action, "UTF-8")}", auth = true)''')
 p.write_text(s)
