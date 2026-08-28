@@ -4,7 +4,8 @@ import sys
 checks = {
     "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt": [
         "toggleEmbeddedVoiceRecognition",
-        "RoomEntry",
+        "showRoomAssignmentDialog",
+        "showUnifiedDomoticsWidget",
         "homey_devices_json",
         "PhoneAgentController",
     ],
@@ -23,10 +24,17 @@ checks = {
     "mobile/src/main/java/com/jarvis/mobile/JarvisOverlayService.kt": [
         "WindowManager",
     ],
+    "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt": [
+        "IncomingCallPresenter.show",
+    ],
+    "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt": [
+        "CallStateStore.current(this)",
+    ],
     "mobile/src/main/AndroidManifest.xml": [
         ".HomeyActivity",
         ".JarvisAccessibilityService",
         ".WakeWordService",
+        ".JarvisCallScreeningService",
     ],
 }
 
@@ -51,5 +59,6 @@ print("Jarvis feature validation OK")
 print(" - embedded Vosk voice present")
 print(" - persistent wake/overlay present")
 print(" - Homey Cloud integration present")
-print(" - rooms/domotics integration present")
+print(" - room assignment/domotics integration present")
 print(" - phone agent browser/app helpers present")
+print(" - incoming call mobile/TV bridge hooks present")
