@@ -28,7 +28,7 @@ class DeviceHubActivity : Activity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32,32,32,32); setBackgroundColor(0xFF0B0B0B.toInt()) }
         root.addView(TextView(this).apply { text = "Control del teléfono"; textSize = 26f; setTextColor(0xFFFFFFFF.toInt()) })
-        root.addView(TextView(this).apply { text = "Llamadas · SMS/RCS · WhatsApp · apps/navegador · Homey · puente con TV"; textSize = 15f; setTextColor(0xFFB8B8B8.toInt()); setPadding(0,8,0,16) })
+        root.addView(TextView(this).apply { text = "Llamadas · SMS/RCS · WhatsApp · apps/navegador · Homey · LG ThinQ · puente con TV"; textSize = 15f; setTextColor(0xFFB8B8B8.toInt()); setPadding(0,8,0,16) })
         permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(0xFFE0E0E0.toInt()); setPadding(0,0,0,14) }
         root.addView(permissionStatus)
         refreshStatus()
@@ -70,6 +70,7 @@ class DeviceHubActivity : Activity() {
         add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this, "Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}", Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this, "No se pudo iniciar el puente TV", Toast.LENGTH_LONG).show() } }
         add("Detener puente con TV") { stopService(Intent(this, PhoneBridgeService::class.java)) }
         add("Homey Cloud · luces y dispositivos") { startActivity(Intent(this, HomeyActivity::class.java)) }
+        add("LG ThinQ · conectar / API") { startActivity(Intent(this, LgThinQActivity::class.java)) }
         add("Acceso a notificaciones") { openNotificationListenerSettings() }
         add("Control de aplicaciones · Accesibilidad") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         add("Abrir navegador") { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))) }
@@ -109,6 +110,7 @@ class DeviceHubActivity : Activity() {
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
         val listenerConnected = prefs.getBoolean("notification_listener_connected", false)
         val homeyConnected = prefs.getString("homey_session", "").orEmpty().isNotBlank()
+        val thinQConnected = prefs.getString("lg_thinq_pat", "").orEmpty().isNotBlank()
         val priorityCount = runCatching { JSONArray(prefs.getString("priority_contacts_json","[]")).length() }.getOrDefault(0)
         val contacts = if (granted(Manifest.permission.READ_CONTACTS)) "✓" else "✗"
         val phone = if (granted(Manifest.permission.CALL_PHONE)) "✓" else "✗"
@@ -117,8 +119,9 @@ class DeviceHubActivity : Activity() {
         val notifications = if (notificationAccessGranted()) "✓" else "✗"
         val listener = if (listenerConnected) "CONECTADO" else "NO CONECTADO"
         val homey = if (homeyConnected) "CONECTADO" else "NO CONECTADO"
+        val thinQ = if (thinQConnected) "CONFIGURADO" else "NO CONFIGURADO"
         val screening = if (callScreeningEnabled()) "ACTIVO" else "INACTIVO"
-        permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nHomey Cloud $homey"
+        permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nHomey Cloud $homey · LG ThinQ $thinQ"
     }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
 }
