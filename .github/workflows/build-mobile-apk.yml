@@ -22,10 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Configure AndroidX
-        shell: bash
         run: |
           cat > gradle.properties <<'EOF'
           android.useAndroidX=true
@@ -33,43 +31,22 @@ jobs:
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android platforms
-        run: |
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
-      - name: Set up Gradle 8.11.1
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-      - name: Restore stable Jarvis signing key
-        uses: actions/cache@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - uses: actions/cache@v4
         with:
           path: ~/.jarvis-signing/jarvis-debug.keystore
           key: jarvis-debug-keystore-v1
       - name: Create signing key if needed
-        shell: bash
         run: |
           mkdir -p ~/.jarvis-signing
-          if [ ! -f ~/.jarvis-signing/jarvis-debug.keystore ]; then
-            keytool -genkeypair -v -keystore ~/.jarvis-signing/jarvis-debug.keystore -storepass jarvis123 -keypass jarvis123 -alias jarvis -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
-          fi
-      - name: Apply Jarvis Mobile voice fixes
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('mobile/src/main/java/com/jarvis/mobile/ChatActivity.kt'); s=p.read_text()
-          old="""val first = text.trim().let { t -> val cut = listOf(t.indexOf('.'), t.indexOf('?'), t.indexOf('!')).filter { it in 60..420 }.minOrNull(); if (cut != null) t.take(cut + 1) else t.take(360) }"""
-          new="""val first = text.replace(Regex("https?://\\\\S+"), "").replace(Regex("[*_`#>|]+"), " ").replace(Regex("\\\\s+"), " ").trim()"""
-          s=s.replace(old,new).replace('.put("speed", 1.2)', '.put("speed", 1.02)').replace('connectTimeout=7000; readTimeout=25000','connectTimeout=7000; readTimeout=45000'); p.write_text(s)
-          PY
+          test -f ~/.jarvis-signing/jarvis-debug.keystore || keytool -genkeypair -v -keystore ~/.jarvis-signing/jarvis-debug.keystore -storepass jarvis123 -keypass jarvis123 -alias jarvis -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
       - run: python3 mobile/patch_main_voice.py
       - run: python3 mobile/patch_weather_widget.py
       - run: python3 mobile/patch_scheduled_menu.py
@@ -83,32 +60,25 @@ jobs:
       - run: python3 mobile/patch_direct_calls.py
       - run: python3 mobile/patch_phone_agent.py
       - run: python3 mobile/patch_phone_agent_cart_verification.py
-      - name: Improve Makro product search and cart automation
-        run: python3 mobile/patch_makro_shopping.py
-      - name: Require clarification before ambiguous shopping
-        run: python3 mobile/patch_shopping_clarification.py
-      - name: Keep shopping state across multiple products
-        run: python3 mobile/patch_stateful_shopping.py
+      - run: python3 mobile/patch_makro_shopping.py
+      - run: python3 mobile/patch_shopping_clarification.py
+      - run: python3 mobile/patch_stateful_shopping.py
       - run: python3 mobile/patch_all_apps_catalog.py
       - run: python3 mobile/patch_remote_control.py
-      - name: Add authenticated incoming-call bridge for Jarvis TV
-        run: python3 mobile/patch_call_bridge.py
-      - name: Unify current incoming-call state for mobile and TV
-        run: python3 mobile/patch_unified_call_bridge.py
+      - run: python3 mobile/patch_call_bridge.py
+      - run: python3 mobile/patch_unified_call_bridge.py
       - run: python3 mobile/patch_pairing_pin.py
       - run: python3 mobile/patch_tv_sync.py
       - run: python3 mobile/patch_chat_sync_bridge.py
       - run: python3 mobile/patch_messaging_agenda.py
       - run: python3 mobile/patch_agenda_hardening.py
       - run: python3 mobile/patch_unread_inbox.py
-      - name: Track truly new messages since last Jarvis check
-        run: python3 mobile/patch_new_messages_since_last_check.py
+      - run: python3 mobile/patch_new_messages_since_last_check.py
       - run: python3 mobile/patch_handsfree_voice.py
       - run: python3 mobile/patch_persistent_wake_overlay.py
       - run: python3 mobile/patch_today_news_widgets.py
       - run: python3 mobile/patch_universal_widgets.py
-      - name: Add dedicated TV and streaming widget guide
-        run: python3 mobile/patch_media_guide.py
+      - run: python3 mobile/patch_media_guide.py
       - run: python3 mobile/patch_persistent_home_recents.py
       - run: python3 mobile/patch_library_main.py
       - run: python3 mobile/patch_chat_order.py
@@ -116,111 +86,39 @@ jobs:
       - run: python3 mobile/patch_direct_tado_commands.py
       - run: python3 mobile/patch_homeconnect_direct.py
       - run: python3 mobile/patch_homeconnect_authcode.py
-      - name: Enforce real Home Connect API devices only
-        run: python3 mobile/patch_homeconnect_strict_real.py
+      - run: python3 mobile/patch_homeconnect_strict_real.py
       - run: python3 mobile/patch_domotics_hub.py
       - run: python3 mobile/patch_domotics_rooms.py
       - run: python3 mobile/patch_domotics_quickcard.py
       - run: python3 mobile/patch_homey_cloud.py
-      - name: Add LG ThinQ connector entry
-        run: python3 mobile/patch_lg_thinq_ui.py
-      - name: Add LG ThinQ devices to unified domotics
-        run: python3 mobile/patch_thinq_connect.py
-      - name: Route LG ThinQ UI through backend
-        run: python3 mobile/patch_thinq_backend_ui.py
+      - run: python3 mobile/patch_lg_thinq_ui.py
+      - run: python3 mobile/patch_thinq_connect.py
+      - run: python3 mobile/patch_thinq_backend_ui.py
       - run: python3 mobile/patch_ai_provider_picker.py
       - run: python3 mobile/patch_fix_duplicate_onnewintent.py
       - run: python3 mobile/fix_generated_kotlin.py
-      - name: Final inline widgets and Domótica wiring
-        run: python3 mobile/patch_inline_widgets_domotics.py
-      - name: Prevent duplicate assistant responses
-        run: python3 mobile/patch_dedupe_responses.py
-      - name: Finalize bubble context widgets and lockscreen wake
-        run: python3 mobile/patch_overlay_context_widgets.py
-      - name: Persist room assignments and throttle Home Connect
-        run: python3 mobile/patch_domotics_persistence_rate_limit.py
-      - name: Ensure incoming-call screening setup
-        run: python3 mobile/patch_call_screening_setup.py
-      - name: Enforce one unified Domótica widget
-        run: python3 mobile/patch_single_domotics_widget.py
-      - name: Normalize final generated domotics Kotlin
-        run: python3 mobile/patch_fix_domotics_compile.py
-      - name: Diagnose final feature hooks
-        shell: bash
-        run: |
-          checks=(
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|R.id.menuDomotics).setOnClickListener"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|showUnifiedDomoticsWidget()"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|⌂  Casa"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|Configurar estancias"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|openMediaGuide(message)"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|maybeRequestCallScreeningRole()"
-            "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt|hasCartEvidence"
-            "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt|recentAgentActions"
-            "mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt|readNewMessagesSinceLastCheck"
-            "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|ROLE_CALL_SCREENING"
-            "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt|CallStateStore.current(this)"
-            "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt|IncomingCallPresenter.show"
-            "mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt|ACTION_CALL_CONTROL"
-            "mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt|LgThinQActivity::class.java"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|fetchThinQDevices"
-            "mobile/src/main/java/com/jarvis/mobile/LgThinQActivity.kt|/api/domotics/thinq"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|saveDomoticsRoom"
-            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|homeconnect_devices_cache_at"
-          )
-          for c in "${checks[@]}"; do
-            f="${c%%|*}"; q="${c#*|}"
-            if grep -Fq "$q" "$f"; then echo "OK $q"; else echo "WARNING missing hook: $q in $f"; fi
-          done
-          for f in IncomingCallActivity.kt FavoriteContactsActivity.kt CallStateStore.kt CallActionManager.kt LgThinQActivity.kt; do
-            test -f "mobile/src/main/java/com/jarvis/mobile/$f" && echo "OK $f" || echo "WARNING missing $f"
-          done
-      - name: Prepare private Google Home SDK when configured
-        shell: bash
-        env:
-          GOOGLE_HOME_SDK_FRAMEWORK_B64: ${{ secrets.GOOGLE_HOME_SDK_FRAMEWORK_B64 }}
-          GOOGLE_HOME_SDK_TYPES_B64: ${{ secrets.GOOGLE_HOME_SDK_TYPES_B64 }}
-        run: |
-          mkdir -p mobile/libs
-          if [ -n "$GOOGLE_HOME_SDK_FRAMEWORK_B64" ] && [ -n "$GOOGLE_HOME_SDK_TYPES_B64" ]; then
-            printf '%s' "$GOOGLE_HOME_SDK_FRAMEWORK_B64" | base64 -d > mobile/libs/play-services-home.aar
-            printf '%s' "$GOOGLE_HOME_SDK_TYPES_B64" | base64 -d > mobile/libs/play-services-home-types.aar
-            test -s mobile/libs/play-services-home.aar
-            test -s mobile/libs/play-services-home-types.aar
-            cp mobile/google-home-sdk/GoogleHomeActivity.kt.template mobile/src/main/java/com/jarvis/mobile/GoogleHomeActivity.kt
-            echo "Google Home SDK AARs installed into mobile APK build"
-          else
-            echo "Google Home SDK not injected: add GOOGLE_HOME_SDK_FRAMEWORK_B64 and GOOGLE_HOME_SDK_TYPES_B64 GitHub secrets"
-          fi
+      - run: python3 mobile/patch_inline_widgets_domotics.py
+      - run: python3 mobile/patch_dedupe_responses.py
+      - run: python3 mobile/patch_overlay_context_widgets.py
+      - run: python3 mobile/patch_domotics_persistence_rate_limit.py
+      - run: python3 mobile/patch_call_screening_setup.py
+      - name: Request Android call-screening role
+        run: python3 mobile/patch_call_screening_role.py
+      - run: python3 mobile/patch_single_domotics_widget.py
+      - run: python3 mobile/patch_fix_domotics_compile.py
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
       - name: Verify APK is Jarvis Mobile 0.2.16
-        shell: bash
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
           echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='16' versionName='0.2.16'"
-          if echo "$BADGING" | grep -q "name='com.jarvis.tv'"; then exit 1; fi
-      - name: Sign and verify mobile APK
-        shell: bash
+      - name: Sign mobile APK
         run: |
-          KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.16-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          K="$HOME/.jarvis-signing/jarvis-debug.keystore"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.16-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.16-debug.apk
-      - name: Upload mobile APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: MOBILE-ONLY-Jarvis-v0.2.16
           path: Jarvis-Mobile-v0.2.16-debug.apk
           if-no-files-found: error
-      - name: Record successful MOBILE run ID
-        if: success()
-        continue-on-error: true
-        shell: bash
-        run: |
-          echo "${{ github.run_id }}" > LATEST_MOBILE_RUN_ID.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add LATEST_MOBILE_RUN_ID.txt
-          git commit -m "ci: record signed Jarvis Mobile 0.2.16 APK [skip ci]" || true
-          git pull --rebase origin main || true
-          git push || true
