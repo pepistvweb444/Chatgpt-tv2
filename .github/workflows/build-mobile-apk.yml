@@ -108,17 +108,17 @@ jobs:
       - run: python3 mobile/patch_fix_domotics_compile.py
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.16
+      - name: Verify APK is Jarvis Mobile 0.2.17
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='16' versionName='0.2.16'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='17' versionName='0.2.17'"
       - name: Sign mobile APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.16-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.16-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.17-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.17-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.16
-          path: Jarvis-Mobile-v0.2.16-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.17
+          path: Jarvis-Mobile-v0.2.17-debug.apk
           if-no-files-found: error
