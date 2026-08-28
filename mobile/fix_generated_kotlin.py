@@ -113,4 +113,11 @@ if 'Toast.makeText(this, "IP del móvil: ${localIp()}\nPIN de emparejamiento:' i
     raise SystemExit('Generated DeviceHub Kotlin still contains multiline pairing PIN text')
 
 p.write_text(s)
-print('Generated Kotlin normalized; day summary routed to local calendar; pairing PIN strings repaired')
+
+# Apply order-status widgets after the messaging/notification generators have
+# already shaped MainActivity and LocalActionRouter.
+order_patch = Path('mobile/patch_order_status_widgets.py')
+if order_patch.exists():
+    exec(compile(order_patch.read_text(), str(order_patch), 'exec'), {'__name__': '__main__'})
+
+print('Generated Kotlin normalized; day summary routed to local calendar; pairing PIN strings repaired; order widgets applied')
