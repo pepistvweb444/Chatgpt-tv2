@@ -4,13 +4,11 @@ import re
 p = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s = p.read_text()
 
-# Required imports for the official Android call-screening role.
 if 'import android.app.role.RoleManager' not in s:
     s = s.replace('import android.Manifest\n', 'import android.Manifest\nimport android.app.role.RoleManager\n')
 if 'import android.os.Build' not in s:
     s = s.replace('import android.os.Bundle\n', 'import android.os.Build\nimport android.os.Bundle\n')
 
-# Add a one-time official role request after the activity is fully initialized.
 anchor = '        warmLocation()\n'
 call = '        maybeRequestCallScreeningRole()\n        ensurePhoneBridgeForCalls()\n'
 if 'maybeRequestCallScreeningRole()' not in s:
@@ -23,18 +21,28 @@ methods = r'''    private fun maybeRequestCallScreeningRole() {
         if (Build.VERSION.SDK_INT < 29) return
         val rm = getSystemService(RoleManager::class.java) ?: return
         if (!rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING) || rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) return
-        val prompted = prefs.getBoolean("call_screening_role_prompted", false)
-        if (prompted) return
-        prefs.edit().putBoolean("call_screening_role_prompted", true).apply()
+        // Re-prompt once for this release even if an older build was dismissed. The
+        // Android role consent is mandatory; permissions alone do not deliver calls.
+        val key = "call_screening_role_prompted_0216"
+        if (prefs.getBoolean(key, false)) return
+        prefs.edit().putBoolean(key, true).apply()
         window.decorView.postDelayed({
-            runCatching { startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING), 5401) }
-        }, 700L)
+            AlertDialog.Builder(this)
+                .setTitle("Activar llamadas Jarvis")
+                .setMessage("Para identificar una llamada entrante, mostrar el contacto/spam y permitir responder también desde Jarvis TV, Android debe autorizar a Jarvis como app de identificación y cribado de llamadas.")
+                .setPositiveButton("ACTIVAR") { _, _ ->
+                    runCatching { startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING), 5401) }
+                }
+                .setNegativeButton("Más tarde", null)
+                .show()
+        }, 650L)
     }
 
     private fun ensurePhoneBridgeForCalls() {
-        // Once the user paired/activated remote control, keep the phone bridge alive
-        // so Jarvis TV can receive incoming-call cards even when this activity is not open.
-        if (prefs.getBoolean("remote_control_enabled", false)) {
+        val screening = if (Build.VERSION.SDK_INT >= 29) runCatching {
+            getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
+        }.getOrDefault(false) else false
+        if (screening || prefs.getBoolean("remote_control_enabled", false)) {
             runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }
         }
     }
@@ -45,8 +53,7 @@ if 'private fun maybeRequestCallScreeningRole()' not in s:
         raise SystemExit('MainActivity dp marker not found')
     s = s.replace(marker, methods + marker, 1)
 
-# Final connector dialog. This runs at the end of the current patch chain so
-# LG ThinQ cannot disappear because an earlier MCP/settings patch rewrote it.
+# Keep connector dialog final and deterministic.
 start = s.find('    private fun showConnections()')
 if start >= 0:
     brace = s.find('{', start)
@@ -78,4 +85,24 @@ if start >= 0:
             s = s[:start] + final_dialog + s[end:]
 
 p.write_text(s)
-print('Call screening role + TV bridge + final LG ThinQ connectors dialog applied')
+
+# DeviceHub: explicit recovery buttons for both mandatory role and Android 14+
+# full-screen call notification permission.
+d = Path('mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt')
+t = d.read_text()
+needle = '        add("Activar Jarvis para identificar llamadas") { requestCallScreeningRole() }\n'
+extra = needle + '''        add("Permitir aviso de llamada a pantalla completa") {
+            if (Build.VERSION.SDK_INT >= 34) {
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))) }
+                    .onFailure { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+            } else Toast.makeText(this, "En esta versión de Android no hace falta este permiso adicional.", Toast.LENGTH_LONG).show()
+        }
+'''
+if 'Permitir aviso de llamada a pantalla completa' not in t and needle in t:
+    t = t.replace(needle, extra, 1)
+# When the role is granted, keep the TV bridge alive immediately.
+old = 'if(requestCode==54){ Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
+new = 'if(requestCode==54){ if(resultCode==RESULT_OK) runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }; Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
+t = t.replace(old, new)
+d.write_text(t)
+print('Reliable call-screening activation + full-screen call alerts + TV bridge applied')
