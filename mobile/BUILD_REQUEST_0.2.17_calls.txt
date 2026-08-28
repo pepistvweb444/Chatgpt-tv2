@@ -1,0 +1,1 @@
+Force clean Jarvis Mobile 0.2.17 build with incoming-call screening, VoIP call detection, mobile-TV call bridge, Makro/new-messages/Home Connect/widget fixes.
