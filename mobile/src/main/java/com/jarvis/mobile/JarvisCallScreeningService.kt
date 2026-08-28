@@ -23,13 +23,15 @@ class JarvisCallScreeningService : CallScreeningService() {
 
         val id = UUID.randomUUID().toString()
         val contact = lookupContact(number)
+        val recent = wasSeenBefore(number)
         val call = JSONObject()
             .put("id", id).put("active", true).put("state", "ringing")
             .put("source", "cellular").put("app", "Teléfono").put("number", number)
             .put("name", contact?.name ?: number.ifBlank { "Número oculto" })
-            .put("knownContact", contact != null).put("priority", contact?.priority == true)
-            .put("classification", if (contact != null) "contact" else "unknown")
+            .put("knownContact", contact != null).put("priority", contact?.priority == true).put("recent", recent)
+            .put("classification", if (contact != null) "contact" else "checking")
             .put("spamScore", 0).put("spamSources", "")
+            .put("publicLabel", "").put("publicSource", "").put("publicConfidence", "")
             .put("photoData", contact?.photoData.orEmpty()).put("video", false)
             .put("time", System.currentTimeMillis()).put("updatedAt", System.currentTimeMillis())
         CallStateStore.save(this, call)
@@ -37,14 +39,21 @@ class JarvisCallScreeningService : CallScreeningService() {
         IncomingCallPresenter.show(this, call)
 
         if (contact == null && number.isNotBlank()) Thread {
-            val rep = runCatching { reputation(number) }.getOrNull() ?: return@Thread
+            val rep = runCatching { reputation(number) }.getOrNull() ?: run {
+                CallStateStore.update(this, id) { it.put("classification", "unknown").put("updatedAt", System.currentTimeMillis()) }?.let { IncomingCallPresenter.show(this, it) }
+                return@Thread
+            }
             val cls = rep.optString("classification").ifBlank { "unknown" }
             val sources = rep.optJSONArray("sources") ?: JSONArray()
             val sourceText = (0 until sources.length()).map { sources.optString(it) }.filter { it.isNotBlank() }.joinToString(", ")
+            val publicMatch = rep.optJSONObject("publicMatch")
             CallStateStore.update(this, id) {
                 it.put("classification", cls)
                     .put("spamScore", rep.optInt("score", 0))
                     .put("spamSources", sourceText)
+                    .put("publicLabel", publicMatch?.optString("label").orEmpty())
+                    .put("publicSource", publicMatch?.optString("source").orEmpty())
+                    .put("publicConfidence", publicMatch?.optString("confidence").orEmpty())
                     .put("updatedAt", System.currentTimeMillis())
             }?.let { IncomingCallPresenter.show(this, it) }
         }.start()
@@ -75,6 +84,17 @@ class JarvisCallScreeningService : CallScreeningService() {
             return ContactInfo(name, CallStateStore.uriToBase64(this, photoUri), priority)
         }
         return null
+    }
+
+    private fun wasSeenBefore(number: String): Boolean {
+        if (number.isBlank()) return false
+        val feed = runCatching { JSONArray(getSharedPreferences("jarvis_mobile", MODE_PRIVATE).getString("call_feed", "[]")) }.getOrElse { JSONArray() }
+        val digits = number.filter { it.isDigit() }.takeLast(9)
+        for (i in 0 until feed.length()) {
+            val old = feed.optJSONObject(i) ?: continue
+            if (old.optString("number").filter { it.isDigit() }.takeLast(9) == digits) return true
+        }
+        return false
     }
 
     private fun reputation(number: String): JSONObject {
