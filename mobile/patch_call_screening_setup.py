@@ -21,8 +21,6 @@ methods = r'''    private fun maybeRequestCallScreeningRole() {
         if (Build.VERSION.SDK_INT < 29) return
         val rm = getSystemService(RoleManager::class.java) ?: return
         if (!rm.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING) || rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) return
-        // Re-prompt once for this release even if an older build was dismissed. The
-        // Android role consent is mandatory; permissions alone do not deliver calls.
         val key = "call_screening_role_prompted_0216"
         if (prefs.getBoolean(key, false)) return
         prefs.edit().putBoolean(key, true).apply()
@@ -52,6 +50,23 @@ if 'private fun maybeRequestCallScreeningRole()' not in s:
     if marker not in s:
         raise SystemExit('MainActivity dp marker not found')
     s = s.replace(marker, methods + marker, 1)
+
+# Extend the existing onActivityResult rather than adding a second override.
+profile = '''        if (requestCode == REQ_PROFILE_IMAGE && resultCode == RESULT_OK) {'''
+role_block = '''        if (requestCode == 5401) {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val held = runCatching { getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING) }.getOrDefault(false)
+                if (held) {
+                    runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }
+                    Toast.makeText(this, "Jarvis ya identifica llamadas y las comparte con Jarvis TV", Toast.LENGTH_LONG).show()
+                } else Toast.makeText(this, "El identificador de llamadas Jarvis sigue desactivado", Toast.LENGTH_LONG).show()
+            }
+        }
+'''
+if 'requestCode == 5401' not in s:
+    if profile not in s:
+        raise SystemExit('MainActivity onActivityResult anchor not found')
+    s = s.replace(profile, role_block + profile, 1)
 
 # Keep connector dialog final and deterministic.
 start = s.find('    private fun showConnections()')
@@ -100,9 +115,8 @@ extra = needle + '''        add("Permitir aviso de llamada a pantalla completa")
 '''
 if 'Permitir aviso de llamada a pantalla completa' not in t and needle in t:
     t = t.replace(needle, extra, 1)
-# When the role is granted, keep the TV bridge alive immediately.
 old = 'if(requestCode==54){ Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
 new = 'if(requestCode==54){ if(resultCode==RESULT_OK) runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }; Toast.makeText(this, if(resultCode==RESULT_OK) "Jarvis ya puede identificar llamadas entrantes" else "No se activó el identificador de llamadas", Toast.LENGTH_LONG).show(); refreshStatus() }'
 t = t.replace(old, new)
 d.write_text(t)
-print('Reliable call-screening activation + full-screen call alerts + TV bridge applied')
+print('Reliable call-screening activation + immediate TV bridge + full-screen alerts applied')
