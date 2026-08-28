@@ -23,9 +23,13 @@ object IncomingCallPresenter {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             })
         }
-        val open = PendingIntent.getActivity(context, 5107,
-            Intent(context, IncomingCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val activityIntent = Intent(context, IncomingCallActivity::class.java).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        )
+        val open = PendingIntent.getActivity(
+            context, 5107, activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         fun action(label: String, value: String, request: Int): NotificationCompat.Action {
             val pi = PendingIntent.getBroadcast(context, request,
                 Intent(context, CallActionReceiver::class.java).putExtra("call_action", value),
@@ -66,6 +70,12 @@ object IncomingCallPresenter {
             builder.setLargeIcon(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
         }
         nm.notify(NOTIFICATION_ID, builder.build())
+
+        // Samsung/Android recientes pueden no desplegar el full-screen intent aunque la
+        // notificación exista. El rol de call screening recibe la llamada en tiempo real,
+        // así que intentamos abrir también la tarjeta directamente. Si Android bloquea
+        // el arranque en segundo plano, la notificación full-screen sigue siendo respaldo.
+        runCatching { context.startActivity(activityIntent) }
     }
 
     fun dismiss(context: Context) {
