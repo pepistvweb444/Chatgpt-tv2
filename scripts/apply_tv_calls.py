@@ -18,8 +18,21 @@ p.write_text(s)
 # Poll the paired mobile while Jarvis TV is visible and show the same call decision card.
 p=Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
 s=p.read_text()
-if 'import android.graphics.BitmapFactory' not in s:
-    s=s.replace('import android.content.pm.PackageManager\n', 'import android.content.pm.PackageManager\nimport android.graphics.BitmapFactory\nimport android.util.Base64\nimport android.view.Gravity\nimport android.widget.ImageView\n')
+# Guarantee each required import independently. Other TV patches may already add
+# BitmapFactory, which previously prevented Base64 from being inserted.
+imports = [
+    ('import android.graphics.BitmapFactory\n', 'import android.content.pm.PackageManager\n'),
+    ('import android.util.Base64\n', 'import android.graphics.BitmapFactory\n'),
+    ('import android.view.Gravity\n', 'import android.util.Base64\n'),
+    ('import android.widget.ImageView\n', 'import android.view.Gravity\n'),
+]
+for imp, after in imports:
+    if imp not in s:
+        if after in s:
+            s=s.replace(after, after+imp, 1)
+        else:
+            # Safe fallback after package declaration.
+            s=s.replace('package com.jarvis.tv\n', 'package com.jarvis.tv\n\n'+imp, 1)
 
 field='''    private var conversationId: String = ""\n'''
 if 'private var activeCallDialog' not in s:
