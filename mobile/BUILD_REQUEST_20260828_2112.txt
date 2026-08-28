@@ -1,0 +1,2 @@
+Force Jarvis Mobile APK rebuild at 2026-08-28 21:12 Europe/Madrid.
+Reason: user needs a fresh downloadable APK artifact; previous GitHub Actions artifact is no longer present.
