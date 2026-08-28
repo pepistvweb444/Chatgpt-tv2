@@ -43,3 +43,10 @@ s=s.replace('''                val root=api("/devices")
 
 p.write_text(s)
 print('LG ThinQ UI routed through Jarvis official backend')
+
+# Apply Philips Hue direct provider after the unified domotics/room/Homey/ThinQ patches
+# have already built the final device widget. Keeping this chained here avoids a
+# separate workflow step being accidentally lost in later workflow edits.
+hue_patch=Path('mobile/patch_hue_unified_widget.py')
+if hue_patch.exists():
+    exec(compile(hue_patch.read_text(), str(hue_patch), 'exec'))
