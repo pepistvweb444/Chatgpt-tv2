@@ -45,5 +45,37 @@ if 'private fun maybeRequestCallScreeningRole()' not in s:
         raise SystemExit('MainActivity dp marker not found')
     s = s.replace(marker, methods + marker, 1)
 
+# Final connector dialog. This runs at the end of the current patch chain so
+# LG ThinQ cannot disappear because an earlier MCP/settings patch rewrote it.
+start = s.find('    private fun showConnections()')
+if start >= 0:
+    brace = s.find('{', start)
+    if brace >= 0:
+        depth = 0; end = -1
+        for i in range(brace, len(s)):
+            if s[i] == '{': depth += 1
+            elif s[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i + 1; break
+        if end > 0:
+            final_dialog = '''    private fun showConnections() {
+        val items = arrayOf("Homey Cloud", "Home Connect", "Google Home", "LG ThinQ", "Otros MCP")
+        AlertDialog.Builder(this)
+            .setTitle("Conectores")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> runCatching { startActivity(Intent(this, HomeyActivity::class.java)) }
+                    1 -> runCatching { showUnifiedDomoticsWidget() }
+                    2 -> runCatching { startActivity(Intent(this, GoogleHomeActivity::class.java)) }
+                    3 -> runCatching { startActivity(Intent(this, LgThinQActivity::class.java)) }
+                    4 -> runCatching { showMcpSettings() }
+                }
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }'''
+            s = s[:start] + final_dialog + s[end:]
+
 p.write_text(s)
-print('Call screening role prompt + persistent TV call bridge applied')
+print('Call screening role + TV bridge + final LG ThinQ connectors dialog applied')
