@@ -2,12 +2,11 @@ export default async function handler(req,res){
   const clientId=process.env.HOMEY_CLIENT_ID;
   if(!clientId) return res.status(503).send('HOMEY_CLIENT_ID no configurado');
   const base=process.env.JARVIS_PUBLIC_BASE_URL||'https://chatgpt-tv2.vercel.app';
-  const redirect=process.env.HOMEY_REDIRECT_URI||`${base}/api/domotics/homey-callback`;
+  // Match the callback URL registered in the Homey Web API client. HOMEY_REDIRECT_URI
+  // may still override this, but no Vercel redirect variable is required.
+  const redirect=process.env.HOMEY_REDIRECT_URI||`${base}/api/homey/callback`;
   const state=Buffer.from(JSON.stringify({app:true,t:Date.now()})).toString('base64url');
 
-  // Athom's public HTTP documentation historically names this authorization_type=code,
-  // while the account authorization UI validates response_type=code. Send both so the
-  // flow works across the current API/account front ends.
   const query=new URLSearchParams({
     authorization_type:'code',
     response_type:'code',
