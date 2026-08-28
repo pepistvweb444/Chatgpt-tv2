@@ -10,11 +10,14 @@ export default async function handler(req,res){
     ['TV',`programación televisión hoy España La 1 Antena 3 Telecinco Cuatro La Sexta ${q}`],
     ['Netflix',`Netflix España estrenos hoy qué ver ${q}`],
     ['Prime Video',`Prime Video España estrenos hoy qué ver ${q}`],
+    ['Apple TV+',`Apple TV Plus España estrenos series películas hoy ${q}`],
     ['Disney+',`Disney Plus España estrenos hoy qué ver ${q}`],
-    ['Max',`Max HBO España estrenos hoy qué ver ${q}`]
+    ['Max',`Max HBO España estrenos hoy qué ver ${q}`],
+    ['Movistar Plus+',`Movistar Plus estrenos cine series hoy España ${q}`],
+    ['YouTube',`YouTube España tendencias estrenos vídeos ${q}`]
   ];
   const groups=await Promise.all(queries.map(([section,query])=>googleNews(query,section)));
   const seen=new Set();const items=[];
-  for(const group of groups)for(const item of group){const key=(item.title||'').toLowerCase();if(!key||seen.has(key))continue;seen.add(key);items.push(item);if(items.length>=14)break}
-  return res.status(200).json({items,generatedAt:new Date().toISOString(),note:'Fuentes públicas. El contenido personalizado de continuar viendo requiere autorización de cada servicio.'});
+  for(const group of groups)for(const item of group){const key=(item.title||'').toLowerCase();if(!key||seen.has(key))continue;seen.add(key);items.push(item);if(items.length>=20)break}
+  return res.status(200).json({items,generatedAt:new Date().toISOString(),note:'Fuentes públicas. El contenido personalizado de favoritos/continuar viendo solo se muestra cuando la plataforma lo expone mediante su propia interfaz o una integración autorizada; Jarvis no lo inventa.'});
 }
