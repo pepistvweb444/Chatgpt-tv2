@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.mobile.stable"
         minSdk = 28
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.2.15"
+        versionCode = 16
+        versionName = "0.2.16"
     }
 
     compileOptions {
