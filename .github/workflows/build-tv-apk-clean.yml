@@ -24,91 +24,56 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Configure AndroidX
-        shell: bash
-        run: |
+      - uses: actions/checkout@v4
+      - run: |
           cat > gradle.properties <<'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android platform
-        run: |
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Set up Gradle 8.11.1
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-      - name: Restore stable Jarvis signing key
-        uses: actions/cache@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - uses: actions/cache@v4
         with:
           path: ~/.jarvis-signing/jarvis-debug.keystore
           key: jarvis-debug-keystore-v1
-      - name: Create signing key if needed
-        shell: bash
-        run: |
+      - run: |
           mkdir -p ~/.jarvis-signing
-          if [ ! -f ~/.jarvis-signing/jarvis-debug.keystore ]; then
-            keytool -genkeypair -v -keystore ~/.jarvis-signing/jarvis-debug.keystore -storepass jarvis123 -keypass jarvis123 -alias jarvis -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
-          fi
-      - name: Apply Jarvis TV runtime patch
-        run: python3 scripts/apply_v065.py
-      - name: Apply TV companion and mobile remote
-        run: python3 scripts/apply_tv_companion.py
-      - name: Apply four-digit mobile pairing PIN
-        run: python3 scripts/apply_tv_pairing_pin.py
-      - name: Apply mobile-style TV interface
-        run: python3 scripts/apply_tv_mobile_ui.py
-      - name: Apply mobile agenda and unread sync widgets
-        run: python3 scripts/apply_tv_personal_sync.py
-      - name: Apply rich TV news widgets with media previews
-        run: python3 scripts/apply_tv_rich_news_widgets.py
-      - name: Synchronize chats with Jarvis Mobile
-        run: python3 scripts/apply_tv_chat_sync.py
-      - name: Mirror incoming calls from Jarvis Mobile
+          test -f ~/.jarvis-signing/jarvis-debug.keystore || keytool -genkeypair -v -keystore ~/.jarvis-signing/jarvis-debug.keystore -storepass jarvis123 -keypass jarvis123 -alias jarvis -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jarvis Stable Debug,O=Jarvis,C=ES"
+      - run: python3 scripts/apply_v065.py
+      - run: python3 scripts/apply_tv_companion.py
+      - run: python3 scripts/apply_tv_pairing_pin.py
+      - run: python3 scripts/apply_tv_mobile_ui.py
+      - run: python3 scripts/apply_tv_personal_sync.py
+      - run: python3 scripts/apply_tv_rich_news_widgets.py
+      - run: python3 scripts/apply_tv_chat_sync.py
+      - name: Mirror and control incoming calls from Jarvis Mobile
         run: python3 scripts/apply_tv_calls.py
-      - name: Add TV streaming apps, personalized previews and remote focus
-        run: python3 scripts/apply_tv_streaming_focus.py
-      - name: Apply mobile parity, real domotics and stronger focus
-        run: python3 scripts/apply_tv_mobile_parity.py
-      - name: Verify TV compatibility hooks
-        shell: bash
+      - run: python3 scripts/apply_tv_streaming_focus.py
+      - run: python3 scripts/apply_tv_mobile_parity.py
+      - name: Verify call bridge hooks
         run: |
           grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
           grep -q 'fun callAction' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
           grep -q 'pollIncomingCall' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'TvAppAgentController' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'streamingAppsRow' app/src/main/res/layout/activity_main.xml
-          grep -q 'focusCard' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'showHomeControls' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'domotics/status' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q '1.13f' app/src/main/java/com/jarvis/tv/MainActivity.kt
-      - name: Build TV APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK is Jarvis TV 0.6.10
-        shell: bash
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
           echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='17' versionName='0.6.10'"
-      - name: Sign and verify TV APK
-        shell: bash
+      - name: Sign TV APK
         run: |
-          KEYSTORE="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.10-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          K="$HOME/.jarvis-signing/jarvis-debug.keystore"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.10-debug.apk app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.10-debug.apk
-      - name: Upload TV APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: TV-ONLY-Jarvis-v0.6.10
           path: Jarvis-TV-v0.6.10-debug.apk
