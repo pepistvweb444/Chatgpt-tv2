@@ -143,6 +143,8 @@ jobs:
         run: python3 mobile/patch_call_screening_setup.py
       - name: Enforce one unified Domótica widget
         run: python3 mobile/patch_single_domotics_widget.py
+      - name: Normalize final generated domotics Kotlin
+        run: python3 mobile/patch_fix_domotics_compile.py
       - name: Diagnose final feature hooks
         shell: bash
         run: |
