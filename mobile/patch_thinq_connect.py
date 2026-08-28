@@ -62,28 +62,15 @@ methods=r'''    private data class ThinQDevice(val id:String,val name:String,val
 if 'private fun fetchThinQDevices' not in s:
     s=s.replace(marker,methods+marker,1)
 
-# Add provider entry to integrations/settings dialog if an anchor exists.
-for anchor in [
-    '"Home Connect"',
-    '"Homey"'
-]:
-    pass
-
-# Add ThinQ into unified domotics fetch, if hcDevices block exists.
-needle='''                val hcDevices = runCatching {
-                    val token = refreshHomeConnectTokenIfNeeded()
-                    if (token.isBlank()) emptyList() else fetchHomeConnectDevices(token)
-                }.getOrDefault(emptyList())'''
+# Add ThinQ directly where RoomEntry entries are assembled. Do not rely on a
+# temporary thinQDevices variable injected into a different lexical scope.
+needle='''                hcDevices.forEach { entries += RoomEntry(roomForDevice("homeconnect:${it.haId}"), "homeconnect", "homeconnect:${it.haId}", it.name, it) }'''
 insert=needle+r'''
-                val thinQDevices = runCatching { fetchThinQDevices() }.getOrDefault(emptyList())'''
-if needle in s and 'val thinQDevices = runCatching' not in s:
+                runCatching { fetchThinQDevices() }.getOrDefault(emptyList()).forEach { d ->
+                    entries += RoomEntry(roomForDevice("thinq:${d.id}"), "thinq", "thinq:${d.id}", d.name, d)
+                }'''
+if needle in s and 'RoomEntry(roomForDevice("thinq:' not in s:
     s=s.replace(needle,insert,1)
-
-needle2='''                hcDevices.forEach { entries += RoomEntry(roomForDevice("homeconnect:${it.haId}"), "homeconnect", "homeconnect:${it.haId}", it.name, it) }'''
-insert2=needle2+r'''
-                thinQDevices.forEach { entries += RoomEntry(roomForDevice("thinq:${it.id}"), "thinq", "thinq:${it.id}", it.name, it) }'''
-if needle2 in s and 'RoomEntry(roomForDevice("thinq:' not in s:
-    s=s.replace(needle2,insert2,1)
 
 needle3='''                                "homeconnect" -> addHomeConnectDeviceWidget(e.item as HcDeviceCard)'''
 insert3=needle3+r'''
@@ -91,8 +78,7 @@ insert3=needle3+r'''
 if needle3 in s and '"thinq" -> addThinQDeviceWidget' not in s:
     s=s.replace(needle3,insert3,1)
 
-# Add a direct menu item in tool picker.
 s=s.replace('"Homey", "Home Connect", "Gmail"', '"Homey", "Home Connect", "LG ThinQ", "Gmail"')
 
 p.write_text(s)
-print('LG ThinQ Connect integrated into domotics/rooms')
+print('LG ThinQ Connect integrated into domotics/rooms without cross-scope variables')
