@@ -28,7 +28,7 @@ class DeviceHubActivity : Activity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32,32,32,32); setBackgroundColor(0xFF0B0B0B.toInt()) }
         root.addView(TextView(this).apply { text = "Control del teléfono"; textSize = 26f; setTextColor(0xFFFFFFFF.toInt()) })
-        root.addView(TextView(this).apply { text = "Llamadas · SMS/RCS · WhatsApp · apps/navegador · Homey · LG ThinQ · puente con TV"; textSize = 15f; setTextColor(0xFFB8B8B8.toInt()); setPadding(0,8,0,16) })
+        root.addView(TextView(this).apply { text = "Llamadas · SMS/RCS · WhatsApp · apps/navegador · Philips Hue · Homey · LG ThinQ · puente con TV"; textSize = 15f; setTextColor(0xFFB8B8B8.toInt()); setPadding(0,8,0,16) })
         permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(0xFFE0E0E0.toInt()); setPadding(0,0,0,14) }
         root.addView(permissionStatus)
         refreshStatus()
@@ -69,6 +69,7 @@ class DeviceHubActivity : Activity() {
         add("Probar llamadas") { if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CALL_PHONE), 52) else startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:"))) }
         add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this, "Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}", Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this, "No se pudo iniciar el puente TV", Toast.LENGTH_LONG).show() } }
         add("Detener puente con TV") { stopService(Intent(this, PhoneBridgeService::class.java)) }
+        add("Philips Hue · conectar Bridge / controlar luces") { startActivity(Intent(this, HueActivity::class.java)) }
         add("Homey Cloud · luces y dispositivos") { startActivity(Intent(this, HomeyActivity::class.java)) }
         add("LG ThinQ · conectar / API") { startActivity(Intent(this, LgThinQActivity::class.java)) }
         add("Acceso a notificaciones") { openNotificationListenerSettings() }
@@ -109,6 +110,7 @@ class DeviceHubActivity : Activity() {
         fun granted(permission: String) = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
         val listenerConnected = prefs.getBoolean("notification_listener_connected", false)
+        val hueConnected = prefs.getString("hue_bridge_ip", "").orEmpty().isNotBlank() && prefs.getString("hue_username", "").orEmpty().isNotBlank()
         val homeyConnected = prefs.getString("homey_session", "").orEmpty().isNotBlank()
         val thinQConnected = prefs.getString("lg_thinq_pat", "").orEmpty().isNotBlank()
         val priorityCount = runCatching { JSONArray(prefs.getString("priority_contacts_json","[]")).length() }.getOrDefault(0)
@@ -118,10 +120,11 @@ class DeviceHubActivity : Activity() {
         val smsSend = if (granted(Manifest.permission.SEND_SMS)) "✓" else "✗"
         val notifications = if (notificationAccessGranted()) "✓" else "✗"
         val listener = if (listenerConnected) "CONECTADO" else "NO CONECTADO"
+        val hue = if (hueConnected) "CONECTADO" else "NO CONECTADO"
         val homey = if (homeyConnected) "CONECTADO" else "NO CONECTADO"
         val thinQ = if (thinQConnected) "CONFIGURADO" else "NO CONFIGURADO"
         val screening = if (callScreeningEnabled()) "ACTIVO" else "INACTIVO"
-        permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nHomey Cloud $homey · LG ThinQ $thinQ"
+        permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nPhilips Hue $hue · Homey Cloud $homey · LG ThinQ $thinQ"
     }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
 }
