@@ -3,33 +3,30 @@ from pathlib import Path
 p=Path('mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt')
 s=p.read_text()
 
-# This patch is intentionally run after patch_remote_control.py, which upgrades handle() to receive headers.
-if 'private fun handle(path: String, headers: Map<String,String>' not in s:
-    raise SystemExit('remote-control header-aware bridge must be applied first')
+# Current bridge already supports header-aware authentication. Accept either
+# the explicit default argument form or the older signature produced by patches.
+header_aware = (
+    'private fun handle(path: String, headers: Map<String,String> = emptyMap())' in s or
+    'private fun handle(path: String, headers: Map<String,String>)' in s or
+    'private fun handle(path: String, headers: Map<String, String>' in s
+)
+if not header_aware:
+    raise SystemExit('PhoneBridgeService is not header-aware; patch_remote_control must run first')
 
-marker='''        if (path.startsWith("/messages")) {'''
-endpoints=r'''        if (path.startsWith("/incoming-call")) {
-            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
-            val expected = prefs.getString("remote_token", "").orEmpty()
-            val bearer = headers["authorization"].orEmpty().removePrefix("Bearer ").trim()
-            if (expected.isBlank() || bearer != expected) return 401 to JSONObject().put("error", "unauthorized").toString()
-            if (!prefs.getBoolean("remote_control_enabled", false)) return 403 to JSONObject().put("error", "remote-disabled").toString()
-            return 200 to CallStateStore.current(this).toString()
+# Add call endpoints only when an older bridge does not already contain them.
+if '/incoming-call' not in s:
+    marker='''        if (path.startsWith("/messages")) {'''
+    endpoints=r'''        if (path.startsWith("/incoming-call")) {
+            return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
         }
-        if (path.startsWith("/call-action?")) {
-            val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
-            val expected = prefs.getString("remote_token", "").orEmpty()
-            val bearer = headers["authorization"].orEmpty().removePrefix("Bearer ").trim()
-            if (expected.isBlank() || bearer != expected) return 401 to JSONObject().put("error", "unauthorized").toString()
-            if (!prefs.getBoolean("remote_control_enabled", false)) return 403 to JSONObject().put("error", "remote-disabled").toString()
-            val raw = path.substringAfter("action=", "").substringBefore("&")
-            val action = URLDecoder.decode(raw, StandardCharsets.UTF_8.name()).trim()
-            val result = CallActionManager.perform(this, action)
-            return (if (result.first) 200 else 409) to JSONObject().put("ok", result.first).put("message", result.second).put("call", CallStateStore.current(this)).toString()
+        if (path.startsWith("/incoming-call-action") || path.startsWith("/call-action?")) {
+            val action = URLDecoder.decode(path.substringAfter("action=", "ignore").substringBefore("&"), StandardCharsets.UTF_8.name()).lowercase()
+            val (ok, message) = CallActionManager.perform(this, action)
+            return (if (ok) 200 else 409) to JSONObject().put("ok", ok).put("message", message).put("call", CallStateStore.current(this)).toString()
         }
 '''
-if '/incoming-call' not in s:
-    if marker not in s: raise SystemExit('bridge messages marker not found')
+    if marker not in s:
+        raise SystemExit('bridge messages marker not found')
     s=s.replace(marker,endpoints+marker,1)
 p.write_text(s)
 
