@@ -141,12 +141,16 @@ jobs:
         run: python3 mobile/patch_domotics_persistence_rate_limit.py
       - name: Ensure incoming-call screening setup
         run: python3 mobile/patch_call_screening_setup.py
+      - name: Enforce one unified Domótica widget
+        run: python3 mobile/patch_single_domotics_widget.py
       - name: Diagnose final feature hooks
         shell: bash
         run: |
           checks=(
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|R.id.menuDomotics).setOnClickListener"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|showUnifiedDomoticsWidget()"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|⌂  Casa"
+            "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|Configurar estancias"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|openMediaGuide(message)"
             "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt|maybeRequestCallScreeningRole()"
             "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt|hasCartEvidence"
