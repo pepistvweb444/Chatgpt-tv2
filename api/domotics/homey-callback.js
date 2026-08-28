@@ -10,13 +10,13 @@ function seal(obj){
   const data=Buffer.concat([cipher.update(JSON.stringify(obj),'utf8'),cipher.final()]); const tag=cipher.getAuthTag();
   return Buffer.concat([iv,tag,data]).toString('base64url');
 }
-export default async function handler(req,res){
+export async function handleHomeyCallback(req,res){
   try{
     const code=String(req.query.code||''); if(!code) return res.status(400).send('Falta código de autorización de Homey');
     const clientId=process.env.HOMEY_CLIENT_ID, clientSecret=process.env.HOMEY_CLIENT_SECRET;
     if(!clientId||!clientSecret) return res.status(503).send('Credenciales Homey no configuradas');
     const base=process.env.JARVIS_PUBLIC_BASE_URL||'https://chatgpt-tv2.vercel.app';
-    const redirect=process.env.HOMEY_REDIRECT_URI||`${base}/api/domotics/homey-callback`;
+    const redirect=process.env.HOMEY_REDIRECT_URI||`${base}/api/homey/callback`;
 
     const body=new URLSearchParams({
       client_id:clientId,
@@ -36,3 +36,4 @@ export default async function handler(req,res){
     return res.redirect(302,`jarvis://homey?session=${encodeURIComponent(session)}`);
   }catch(e){ return res.status(500).send(e?.message||'Homey callback error'); }
 }
+export default handleHomeyCallback;
