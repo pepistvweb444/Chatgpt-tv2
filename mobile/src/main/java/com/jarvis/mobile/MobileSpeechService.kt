@@ -14,13 +14,22 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class MobileSpeechService : Service() {
+    private data class SpeechRequest(val text: String, val voice: String)
+
     private var player: MediaPlayer? = null
     private var nextPlayer: MediaPlayer? = null
-    private val generation = AtomicInteger(0)
-    private val downloader = Executors.newFixedThreadPool(8)
+    private val stopGeneration = AtomicInteger(0)
+    private val queue = LinkedBlockingQueue<SpeechRequest>()
+    private val workerRunning = AtomicBoolean(false)
+    private val downloader = Executors.newFixedThreadPool(6)
+    private val worker = Executors.newSingleThreadExecutor()
+    @Volatile private var lastQueuedText = ""
+    @Volatile private var lastQueuedAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -32,20 +41,53 @@ class MobileSpeechService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = runCatching {
         if (intent?.action == ACTION_STOP) {
-            stopPlayback(); stopSelf(); return@runCatching START_NOT_STICKY
+            stopGeneration.incrementAndGet()
+            queue.clear()
+            stopPlayback()
+            stopSelf()
+            return@runCatching START_NOT_STICKY
         }
         val text = intent?.getStringExtra("text").orEmpty().trim()
         val voice = intent?.getStringExtra("voice").orEmpty().ifBlank { "coral" }
         if (text.isBlank()) return@runCatching START_NOT_STICKY
-        val token = generation.incrementAndGet()
-        runCatching { player?.release() }; runCatching { nextPlayer?.release() }
-        player = null; nextPlayer = null
+
+        // Multiple widget/render callbacks can request speech almost simultaneously.
+        // Do not cancel the phrase already being spoken; enqueue the next unique phrase.
+        val now = System.currentTimeMillis()
+        val key = text.replace(Regex("\\s+"), " ").trim()
+        if (key == lastQueuedText && now - lastQueuedAt < 5000L) return@runCatching START_NOT_STICKY
+        lastQueuedText = key; lastQueuedAt = now
+        queue.offer(SpeechRequest(text, voice))
+
         startForeground(4406, NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Jarvis está hablando").setContentText(text.take(80)).setOngoing(true).build())
-        Thread { speakContinuous(text, voice, token) }.start()
+            .setContentTitle("Jarvis está hablando")
+            .setContentText(text.take(80))
+            .setOngoing(true).build())
+        ensureWorker()
         START_NOT_STICKY
     }.getOrElse { stopSelf(); START_NOT_STICKY }
+
+    private fun ensureWorker() {
+        if (!workerRunning.compareAndSet(false, true)) return
+        worker.submit {
+            try {
+                while (true) {
+                    val req = queue.poll() ?: break
+                    val token = stopGeneration.get()
+                    speakContinuous(req.text, req.voice, token)
+                    if (token != stopGeneration.get()) break
+                }
+            } finally {
+                workerRunning.set(false)
+                if (queue.isNotEmpty()) ensureWorker()
+                else {
+                    sendBroadcast(Intent(ACTION_SPEECH_DONE).setPackage(packageName))
+                    stopSelf()
+                }
+            }
+        }
+    }
 
     private fun chunks(text: String): List<String> {
         val clean = text.replace(Regex("https?://\\S+"), " ")
@@ -56,11 +98,10 @@ class MobileSpeechService : Service() {
         var rest = clean
         var first = true
         while (rest.isNotBlank()) {
-            // The old 34-character first chunk could finish before the next MediaPlayer
-            // had been prepared, which caused the observed 2-3 second speech cutoff.
-            // 110 chars still starts quickly but gives the parallel prefetch time to finish.
-            val max = if (first) 110 else 520
-            val minCut = if (first) 45 else 160
+            // Very short first phrase starts audio quickly; the remaining large chunks
+            // are synthesized in parallel while that phrase is already playing.
+            val max = if (first) 80 else 1200
+            val minCut = if (first) 28 else 350
             val limit = minOf(max, rest.length)
             val marks = listOf(". ", "? ", "! ", "; ", ", ", ": ")
             val cut = marks.map { rest.lastIndexOf(it, limit) }
@@ -73,25 +114,32 @@ class MobileSpeechService : Service() {
     }
 
     private fun downloadChunk(chunk: String, voice: String, token: Int, index: Int): File? {
-        if (token != generation.get()) return null
-        val file = File(cacheDir, "jarvis-bg-$token-$index.mp3")
-        return try {
-            val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 1800; readTimeout = 15000
-                setRequestProperty("Content-Type", "application/json")
-            }
-            val provider = when (voice.lowercase()) {
-                "openvoice" -> "openvoice"
-                "noiz", "my_voice", "mi_voz" -> "noiz"
-                else -> "auto"
-            }
-            val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", provider).put("speed", 1.03)
-            c.outputStream.use { it.write(payload.toString().toByteArray()) }
-            if (c.responseCode !in 200..299) { file.delete(); null }
-            else { c.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }; file }
-        } catch (_: Throwable) {
-            runCatching { file.delete() }; null
+        if (token != stopGeneration.get()) return null
+        repeat(2) { attempt ->
+            val file = File(cacheDir, "jarvis-bg-$token-$index-$attempt.mp3")
+            try {
+                val c = (URL("$BACKEND/api/speech").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true
+                    connectTimeout = 1800
+                    readTimeout = if (index == 0) 12000 else 22000
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val provider = when (voice.lowercase()) {
+                    "openvoice" -> "openvoice"
+                    "noiz", "my_voice", "mi_voz" -> "noiz"
+                    else -> "auto"
+                }
+                val payload = JSONObject().put("text", chunk).put("voice", voice).put("provider", provider).put("speed", 1.04)
+                c.outputStream.use { it.write(payload.toString().toByteArray()) }
+                if (c.responseCode in 200..299) {
+                    c.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
+                    if (file.length() > 256) return file
+                }
+            } catch (_: Throwable) { }
+            runCatching { file.delete() }
+            if (token != stopGeneration.get()) return null
         }
+        return null
     }
 
     private fun media(file: File): MediaPlayer? = runCatching {
@@ -100,89 +148,81 @@ class MobileSpeechService : Service() {
 
     private fun speakContinuous(text: String, voice: String, token: Int) {
         val parts = chunks(text)
-        if (parts.isEmpty()) { finishSpeech(token); return }
-
-        // Download every segment concurrently from the start. Before playback begins we
-        // prepare the first TWO successful segments, so the first player always has a
-        // real successor attached and cannot finish into silence.
+        if (parts.isEmpty() || token != stopGeneration.get()) return
         val futures: List<Future<File?>> = parts.mapIndexed { index, part ->
             downloader.submit<File?> { downloadChunk(part, voice, token, index) }
         }
         val files = arrayOfNulls<File>(parts.size)
 
-        fun awaitFile(index: Int): File? {
-            if (index !in parts.indices || token != generation.get()) return null
+        fun await(index: Int): File? {
+            if (index !in parts.indices || token != stopGeneration.get()) return null
             if (files[index] == null) files[index] = runCatching { futures[index].get() }.getOrNull()
             return files[index]
         }
 
-        fun findPrepared(from: Int): Pair<Int, MediaPlayer>? {
-            for (i in from until parts.size) {
-                val f = awaitFile(i) ?: continue
-                val mp = media(f) ?: continue
-                return i to mp
-            }
-            return null
-        }
+        var i = 0
+        while (i < parts.size && token == stopGeneration.get()) {
+            val f = await(i)
+            if (f == null) { i++; continue }
+            val current = media(f)
+            if (current == null) { runCatching { f.delete() }; i++; continue }
 
-        val firstPair = findPrepared(0) ?: run { finishSpeech(token); return }
-        val firstIndex = firstPair.first
-        val first = firstPair.second
-        val secondPair = findPrepared(firstIndex + 1)
-        player = first
-
-        fun chain(currentIndex: Int, current: MediaPlayer, preparedNext: Pair<Int, MediaPlayer>?) {
-            if (token != generation.get()) {
-                runCatching { current.release() }
-                runCatching { preparedNext?.second?.release() }
-                return
+            // Prepare the immediate successor before playback starts. All audio downloads
+            // were launched at once, so later chunks normally finish while current plays.
+            var nextIndex = i + 1
+            var nextFile: File? = null
+            while (nextIndex < parts.size && nextFile == null) {
+                nextFile = await(nextIndex)
+                if (nextFile == null) nextIndex++
             }
-            if (preparedNext == null) {
-                current.setOnCompletionListener { finished ->
-                    runCatching { finished.release() }
-                    files.forEach { f -> runCatching { f?.delete() } }
-                    finishSpeech(token)
-                }
-                return
-            }
+            val preparedNext = nextFile?.let { media(it) }
+            player = current
+            nextPlayer = preparedNext
+            if (preparedNext != null) runCatching { current.setNextMediaPlayer(preparedNext) }
 
-            val nextIndex = preparedNext.first
-            val next = preparedNext.second
-            nextPlayer = next
-            runCatching { current.setNextMediaPlayer(next) }
-            current.setOnCompletionListener { finished ->
-                runCatching { finished.release() }
-                player = next
+            val lock = Object()
+            current.setOnCompletionListener { synchronized(lock) { lock.notifyAll() } }
+            current.setOnErrorListener { _, _, _ -> synchronized(lock) { lock.notifyAll() }; true }
+            synchronized(lock) {
+                current.start()
+                lock.wait(180000L)
+            }
+            runCatching { current.release() }
+            runCatching { f.delete() }
+
+            if (preparedNext != null && nextFile != null && token == stopGeneration.get()) {
+                // setNextMediaPlayer has already started the successor gaplessly. Wait for it
+                // here, then continue from the next yet-unspoken chunk.
+                player = preparedNext
                 nextPlayer = null
-                // The next segment has already started gaplessly. Prepare its successor
-                // while it is playing; all downloads were launched in parallel earlier.
-                downloader.submit {
-                    val successor = findPrepared(nextIndex + 1)
-                    if (token == generation.get()) chain(nextIndex, next, successor)
-                    else runCatching { successor?.second?.release() }
-                }
+                val nextLock = Object()
+                preparedNext.setOnCompletionListener { synchronized(nextLock) { nextLock.notifyAll() } }
+                preparedNext.setOnErrorListener { _, _, _ -> synchronized(nextLock) { nextLock.notifyAll() }; true }
+                synchronized(nextLock) { nextLock.wait(180000L) }
+                runCatching { preparedNext.release() }
+                runCatching { nextFile.delete() }
+                i = nextIndex + 1
+            } else {
+                i++
             }
         }
-
-        chain(firstIndex, first, secondPair)
-        if (token == generation.get()) first.start() else runCatching { first.release() }
-    }
-
-    private fun finishSpeech(token: Int) {
-        if (token == generation.get()) {
-            sendBroadcast(Intent(ACTION_SPEECH_DONE).setPackage(packageName))
-            stopSelf()
-        }
+        files.forEach { runCatching { it?.delete() } }
+        player = null; nextPlayer = null
     }
 
     private fun stopPlayback() {
-        generation.incrementAndGet()
         runCatching { player?.stop() }; runCatching { player?.release() }
         runCatching { nextPlayer?.release() }
         player = null; nextPlayer = null
     }
 
-    override fun onDestroy() { stopPlayback(); super.onDestroy() }
+    override fun onDestroy() {
+        stopGeneration.incrementAndGet()
+        queue.clear()
+        stopPlayback()
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
