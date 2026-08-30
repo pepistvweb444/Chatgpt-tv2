@@ -1,6 +1,7 @@
 package com.jarvis.mobile
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -141,7 +142,24 @@ class WakeWordService : Service() {
         }
     }
 
+    private fun isDeviceLocked(): Boolean = runCatching {
+        getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+    }.getOrDefault(false)
+
+    private fun showLockScreenPanel(text: String) {
+        runCatching {
+            startActivity(Intent(this, LockScreenAssistantActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(LockScreenAssistantActivity.EXTRA_TEXT, text)
+            })
+        }
+    }
+
     private fun showOverlay(text: String) {
+        if (isDeviceLocked()) {
+            showLockScreenPanel(text)
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
             startService(Intent(this, JarvisOverlayService::class.java).apply {
                 action = JarvisOverlayService.ACTION_SHOW
@@ -151,6 +169,9 @@ class WakeWordService : Service() {
     }
 
     private fun showOverlayCommand(command: String) {
+        if (isDeviceLocked()) {
+            showLockScreenPanel(command)
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
             startService(Intent(this, JarvisOverlayService::class.java).apply {
                 action = JarvisOverlayService.ACTION_COMMAND
