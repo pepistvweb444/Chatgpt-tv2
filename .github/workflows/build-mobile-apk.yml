@@ -107,6 +107,8 @@ jobs:
       - run: python3 mobile/patch_call_screening_setup.py
       - name: Request Android call-screening role
         run: python3 mobile/patch_call_screening_role.py
+      - name: Normalize generated call notification regexes
+        run: python3 mobile/patch_fix_notification_regexes.py
       - run: python3 mobile/patch_single_domotics_widget.py
       - run: python3 mobile/patch_fix_domotics_compile.py
       - name: Verify critical generated features
@@ -119,6 +121,7 @@ jobs:
           grep -q '"Glovo"' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
           grep -q '__MOBILITY_REMOTE__' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
           grep -q 'Villavesa · próximas llegadas' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'isIncomingVoipCall' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
       - name: Verify APK is Jarvis Mobile 0.2.18
