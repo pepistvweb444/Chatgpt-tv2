@@ -42,16 +42,19 @@ if 'private fun readLatestOrderStatus' not in s and marker in s:
     s = s.replace(marker, methods + marker, 1)
 p.write_text(s)
 
-# 3) Render the status as an inline widget in MainActivity.
+# 3) Render the status inline when a known local-result branch is present.
+# The MainActivity generator evolves frequently; this feature must never abort
+# the whole APK build just because a renderer anchor has moved.
 p = Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s = p.read_text()
 needle_candidates = [
     '            if (local.message.startsWith("__NEW_MESSAGES__|")) {',
     '            if (local.message.startsWith("__MESSAGES_WIDGET__")) {',
-    '            if (local.message.startsWith("__MESSAGES__|")) {'
+    '            if (local.message.startsWith("__MESSAGES__|")) {',
+    '            if (local.message.startsWith("__AGENDA_WIDGET__")) {'
 ]
 needle = next((x for x in needle_candidates if x in s), None)
-block = r'''            if (local.message.startsWith("__ORDER_WIDGET__|")) {
+block_prefix = r'''            if (local.message.startsWith("__ORDER_WIDGET__|")) {
                 val j = runCatching { JSONObject(local.message.substringAfter("__ORDER_WIDGET__|")) }.getOrElse { JSONObject() }
                 val app = j.optString("app").ifBlank { "Pedido" }
                 val title = j.optString("title").ifBlank { "Estado del pedido" }
@@ -64,14 +67,12 @@ block = r'''            if (local.message.startsWith("__ORDER_WIDGET__|")) {
                 beginWidgetGroup("Pedidos")
                 addTextWidget("day", "Sin estado disponible", local.message.substringAfter("|"))
                 status.text = "Jarvis listo"
-            } else if (local.message.startsWith("__NEW_MESSAGES__|")) {'''
-if '__ORDER_WIDGET__|' not in s:
-    if needle is None:
-        raise SystemExit('No local-result render anchor found')
-    if needle.startswith('            if (local.message.startsWith("__NEW_MESSAGES__|")) {'):
-        s = s.replace(needle, block, 1)
-    else:
-        alt = block.replace('            } else if (local.message.startsWith("__NEW_MESSAGES__|")) {', needle)
-        s = s.replace(needle, alt, 1)
+            } else '''
+
+if '__ORDER_WIDGET__|' not in s and needle is not None:
+    s = s.replace(needle, block_prefix + needle.strip(), 1)
+elif '__ORDER_WIDGET__|' not in s:
+    print('Order widget renderer anchor moved; capture/router retained and build continues')
+
 p.write_text(s)
-print('Glovo/Uber order status widgets applied')
+print('Glovo/Uber order status capture/router applied; renderer patch is non-fatal')
