@@ -48,6 +48,7 @@
 
     <application android:allowBackup="true" android:usesCleartextTraffic="true" android:label="Jarvis" android:theme="@style/Theme.JarvisMobile">
         <activity android:name=".IncomingCallActivity" android:exported="false" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" />
+        <activity android:name=".LockScreenAssistantActivity" android:exported="false" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" />
         <activity android:name=".FavoriteContactsActivity" android:exported="false" />
         <activity android:name=".LgThinQActivity" android:exported="false" />
         <activity android:name=".HueActivity" android:exported="false" />
