@@ -75,6 +75,8 @@ jobs:
       - run: python3 mobile/patch_unread_inbox.py
       - run: python3 mobile/patch_new_messages_since_last_check.py
       - run: python3 mobile/patch_mobility_realtime.py
+      - name: Add Bolt, Villavesa and delivery live tracking
+        run: python3 mobile/patch_mobility_delivery_live.py
       - run: python3 mobile/patch_handsfree_voice.py
       - run: python3 mobile/patch_persistent_wake_overlay.py
       - run: python3 mobile/patch_today_news_widgets.py
@@ -113,6 +115,10 @@ jobs:
           grep -q 'mobility_feed' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
           grep -q 'readMobilityStatus' mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt
           grep -q 'LinkedBlockingQueue' mobile/src/main/java/com/jarvis/mobile/MobileSpeechService.kt
+          grep -q '"Bolt"' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
+          grep -q '"Glovo"' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
+          grep -q '__MOBILITY_REMOTE__' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'Villavesa · próximas llegadas' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
       - name: Verify APK is Jarvis Mobile 0.2.18
