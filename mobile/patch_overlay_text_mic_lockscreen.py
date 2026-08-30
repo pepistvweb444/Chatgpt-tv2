@@ -20,7 +20,7 @@ old='''    private fun attachOverlay(outer: LinearLayout, userText: String) {
 new='''    private fun attachOverlay(outer: LinearLayout, userText: String) {
         val composer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, 0) }
         val box = EditText(this).apply {
-            hint = "Escribe a Jarvis…"; textSize = 15f; setTextColor(Color.rgb(24,27,35)); setHintTextColor(Color.rgb(115,119,132)); singleLine = true
+            hint = "Escribe a Jarvis…"; textSize = 15f; setTextColor(Color.rgb(24,27,35)); setHintTextColor(Color.rgb(115,119,132)); setSingleLine(true)
             background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(18).toFloat(); setStroke(dp(1), Color.rgb(215,218,228)) }
             setPadding(dp(12),0,dp(12),0)
         }
@@ -53,6 +53,8 @@ if old in s:
     s=s.replace(old,new,1)
 elif 'Escribe a Jarvis…' not in s:
     raise SystemExit('attachOverlay anchor not found')
+else:
+    s=s.replace('singleLine = true','setSingleLine(true)')
 if 'import androidx.core.content.ContextCompat' not in s:
     s=s.replace('import android.widget.TextView\n','import android.widget.TextView\nimport androidx.core.content.ContextCompat\n')
 p.write_text(s)
