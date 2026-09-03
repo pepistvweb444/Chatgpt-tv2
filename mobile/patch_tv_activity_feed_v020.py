@@ -7,8 +7,8 @@ s=p.read_text()
 # banking/biometric notifications to be misclassified as appointments. Only accept
 # known agenda apps or whole agenda words.
 old='''            val relevant=pkg.contains("calendar")||pkg.contains("tasks")||pkg.contains("todo")||pkg.contains("reminder")||combined.contains("recordatorio")||combined.contains("reminder")||combined.contains("cita")||combined.contains("evento")'''
-new='''            val knownAgendaApp = pkg.contains("calendar") || pkg.contains("calendario") || pkg.contains("tasks") || pkg.contains("task") || pkg.contains("todo") || pkg.contains("reminder") || pkg.contains("keep") || pkg.contains("microsoft.todos") || pkg.contains("samsung.android.app.reminder")
-            val agendaWord = Regex("(?iu)(?:^|[^\\p{L}])(recordatorios?|reminders?|citas?|eventos?|reuniones?|tareas?)(?:$|[^\\p{L}])").containsMatchIn(combined)
+new=r'''            val knownAgendaApp = pkg.contains("calendar") || pkg.contains("calendario") || pkg.contains("tasks") || pkg.contains("task") || pkg.contains("todo") || pkg.contains("reminder") || pkg.contains("keep") || pkg.contains("microsoft.todos") || pkg.contains("samsung.android.app.reminder")
+            val agendaWord = Regex("""(?iu)(?:^|[^\p{L}])(recordatorios?|reminders?|citas?|eventos?|reuniones?|tareas?)(?:$|[^\p{L}])""").containsMatchIn(combined)
             val securityNoise = listOf("huella digital","fingerprint","verificación de huella","verificacion de huella","verifica la transferencia","transferencia bancaria","autoriza la compra","autorización de pago","autorizacion de pago").any { combined.contains(it) }
             val relevant=(knownAgendaApp || agendaWord) && !securityNoise'''
 if old not in s:
