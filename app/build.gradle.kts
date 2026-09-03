@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.tv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "0.6.13"
+        versionCode = 21
+        versionName = "0.6.14"
     }
 
     compileOptions {
