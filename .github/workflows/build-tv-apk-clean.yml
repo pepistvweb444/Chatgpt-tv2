@@ -66,7 +66,9 @@ jobs:
         run: python3 scripts/apply_tv_fire_overlay_calls_v0611.py
       - name: Make call filter usable with the Fire TV remote
         run: python3 scripts/apply_tv_call_overlay_focus_v0611.py
-      - name: Verify TV 0.6.11 features
+      - name: Fix streaming loading agenda timeline and chat navigation
+        run: python3 scripts/apply_tv_usability_v0612.py
+      - name: Verify TV 0.6.12 features
         run: |
           grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
           grep -q 'fun callAction' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
@@ -76,20 +78,23 @@ jobs:
           grep -q 'voiceMonitor' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'renderPersonalDashboard' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'showStreamingFavoritesOverview' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'scrollToLatestAnswer' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'streamingPreviewProvider' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'Agenda, pedidos y recordatorios' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
           grep -q 'FLAG_NOT_TOUCH_MODAL' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
       - run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Verify APK is Jarvis TV 0.6.11
+      - name: Verify APK is Jarvis TV 0.6.12
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='18' versionName='0.6.11'"
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='19' versionName='0.6.12'"
       - name: Sign TV APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.11-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.11-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.12-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.12-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Jarvis-v0.6.11
-          path: Jarvis-TV-v0.6.11-debug.apk
+          name: TV-ONLY-Jarvis-v0.6.12
+          path: Jarvis-TV-v0.6.12-debug.apk
           if-no-files-found: error
