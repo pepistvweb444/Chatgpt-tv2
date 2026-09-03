@@ -18,17 +18,15 @@ export default async function handler(req, res) {
   const body = req.body || {};
   if (!body.text || typeof body.text !== 'string') return res.status(400).json({ error: 'text_required' });
 
-  // Noiz can pause or stop on Markdown list markers/new lines. Convert the
-  // assistant answer to continuous spoken punctuation before sending it to any TTS.
   const speechText = normalizeSpeechText(body.text);
   if (!speechText) return res.status(400).json({ error: 'text_required' });
 
   const requestedProvider = String(body.provider || '').toLowerCase();
   const requestedVoice = String(body.voice || '').toLowerCase();
+  const requireClone = body.requireClone === true || String(body.requireClone || '').toLowerCase() === 'true';
   const speed = Number(body.speed || process.env.JARVIS_TTS_SPEED || 1.15);
 
-  // 1) NOIZ AI — preferred when configured. It can clone directly from a short
-  // reference sample, so Jarvis does not need to persist a separate local model.
+  // 1) NOIZ AI — primary cloned voice.
   const noizKey = process.env.NOIZ_API_KEY || '';
   const noizVoiceId = process.env.NOIZ_VOICE_ID || '';
   const noizRefUrl = process.env.NOIZ_REFERENCE_AUDIO_URL || '';
@@ -71,11 +69,11 @@ export default async function handler(req, res) {
       }
       console.warn('Noiz synthesize failed', noiz.status, await noiz.text());
     } catch (error) {
-      console.warn('Noiz unavailable; falling back', error?.message || error);
+      console.warn('Noiz unavailable; falling back to OpenVoice clone', error?.message || error);
     }
   }
 
-  // 2) Self-hosted OpenVoice fallback on DigitalOcean.
+  // 2) Self-hosted OpenVoice — cloned-voice fallback on DigitalOcean.
   const openVoiceUrl = (process.env.OPENVOICE_URL || 'http://165.22.83.150:8000').replace(/\/$/, '');
   const forceOpenAI = requestedProvider === 'openai';
   const preferOpenVoice = !forceOpenAI && Boolean(openVoiceUrl);
@@ -102,11 +100,17 @@ export default async function handler(req, res) {
       }
       console.warn('OpenVoice synthesize failed', ov.status, await ov.text());
     } catch (error) {
-      console.warn('OpenVoice unavailable; falling back to OpenAI', error?.message || error);
+      console.warn('OpenVoice unavailable', error?.message || error);
     }
   }
 
-  // 3) OpenAI final fallback so Jarvis never loses speech entirely.
+  // TV can mark the cloned voice as mandatory. In that mode we never silently
+  // replace Jarvis with Coral or Android TTS; the client receives an explicit error.
+  if (requireClone) {
+    return res.status(503).json({ error: 'cloned_voice_temporarily_unavailable' });
+  }
+
+  // 3) Generic OpenAI fallback for clients that did not require a clone.
   const key = process.env.OPENAI_API_KEY;
   if (!key) return res.status(503).json({ error: 'No TTS provider available. Configure NOIZ_API_KEY, OPENVOICE_URL or OPENAI_API_KEY.' });
 
