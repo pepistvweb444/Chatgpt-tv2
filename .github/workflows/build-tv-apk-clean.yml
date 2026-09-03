@@ -76,22 +76,24 @@ jobs:
         run: python3 scripts/apply_tv_morning_remote_v0614.py
       - name: Reduce cloned voice latency with parallel chunks
         run: python3 scripts/apply_tv_fast_clone_v0614.py
-      - name: Verify TV 0.6.14 features
+      - name: Diagnose TV 0.6.14 generated features
         run: |
-          grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
-          grep -q 'fun calls()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
-          grep -q 'fun domotics()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
-          grep -q 'fun domoticsCommand' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
-          grep -q 'homeContext' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'executeTvDomoticsAction' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'renderDomoticsControlCard' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'showMorningBriefing' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'splitCloneSpeech' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'speech-fast-clone' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q 'inlineDetailLabel' app/src/main/res/layout/activity_main.xml
-          grep -q 'TvCommandService' app/src/main/AndroidManifest.xml
-          grep -q 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
-      - run: gradle --no-daemon --stacktrace :app:assembleDebug
+          check() { if grep -q "$1" "$2"; then echo "OK: $1"; else echo "MISSING: $1 in $2"; fi; }
+          check 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          check 'fun calls()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          check 'fun domotics()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          check 'fun domoticsCommand' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          check 'homeContext' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'executeTvDomoticsAction' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'renderDomoticsControlCard' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'showMorningBriefing' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'splitCloneSpeech' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'speech-fast-clone' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'inlineDetailLabel' app/src/main/res/layout/activity_main.xml
+          check 'TvCommandService' app/src/main/AndroidManifest.xml
+          check 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
+      - name: Compile Jarvis TV
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK is Jarvis TV 0.6.14
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
