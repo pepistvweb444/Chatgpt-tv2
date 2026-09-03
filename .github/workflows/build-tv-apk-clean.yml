@@ -58,23 +58,35 @@ jobs:
         run: python3 scripts/apply_tv_calls.py
       - run: python3 scripts/apply_tv_streaming_focus.py
       - run: python3 scripts/apply_tv_mobile_parity.py
-      - name: Verify call bridge hooks
+      - name: Improve Fire TV voice latency and microphone capture
+        run: python3 scripts/apply_tv_voice_latency_v0611.py
+      - name: Add agenda calls delivery finance and synced domotics
+        run: python3 scripts/apply_tv_personal_dashboard_v0611.py
+      - name: Keep bubble call filter and favorites visible on Fire TV
+        run: python3 scripts/apply_tv_fire_overlay_calls_v0611.py
+      - name: Verify TV 0.6.11 features
         run: |
           grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
           grep -q 'fun callAction' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
-          grep -q 'pollIncomingCall' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'fun calls()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          grep -q 'fun mobility()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          grep -q 'fun domotics()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+          grep -q 'voiceMonitor' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'renderPersonalDashboard' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'showStreamingFavoritesOverview' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
       - run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Verify APK is Jarvis TV 0.6.10
+      - name: Verify APK is Jarvis TV 0.6.11
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='17' versionName='0.6.10'"
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='18' versionName='0.6.11'"
       - name: Sign TV APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.10-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.10-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.11-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.11-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Jarvis-v0.6.10
-          path: Jarvis-TV-v0.6.10-debug.apk
+          name: TV-ONLY-Jarvis-v0.6.11
+          path: Jarvis-TV-v0.6.11-debug.apk
           if-no-files-found: error
