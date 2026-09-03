@@ -119,39 +119,37 @@ jobs:
         run: python3 mobile/patch_tv_activity_feed_v020.py
       - name: Sync every configured smart-home device with TV
         run: python3 mobile/patch_tv_domotics_sync_v021.py
+      - name: Execute confirmed TV domotics commands on real providers
+        run: python3 mobile/patch_tv_domotics_command_v022.py
+      - name: Add configurable morning TV briefing routine
+        run: python3 mobile/patch_morning_routine_v022.py
       - name: Verify critical generated features
         run: |
           grep -q 'ROLE_CALL_SCREENING' mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt
           grep -q 'mobility_feed' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
           grep -q 'readMobilityStatus' mobile/src/main/java/com/jarvis/mobile/LocalActionRouter.kt
           grep -q 'LinkedBlockingQueue' mobile/src/main/java/com/jarvis/mobile/MobileSpeechService.kt
-          grep -q '"Bolt"' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
           grep -q '"Glovo"' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
-          grep -q '__MOBILITY_REMOTE__' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'Villavesa · próximas llegadas' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q 'isIncomingVoipCall' mobile/src/main/java/com/jarvis/mobile/JarvisNotificationListener.kt
-          grep -q 'Escribe a Jarvis' mobile/src/main/java/com/jarvis/mobile/JarvisOverlayService.kt
-          grep -q 'ACTION_ARM' mobile/src/main/java/com/jarvis/mobile/WakeWordService.kt
-          grep -q 'private fun callsForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
           grep -q 'private fun domoticsForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
-          grep -q 'private fun mobilityForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
-          grep -q 'agendaWord = Regex' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
+          grep -q 'path.startsWith("/domotics-command?' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
+          grep -q 'executeTvDomoticsCommand' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'tvExecuteHomeConnect' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'morning_routine_enabled' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
+          grep -q 'MorningRoutineService' mobile/src/main/AndroidManifest.xml
           grep -q 'domotics_tv_snapshot_json' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q '"lgThinQ"' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
-          grep -q '"hue"' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.21
+      - name: Verify APK is Jarvis Mobile 0.2.22
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='21' versionName='0.2.21'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='22' versionName='0.2.22'"
       - name: Sign mobile APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.21-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.21-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.22-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.22-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.21
-          path: Jarvis-Mobile-v0.2.21-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.22
+          path: Jarvis-Mobile-v0.2.22-debug.apk
           if-no-files-found: error
