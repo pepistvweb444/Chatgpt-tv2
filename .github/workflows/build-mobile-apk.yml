@@ -115,6 +115,8 @@ jobs:
       - run: python3 mobile/patch_fix_domotics_compile.py
       - name: Add complete TV dashboard bridge
         run: python3 mobile/patch_tv_dashboard_bridge.py
+      - name: Correct agenda filtering and recover Glovo activity
+        run: python3 mobile/patch_tv_activity_feed_v020.py
       - name: Verify critical generated features
         run: |
           grep -q 'ROLE_CALL_SCREENING' mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt
@@ -130,19 +132,21 @@ jobs:
           grep -q 'ACTION_ARM' mobile/src/main/java/com/jarvis/mobile/WakeWordService.kt
           grep -q 'private fun callsForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
           grep -q 'private fun domoticsForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
+          grep -q 'private fun mobilityForTv' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
+          grep -q 'agendaWord = Regex' mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.19
+      - name: Verify APK is Jarvis Mobile 0.2.20
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='19' versionName='0.2.19'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='20' versionName='0.2.20'"
       - name: Sign mobile APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.19-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.19-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.20-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.20-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.19
-          path: Jarvis-Mobile-v0.2.19-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.20
+          path: Jarvis-Mobile-v0.2.20-debug.apk
           if-no-files-found: error
