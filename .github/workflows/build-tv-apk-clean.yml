@@ -74,6 +74,8 @@ jobs:
         run: python3 scripts/apply_tv_dashboard_control_v0614.py
       - name: Add scheduled briefing reverse bridge
         run: python3 scripts/apply_tv_morning_remote_v0614.py
+      - name: Reduce cloned voice latency with parallel chunks
+        run: python3 scripts/apply_tv_fast_clone_v0614.py
       - name: Verify TV 0.6.14 features
         run: |
           grep -q 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
@@ -84,10 +86,10 @@ jobs:
           grep -q 'executeTvDomoticsAction' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'renderDomoticsControlCard' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'showMorningBriefing' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'splitCloneSpeech' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          grep -q 'speech-fast-clone' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'inlineDetailLabel' app/src/main/res/layout/activity_main.xml
           grep -q 'TvCommandService' app/src/main/AndroidManifest.xml
-          grep -q '"provider", "noiz"' app/src/main/java/com/jarvis/tv/MainActivity.kt
-          grep -q '"requireClone", true' app/src/main/java/com/jarvis/tv/MainActivity.kt
           grep -q 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
       - run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK is Jarvis TV 0.6.14
