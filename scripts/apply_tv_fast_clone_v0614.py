@@ -26,6 +26,20 @@ if 'private var cloneSpeechGeneration' not in s:
     s=s.replace(field,field+'    private var cloneSpeechGeneration = 0\n',1)
 
 helper_anchor='    private fun updateChatMeta(text: String, role: String) {'
+if 'private fun scrollToView(view: View)' not in s:
+    scroll_helper=r'''    private fun scrollToView(view: View) {
+        val scroll=findViewById<android.widget.ScrollView>(R.id.mainScroll)
+        scroll.post {
+            val target=(view.top-pDp(18)).coerceAtLeast(0)
+            scroll.smoothScrollTo(0,target)
+            view.requestFocus()
+        }
+    }
+
+'''
+    if helper_anchor not in s:raise SystemExit('helper anchor missing for scrollToView')
+    s=s.replace(helper_anchor,scroll_helper+helper_anchor,1)
+
 if 'private fun splitCloneSpeech(' not in s:
     helpers=r'''    private fun splitCloneSpeech(text:String,max:Int=360):List<String> {
         val clean=text.replace(Regex("\\s+")," ").trim(); if(clean.isBlank())return emptyList()
@@ -86,4 +100,4 @@ speech=r'''    private fun speakWithOpenAI(text: String) {
     }'''
 s=replace_function(s,'    private fun speakWithOpenAI(text: String)',speech)
 p.write_text(s)
-print('TV 0.6.14 fast chunked cloned voice applied')
+print('TV 0.6.14 dashboard scroll fix + fast chunked cloned voice applied')
