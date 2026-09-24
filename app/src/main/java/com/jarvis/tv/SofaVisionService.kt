@@ -268,16 +268,20 @@ class SofaVisionService : Service() {
         val lh = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
         val rh = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
 
-        val points = listOfNotNull(ls, rs, lh, rh)
-        if (points.size < 4 || points.any { it.inFrameLikelihood < MIN_LANDMARK_CONFIDENCE }) {
+        val leftShoulder = ls ?: run { resetCandidate(); return }
+        val rightShoulder = rs ?: run { resetCandidate(); return }
+        val leftHip = lh ?: run { resetCandidate(); return }
+        val rightHip = rh ?: run { resetCandidate(); return }
+        val points = listOf(leftShoulder, rightShoulder, leftHip, rightHip)
+        if (points.any { it.inFrameLikelihood < MIN_LANDMARK_CONFIDENCE }) {
             resetCandidate()
             return
         }
 
-        val shoulderX = (ls!!.position.x + rs!!.position.x) / 2f
-        val shoulderY = (ls.position.y + rs.position.y) / 2f
-        val hipX = (lh!!.position.x + rh!!.position.x) / 2f
-        val hipY = (lh.position.y + rh.position.y) / 2f
+        val shoulderX = (leftShoulder.position.x + rightShoulder.position.x) / 2f
+        val shoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2f
+        val hipX = (leftHip.position.x + rightHip.position.x) / 2f
+        val hipY = (leftHip.position.y + rightHip.position.y) / 2f
         val centerX = ((shoulderX + hipX) / 2f) / width.toFloat()
         val centerY = ((shoulderY + hipY) / 2f) / height.toFloat()
 
@@ -345,7 +349,8 @@ class SofaVisionService : Service() {
                 code
             }
 
-            if (result.getOrNull() in 200..299) {
+            val code = result.getOrNull()
+            if (code != null && code in 200..299) {
                 prefs.edit()
                     .putLong("sofaLastPulseAt", System.currentTimeMillis())
                     .putString("sofaVisionStatus", "Persona tumbada en sofá · pulso enviado a Homey")
