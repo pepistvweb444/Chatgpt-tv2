@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.tv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.6.14"
+        versionCode = 22
+        versionName = "0.6.15"
     }
 
     compileOptions {
@@ -26,4 +26,5 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
 }
