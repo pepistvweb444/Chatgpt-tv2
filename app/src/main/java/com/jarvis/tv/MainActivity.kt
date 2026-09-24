@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         migrateLegacyHistoryIfNeeded()
         loadConversation(conversationId)
         bindUi()
+        if (prefs.getBoolean("sofaVisionEnabled", false) && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startSofaVisionService()
         if (!isFireTv()) setupRecognizer()
         showHome()
         ensureOverlayPermission(true)
@@ -462,11 +463,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try { ContextCompat.startForegroundService(this, Intent(this, OverlayService::class.java)) } catch (_: Exception) {}
     }
 
+    private fun startSofaVisionService() {
+        try {
+            ContextCompat.startForegroundService(this, Intent(this, SofaVisionService::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se pudo iniciar la visión local: " + (e.message ?: "error"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun enableSofaVision(webhook: String) {
+        prefs.edit()
+            .putString("homeySofaWebhook", webhook.trim())
+            .putBoolean("sofaVisionEnabled", true)
+            .apply()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
+            return
+        }
+        startSofaVisionService()
+        Toast.makeText(this, "Detector de sofá activado", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun disableSofaVision() {
+        prefs.edit().putBoolean("sofaVisionEnabled", false).apply()
+        stopService(Intent(this, SofaVisionService::class.java))
+        Toast.makeText(this, "Detector de sofá detenido", Toast.LENGTH_SHORT).show()
+    }
+
     private fun showSettings() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36, 16, 36, 8) }
         val name = edit("Nombre del asistente", assistantName())
         val wake = edit("Palabra de activación", wakeWord())
         val backend = edit("URL de Jarvis Backend", prefs.getString("backendUrl", DEFAULT_BACKEND).orEmpty().ifBlank { DEFAULT_BACKEND })
+        val homeyWebhook = edit("Webhook Homey · jarvis_sofa_present", prefs.getString("homeySofaWebhook", "").orEmpty())
         val testBackendButton = Button(this).apply { text = "PROBAR BACKEND / OPENAI"; setOnClickListener { testBackend(backend.text.toString()) } }
         val connections = Button(this).apply { text = "VER WEB + MCP"; setOnClickListener { showConnections() } }
         val newChat = Button(this).apply { text = "NUEVO CHAT"; setOnClickListener { createConversation(true) } }
@@ -474,13 +503,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val accessibilityButton = Button(this).apply { text = "BURBUJA SIEMPRE VISIBLE · ACCESIBILIDAD"; setOnClickListener { openAccessibilitySettings() } }
         val micTestButton = Button(this).apply { text = "PROBAR MICRÓFONO DIRECTO"; setOnClickListener { startServerVoiceCapture() } }
         val voiceTestButton = Button(this).apply { text = "PROBAR VOZ OPENAI"; setOnClickListener { speakWithOpenAI("Hola. Esta es la voz de Jarvis usando OpenAI.") } }
+        val sofaStartButton = Button(this).apply { text = "ACTIVAR IA LOCAL DEL SOFÁ"; setOnClickListener { enableSofaVision(homeyWebhook.text.toString()) } }
+        val sofaStopButton = Button(this).apply { text = "DETENER IA DEL SOFÁ"; setOnClickListener { disableSofaVision() } }
         val diagnostics = TextView(this).apply {
-            text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nDispositivo: ${Build.MANUFACTURER} ${Build.MODEL}\nModo Fire TV: ${if (isFireTv()) "SÍ" else "NO"}\nOverlay: ${overlayStatus()}\nChats guardados: ${sortedChats().size}\n\nEntradas de audio:\n${audioInputs()}"
+            text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nDispositivo: ${Build.MANUFACTURER} ${Build.MODEL}\nModo Fire TV: ${if (isFireTv()) "SÍ" else "NO"}\nOverlay: ${overlayStatus()}\nChats guardados: ${sortedChats().size}\nDetector sofá: ${if (prefs.getBoolean("sofaVisionEnabled", false)) "ACTIVO" else "APAGADO"}\nEstado visión: ${prefs.getString("sofaVisionStatus", "sin iniciar")}\n\nEntradas de audio:\n${audioInputs()}"
             textSize = 15f
         }
-        box.addView(name); box.addView(wake); box.addView(backend); box.addView(testBackendButton); box.addView(connections); box.addView(newChat); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(diagnostics)
-        AlertDialog.Builder(this).setTitle("Ajustes de Jarvis TV v0.6.1").setView(box)
-            .setPositiveButton("GUARDAR") { _, _ -> prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).apply(); showHome() }
+        box.addView(name); box.addView(wake); box.addView(backend); box.addView(homeyWebhook); box.addView(testBackendButton); box.addView(connections); box.addView(newChat); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(sofaStartButton); box.addView(sofaStopButton); box.addView(diagnostics)
+        AlertDialog.Builder(this).setTitle("Ajustes de Jarvis TV v0.6.15").setView(box)
+            .setPositiveButton("GUARDAR") { _, _ -> prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).putString("homeySofaWebhook", homeyWebhook.text.toString().trim()).apply(); showHome() }
             .setNegativeButton("CERRAR", null).show()
     }
 
@@ -517,6 +548,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startVoiceInput()
+        if (requestCode == REQ_CAMERA && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startSofaVisionService()
     }
 
     override fun onDestroy() {
@@ -525,6 +557,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     companion object {
         private const val REQ_AUDIO = 10
+        private const val REQ_CAMERA = 20
         private const val REQ_OVERLAY = 30
         private const val DEFAULT_BACKEND = "https://chatgpt-tv2.vercel.app"
     }
