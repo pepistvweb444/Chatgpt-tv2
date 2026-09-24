@@ -76,7 +76,7 @@ jobs:
         run: python3 scripts/apply_tv_morning_remote_v0614.py
       - name: Reduce cloned voice latency with parallel chunks
         run: python3 scripts/apply_tv_fast_clone_v0614.py
-      - name: Diagnose TV 0.6.14 generated features
+      - name: Diagnose TV 0.6.15 generated features
         run: |
           check() { if grep -q "$1" "$2"; then echo "OK: $1"; else echo "MISSING: $1 in $2"; fi; }
           check 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
@@ -102,7 +102,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TV-BUILD-DIAGNOSTICS-v0.6.14
+          name: TV-BUILD-DIAGNOSTICS-v0.6.15
           path: |
             tv-build.log
             app/src/main/java/com/jarvis/tv/MainActivity.kt
@@ -113,17 +113,17 @@ jobs:
       - name: Stop if compilation failed
         if: steps.compile.outcome == 'failure'
         run: exit 1
-      - name: Verify APK is Jarvis TV 0.6.14
+      - name: Verify APK is Jarvis TV 0.6.15
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='21' versionName='0.6.14'"
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='22' versionName='0.6.15'"
       - name: Sign TV APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.14-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.14-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-TV-v0.6.15-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-TV-v0.6.15-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Jarvis-v0.6.14
-          path: Jarvis-TV-v0.6.14-debug.apk
+          name: TV-ONLY-Jarvis-v0.6.15
+          path: Jarvis-TV-v0.6.15-debug.apk
           if-no-files-found: error
