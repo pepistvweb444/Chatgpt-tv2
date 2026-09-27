@@ -89,6 +89,44 @@ class DeviceHubActivity : Activity() {
             }
         }
         add("Probar llamadas") { if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CALL_PHONE), 52) else startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:"))) }
+        add("PREPARAR SINCRONIZACIÓN CON JAVISTV") {
+            val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE)
+            var token=prefs.getString("remote_token","").orEmpty()
+            if(token.isBlank()) token=UUID.randomUUID().toString().replace("-","")
+            var pin=prefs.getString("pairing_pin","").orEmpty()
+            if(pin.length!=4) pin=(1000..9999).random().toString()
+            prefs.edit()
+                .putString("remote_token",token)
+                .putString("pairing_pin",pin)
+                .putBoolean("pairing_enabled",true)
+                .putBoolean("remote_control_enabled",true)
+                .apply()
+            runCatching { ContextCompat.startForegroundService(this,Intent(this,PhoneBridgeService::class.java)) }
+            val calendar=ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED
+            if(!calendar) ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.READ_CALENDAR),174)
+            Toast.makeText(
+                this,
+                "Datos para Javistv TV:\n\nIP: " + localIp() + "\nPuerto: 8765\nPIN: " + pin +
+                    "\nGoogle Calendar: " + if(calendar) "permiso ✓" else "permiso solicitado" +
+                    "\n\nEn TV: Ajustes > Sincronización con teléfono.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        add("VER DATOS DE SINCRONIZACIÓN TV") {
+            val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE)
+            val pin=prefs.getString("pairing_pin","").orEmpty().ifBlank{"sin generar"}
+            val bridge=prefs.getBoolean("bridge_running",false)
+            val remote=prefs.getBoolean("remote_control_enabled",false)
+            val calendar=ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED
+            Toast.makeText(
+                this,
+                "IP: " + localIp() + ":8765\nPIN: " + pin +
+                    "\nRemote: " + if(remote) "ACTIVO" else "APAGADO" +
+                    "\nPuente: " + if(bridge) "ACTIVO" else "APAGADO" +
+                    "\nGoogle Calendar: " + if(calendar) "PERMITIDO" else "SIN PERMISO",
+                Toast.LENGTH_LONG
+            ).show()
+        }
         add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this, "Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}", Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this, "No se pudo iniciar el puente TV", Toast.LENGTH_LONG).show() } }
         add("Detener puente con TV") { stopService(Intent(this, PhoneBridgeService::class.java)) }
         add("Philips Hue · conectar Bridge / controlar luces") { startActivity(Intent(this, HueActivity::class.java)) }
