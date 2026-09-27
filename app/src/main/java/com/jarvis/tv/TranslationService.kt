@@ -61,7 +61,7 @@ class TranslationService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_SET_LANGUAGE -> {
-                targetLanguage = normalizeLanguage(intent.getStringExtra(EXTRA_LANGUAGE))
+                targetLanguage = normalizeLanguage(intent?.getStringExtra(EXTRA_LANGUAGE))
                 prefs().edit().putString("translation_target", targetLanguage).apply()
                 updateNotification()
                 return START_STICKY
