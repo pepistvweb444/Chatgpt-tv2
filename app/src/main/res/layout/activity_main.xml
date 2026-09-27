@@ -284,6 +284,7 @@
         <Button android:id="@+id/homeControlButton" android:layout_width="match_parent" android:layout_height="54dp" android:text="⌂  Domótica" android:textAllCaps="false" />
         <Button android:id="@+id/routinesButton" android:layout_width="match_parent" android:layout_height="54dp" android:text="◷  Programadas" android:textAllCaps="false" />
         <Button android:id="@+id/notificationsButton" android:layout_width="match_parent" android:layout_height="54dp" android:text="●  Avisos / mensajes" android:textAllCaps="false" />
+        <Button android:id="@+id/sleepDetectorButton" android:layout_width="match_parent" android:layout_height="54dp" android:text="◉  Sueño · APAGADO" android:textAllCaps="false" />
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Recientes" android:textColor="#FFFFFF" android:textSize="16sp" android:textStyle="bold" android:paddingTop="20dp" android:paddingBottom="10dp" />
         <TextView android:id="@+id/cardRoutine" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Chats recientes desde ☰" android:textColor="#A9B2C2" android:textSize="14sp" />
