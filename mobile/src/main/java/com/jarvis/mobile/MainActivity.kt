@@ -80,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             sendVisualPrompt("home", "Muéstrame el estado de mi domótica. Devuelve una línea separada por cada dispositivo, escena o dato relevante, sin introducción ni conclusión.")
         }
         findViewById<View>(R.id.dayWidget).setOnClickListener {
-            sendVisualPrompt("day", "Dame mi resumen del día. Devuelve una línea separada por cada cita, recordatorio, aviso o asunto importante, sin introducción ni conclusión.")
+            input.setText("qué tengo hoy en mi Google Calendar"); sendMessage()
         }
         findViewById<View>(R.id.newsWidget).setOnClickListener { openNewsFast() }
         findViewById<View>(R.id.weatherWidget).setOnClickListener { openWeatherForCurrentLocation() }
