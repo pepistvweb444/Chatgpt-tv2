@@ -254,7 +254,7 @@ settings=r'''    private fun showSettings() {
                 } else {
                     val ok=setJavistvAccessibilityEnabled(true)
                     handler.postDelayed({refreshAccess()},500)
-                    Toast.makeText(this@MainActivity,if(ok)"Accesibilidad Javistv activada":"No se pudo activar",Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, if (ok) "Accesibilidad Javistv activada" else "No se pudo activar", Toast.LENGTH_LONG).show()
                 }
             }
         })
