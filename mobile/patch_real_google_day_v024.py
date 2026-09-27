@@ -23,6 +23,7 @@ def replace_function(text, signature, replacement):
 p=Path('mobile/src/main/java/com/jarvis/mobile/MainActivity.kt')
 s=p.read_text()
 s=s.replace('input.setText("qué tengo hoy en mi calendario"); sendMessage()','showRealDayFromPhone()')
+s=s.replace('input.setText("qué tengo hoy en mi Google Calendar"); sendMessage()','showRealDayFromPhone()')
 if 'private fun showRealDayFromPhone()' not in s:
     anchor='    private fun dp(v: Int)'
     helper=r'''    private fun showRealDayFromPhone() {
