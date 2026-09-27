@@ -17,6 +17,28 @@ async function transcribeMultipart(opts) {
   return { text: String(data?.text || '').trim(), provider: opts.provider };
 }
 
+async function transcribeGeminiAudio({ key, model, bytes, mime }) {
+  const response = await fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(key),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [
+          { text: 'Transcribe exactly the spoken dialogue in this audio. Return only the transcript. Keep the original spoken language. If there is no speech, return an empty string.' },
+          { inlineData: { mimeType: mime, data: Buffer.from(bytes).toString('base64') } }
+        ] }],
+        generationConfig: { temperature: 0 }
+      })
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || ('gemini_transcription_http_' + response.status));
+  const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+  if (!text) throw new Error('gemini_empty_transcription');
+  return { text, provider: 'gemini' };
+}
+
 async function translateOpenAI(text, target) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('openai_not_configured');
@@ -79,18 +101,35 @@ export default async function handler(req, res) {
       } catch (e) { errors.push('groq: ' + (e?.message || 'error')); }
     }
 
-    if (!transcription && process.env.OPENAI_API_KEY) {
+    if (!transcription && process.env.GEMINI_API_KEY && bytes.length < 19 * 1024 * 1024) {
       try {
-        transcription = await transcribeMultipart({
-          url: 'https://api.openai.com/v1/audio/transcriptions',
-          key: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe',
-          bytes, mime, filename, provider: 'openai'
+        transcription = await transcribeGeminiAudio({
+          key: process.env.GEMINI_API_KEY,
+          model: process.env.GEMINI_TRANSCRIBE_MODEL || 'gemini-2.5-flash',
+          bytes, mime
         });
-      } catch (e) { errors.push('openai-stt: ' + (e?.message || 'error')); }
+      } catch (e) { errors.push('gemini-stt: ' + (e?.message || 'error')); }
     }
 
-    if (!transcription) return res.status(503).json({ error: 'transcription_unavailable', details: errors });
+    if (!transcription && process.env.OPENAI_API_KEY) {
+      const models = [process.env.OPENAI_TRANSCRIBE_MODEL, 'gpt-4o-mini-transcribe', 'whisper-1'].filter(Boolean);
+      for (const model of [...new Set(models)]) {
+        try {
+          transcription = await transcribeMultipart({
+            url: 'https://api.openai.com/v1/audio/transcriptions',
+            key: process.env.OPENAI_API_KEY,
+            model,
+            bytes, mime, filename, provider: 'openai'
+          });
+          if (transcription?.text) break;
+        } catch (e) { errors.push('openai-stt/' + model + ': ' + (e?.message || 'error')); }
+      }
+    }
+
+    if (!transcription) {
+      console.error('[translate-audio] transcription unavailable', errors);
+      return res.status(503).json({ error: 'transcription_unavailable', details: errors });
+    }
     const transcript = String(transcription.text || '').trim();
     if (!transcript) return res.status(200).json({ transcript: '', translation: '', provider: transcription.provider });
 
@@ -106,7 +145,10 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!translation) return res.status(503).json({ error: 'translation_unavailable', transcript, details: errors });
+    if (!translation) {
+      console.error('[translate-audio] translation unavailable', errors);
+      return res.status(503).json({ error: 'translation_unavailable', transcript, details: errors });
+    }
     return res.status(200).json({ transcript, translation, target, provider: transcription.provider });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'translate_audio_backend_error' });
