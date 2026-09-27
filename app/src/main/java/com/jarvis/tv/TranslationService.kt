@@ -39,7 +39,7 @@ class TranslationService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_SET_LANGUAGE -> {
-                targetLanguage = normalizeLanguage(intent.getStringExtra(EXTRA_LANGUAGE))
+                targetLanguage = normalizeLanguage(intent?.getStringExtra(EXTRA_LANGUAGE))
                 prefs().edit().putString("translation_target", targetLanguage).apply()
                 if (running) updateNotification()
                 return START_STICKY
@@ -79,9 +79,10 @@ class TranslationService : Service() {
                     stopTranslation(true)
                     return
                 }
-                commandLanguage(command)?.let { lang ->
-                    targetLanguage = lang
-                    prefs().edit().putString("translation_target", lang).apply()
+                val requestedLanguage = commandLanguage(command)
+                if (requestedLanguage != null) {
+                    targetLanguage = requestedLanguage
+                    prefs().edit().putString("translation_target", requestedLanguage).apply()
                     updateNotification()
                     continue
                 }
