@@ -273,7 +273,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun postChat(endpoint: String, message: String, history: JSONArray, previousResponseId: String?): Pair<String, String?> {
         val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12000; readTimeout = 60000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json"); setRequestProperty("User-Agent", "JarvisTV/0.6.1")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json"); setRequestProperty("User-Agent", "Javistv/0.6.16")
         }
         val historyPayload = JSONArray()
         for (i in 0 until history.length()) {
@@ -510,7 +510,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             textSize = 15f
         }
         box.addView(name); box.addView(wake); box.addView(backend); box.addView(homeyWebhook); box.addView(testBackendButton); box.addView(connections); box.addView(newChat); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(sofaStartButton); box.addView(sofaStopButton); box.addView(diagnostics)
-        AlertDialog.Builder(this).setTitle("Ajustes de Jarvis TV v0.6.15").setView(box)
+        AlertDialog.Builder(this).setTitle("Ajustes de Javistv v0.6.16").setView(box)
             .setPositiveButton("GUARDAR") { _, _ -> prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).putString("homeySofaWebhook", homeyWebhook.text.toString().trim()).apply(); showHome() }
             .setNegativeButton("CERRAR", null).show()
     }
@@ -531,6 +531,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
+            prefs.edit().putLong("lastTvInteractionElapsed", android.os.SystemClock.elapsedRealtime()).apply()
+        }
         if (!isFireTv() && event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_SEARCH || event.keyCode == KeyEvent.KEYCODE_VOICE_ASSIST)) { startVoiceInput(); return true }
         return super.dispatchKeyEvent(event)
     }
