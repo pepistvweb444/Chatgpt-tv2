@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.tv"
         minSdk = 26
         targetSdk = 28
-        versionCode = 28
-        versionName = "0.6.21"
+        versionCode = 29
+        versionName = "0.6.22"
         ndk { abiFilters += listOf("armeabi-v7a") }
     }
 
