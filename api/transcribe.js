@@ -12,30 +12,38 @@ async function transcribeMultipart({ url, key, model, bytes, mime, filename, pro
   form.append('language', 'es');
   form.append('response_format', 'json');
   form.append('file', new Blob([bytes], { type: mime }), filename);
-  const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}` },
+    body: form
+  });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || data?.message || `${provider}_transcription_http_${response.status}`);
-  if (!data?.text) throw new Error(`${provider}_empty_transcription`);
-  return { text: String(data.text).trim(), provider };
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || `${provider}_${model}_http_${response.status}`);
+  const text = String(data?.text || '').trim();
+  if (!text) throw new Error(`${provider}_${model}_empty_transcription`);
+  return { text, provider, model };
 }
 
 async function transcribeGemini({ key, model, bytes, mime }) {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [
-        { text: 'Transcribe exactamente el habla de este audio en español. Devuelve únicamente la transcripción, sin explicación, sin comillas y respetando nombres propios y la letra ñ.' },
-        { inlineData: { mimeType: mime, data: Buffer.from(bytes).toString('base64') } }
-      ] }],
-      generationConfig: { temperature: 0 }
-    })
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [
+          { text: 'Transcribe exactamente el habla de este audio en español. Devuelve únicamente la transcripción, sin explicación ni comillas.' },
+          { inlineData: { mimeType: mime, data: Buffer.from(bytes).toString('base64') } }
+        ] }],
+        generationConfig: { temperature: 0 }
+      })
+    }
+  );
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || `gemini_transcription_http_${response.status}`);
+  if (!response.ok) throw new Error(data?.error?.message || `gemini_${model}_http_${response.status}`);
   const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
-  if (!text) throw new Error('gemini_empty_transcription');
-  return { text, provider: 'gemini' };
+  if (!text) throw new Error(`gemini_${model}_empty_transcription`);
+  return { text, provider: 'gemini', model };
 }
 
 export default async function handler(req, res) {
@@ -43,36 +51,69 @@ export default async function handler(req, res) {
   try {
     const bytes = await readBody(req);
     if (!bytes.length) return res.status(400).json({ error: 'audio_required' });
-    const mime = req.headers['content-type'] || 'audio/mp4';
-    const filename = req.headers['x-filename'] || 'jarvis-voice.m4a';
+    if (bytes.length > 24 * 1024 * 1024) return res.status(413).json({ error: 'audio_too_large' });
+
+    const mime = String(req.headers['content-type'] || 'audio/mp4').split(';')[0].trim() || 'audio/mp4';
+    const filename = req.headers['x-filename'] || (mime.includes('wav') ? 'javistv-voice.wav' : 'javistv-voice.m4a');
     const errors = [];
 
+    const tryProvider = async (label, fn) => {
+      try { return await fn(); }
+      catch (e) {
+        const message = e?.message || 'error';
+        errors.push(`${label}: ${message}`);
+        console.error('[transcribe]', label, message);
+        return null;
+      }
+    };
+
     if (process.env.GROQ_API_KEY) {
-      try {
-        return res.status(200).json(await transcribeMultipart({
-          url: 'https://api.groq.com/openai/v1/audio/transcriptions', key: process.env.GROQ_API_KEY,
-          model: process.env.GROQ_TRANSCRIBE_MODEL || 'whisper-large-v3-turbo', bytes, mime, filename, provider: 'groq'
-        }));
-      } catch (e) { errors.push(`groq: ${e?.message || 'error'}`); }
+      const r = await tryProvider('groq', () => transcribeMultipart({
+        url: 'https://api.groq.com/openai/v1/audio/transcriptions',
+        key: process.env.GROQ_API_KEY,
+        model: process.env.GROQ_TRANSCRIBE_MODEL || 'whisper-large-v3-turbo',
+        bytes, mime, filename, provider: 'groq'
+      }));
+      if (r) return res.status(200).json(r);
     }
 
     if (process.env.GEMINI_API_KEY && bytes.length < 19 * 1024 * 1024) {
-      try {
-        return res.status(200).json(await transcribeGemini({ key: process.env.GEMINI_API_KEY, model: process.env.GEMINI_TRANSCRIBE_MODEL || process.env.GEMINI_MODEL || 'gemini-3.6-flash', bytes, mime }));
-      } catch (e) { errors.push(`gemini: ${e?.message || 'error'}`); }
+      const geminiModels = [
+        process.env.GEMINI_TRANSCRIBE_MODEL,
+        'gemini-2.5-flash'
+      ].filter(Boolean);
+      for (const model of [...new Set(geminiModels)]) {
+        const r = await tryProvider(`gemini/${model}`, () => transcribeGemini({
+          key: process.env.GEMINI_API_KEY, model, bytes, mime
+        }));
+        if (r) return res.status(200).json(r);
+      }
     }
 
     if (process.env.OPENAI_API_KEY) {
-      try {
-        return res.status(200).json(await transcribeMultipart({
-          url: 'https://api.openai.com/v1/audio/transcriptions', key: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-transcribe', bytes, mime, filename, provider: 'openai'
+      const models = [
+        process.env.OPENAI_TRANSCRIBE_MODEL,
+        'gpt-transcribe',
+        'gpt-4o-mini-transcribe',
+        'whisper-1'
+      ].filter(Boolean);
+      for (const model of [...new Set(models)]) {
+        const r = await tryProvider(`openai/${model}`, () => transcribeMultipart({
+          url: 'https://api.openai.com/v1/audio/transcriptions',
+          key: process.env.OPENAI_API_KEY,
+          model, bytes, mime, filename, provider: 'openai'
         }));
-      } catch (e) { errors.push(`openai: ${e?.message || 'error'}`); }
+        if (r) return res.status(200).json(r);
+      }
     }
 
-    return res.status(503).json({ error: 'transcription_provider_unavailable', message: 'No hay un proveedor de transcripción disponible.', details: errors });
+    return res.status(503).json({
+      error: 'transcription_provider_unavailable',
+      message: 'No se pudo transcribir el audio con los proveedores configurados.',
+      details: errors.slice(0, 10)
+    });
   } catch (error) {
+    console.error('[transcribe] fatal', error);
     return res.status(500).json({ error: error?.message || 'transcription_backend_error' });
   }
 }
