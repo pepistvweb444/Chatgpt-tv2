@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         findViewById<Button>(R.id.homeControlButton).setOnClickListener { showHomeControls() }
         findViewById<Button>(R.id.routinesButton).setOnClickListener { showRoutines() }
         findViewById<Button>(R.id.notificationsButton).setOnClickListener { showNotifications() }
+        findViewById<Button>(R.id.sleepDetectorButton).apply { text = "◉  Sueño · " + if (prefs.getBoolean("sofaVisionEnabled", false)) "ACTIVO" else "APAGADO"; setOnClickListener { showVision() } }
         input.setOnEditorActionListener { _, _, _ -> sendMessage(); true }
     }
 
@@ -503,14 +504,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val accessibilityButton = Button(this).apply { text = "BURBUJA SIEMPRE VISIBLE · ACCESIBILIDAD"; setOnClickListener { openAccessibilitySettings() } }
         val micTestButton = Button(this).apply { text = "PROBAR MICRÓFONO DIRECTO"; setOnClickListener { startServerVoiceCapture() } }
         val voiceTestButton = Button(this).apply { text = "PROBAR VOZ OPENAI"; setOnClickListener { speakWithOpenAI("Hola. Esta es la voz de Jarvis usando OpenAI.") } }
-        val sofaStartButton = Button(this).apply { text = "ACTIVAR IA LOCAL DEL SOFÁ"; setOnClickListener { enableSofaVision(homeyWebhook.text.toString()) } }
-        val sofaStopButton = Button(this).apply { text = "DETENER IA DEL SOFÁ"; setOnClickListener { disableSofaVision() } }
+        val sofaStatus = TextView(this).apply { text = "DETECCIÓN DE SUEÑO: " + if (prefs.getBoolean("sofaVisionEnabled", false)) "ACTIVA ✓" else "APAGADA" + "\n" + prefs.getString("sofaVisionStatus", "sin iniciar"); textSize = 17f; setPadding(4, 8, 4, 10) }
+        val sofaStartButton = Button(this).apply { text = "ACTIVAR WEBCAM + DETECCIÓN DE SUEÑO"; setOnClickListener { enableSofaVision(homeyWebhook.text.toString()); sofaStatus.text = "DETECCIÓN DE SUEÑO: ACTIVA ✓\n" + prefs.getString("sofaVisionStatus", "iniciando…") } }
+        val sofaStopButton = Button(this).apply { text = "DESACTIVAR WEBCAM / DETECTOR DE SUEÑO"; setOnClickListener { disableSofaVision(); sofaStatus.text = "DETECCIÓN DE SUEÑO: APAGADA" } }
         val diagnostics = TextView(this).apply {
             text = "\nBackend: ${prefs.getString("backendUrl", DEFAULT_BACKEND)}\nDispositivo: ${Build.MANUFACTURER} ${Build.MODEL}\nModo Fire TV: ${if (isFireTv()) "SÍ" else "NO"}\nOverlay: ${overlayStatus()}\nChats guardados: ${sortedChats().size}\nDetector sofá: ${if (prefs.getBoolean("sofaVisionEnabled", false)) "ACTIVO" else "APAGADO"}\nEstado visión: ${prefs.getString("sofaVisionStatus", "sin iniciar")}\n\nEntradas de audio:\n${audioInputs()}"
             textSize = 15f
         }
-        box.addView(name); box.addView(wake); box.addView(backend); box.addView(homeyWebhook); box.addView(testBackendButton); box.addView(connections); box.addView(newChat); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(sofaStartButton); box.addView(sofaStopButton); box.addView(diagnostics)
-        AlertDialog.Builder(this).setTitle("Ajustes de Javistv v0.6.16").setView(box)
+        box.addView(TextView(this).apply { text = "Webcam y detección de sueño"; textSize = 21f }); box.addView(sofaStatus); box.addView(sofaStartButton); box.addView(sofaStopButton); box.addView(homeyWebhook); box.addView(name); box.addView(wake); box.addView(backend); box.addView(testBackendButton); box.addView(connections); box.addView(newChat); box.addView(overlayButton); box.addView(accessibilityButton); box.addView(micTestButton); box.addView(voiceTestButton); box.addView(diagnostics)
+        val settingsScroll = android.widget.ScrollView(this).apply { addView(box) }
+        AlertDialog.Builder(this).setTitle("Ajustes de Javistv v0.6.22").setView(settingsScroll)
             .setPositiveButton("GUARDAR") { _, _ -> prefs.edit().putString("assistantName", name.text.toString().trim().ifBlank { "Jarvis" }).putString("wakeWord", wake.text.toString().trim().ifBlank { "Hola ChatGPT" }).putString("backendUrl", backend.text.toString().trim().ifBlank { DEFAULT_BACKEND }).putString("homeySofaWebhook", homeyWebhook.text.toString().trim()).apply(); showHome() }
             .setNegativeButton("CERRAR", null).show()
     }
