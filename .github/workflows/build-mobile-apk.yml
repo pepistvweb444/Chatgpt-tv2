@@ -127,6 +127,8 @@ jobs:
         run: python3 mobile/patch_morning_routine_v022.py
       - name: Force real CalendarContract data for Mi día and TV agenda
         run: python3 mobile/patch_strict_real_calendar_v023.py
+      - name: Restrict Mi dia to real Google Calendar on the phone
+        run: python3 mobile/patch_real_google_day_v024.py
       - name: Verify critical generated features
         run: |
           grep -q 'ROLE_CALL_SCREENING' mobile/src/main/java/com/jarvis/mobile/DeviceHubActivity.kt
@@ -143,17 +145,17 @@ jobs:
           grep -q 'domotics_tv_snapshot_json' mobile/src/main/java/com/jarvis/mobile/MainActivity.kt
       - name: Build mobile APK
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug
-      - name: Verify APK is Jarvis Mobile 0.2.23
+      - name: Verify APK is Jarvis Mobile 0.2.24
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging mobile/build/outputs/apk/debug/mobile-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='23' versionName='0.2.23'"
+          echo "$BADGING" | grep "package: name='com.jarvis.mobile.stable' versionCode='24' versionName='0.2.24'"
       - name: Sign mobile APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.23-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.23-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Jarvis-Mobile-v0.2.24-debug.apk mobile/build/outputs/apk/debug/mobile-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Jarvis-Mobile-v0.2.24-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MOBILE-ONLY-Jarvis-v0.2.23
-          path: Jarvis-Mobile-v0.2.23-debug.apk
+          name: MOBILE-ONLY-Jarvis-v0.2.24
+          path: Jarvis-Mobile-v0.2.24-debug.apk
           if-no-files-found: error
