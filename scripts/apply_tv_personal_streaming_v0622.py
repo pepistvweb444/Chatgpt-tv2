@@ -68,6 +68,10 @@ needle='        input.setOnEditorActionListener { _, _, _ -> sendMessage(); true
 if needle in s and 'REAL_DAY_PHONE_ONLY' not in s:
     s=s.replace(needle,'        findViewById<android.view.View>(R.id.cardNow).setOnClickListener { showNotifications() } // REAL_DAY_PHONE_ONLY\n'+needle,1)
 
+# Remove stale settings view references left by old pairing patches when their controls are not declared.
+s=s.replace('; box.addView(mobileHost); box.addView(mobilePin)', '')
+s=s.replace('; box.addView(testMobileButton)', '')
+
 p.write_text(s)
 
 p=Path('app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt')
