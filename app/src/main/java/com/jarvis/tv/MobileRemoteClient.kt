@@ -15,6 +15,9 @@ class MobileRemoteClient(context: Context) {
     private fun token(): String =
         prefs.getString("mobile_remote_token", "").orEmpty().trim()
 
+    // Compatibility alias for older generated chat-sync helpers.
+    private fun host(): String = rawHost().removePrefix("http://").removePrefix("https://").trimEnd('/').substringBeforeLast(":8765")
+
     private fun baseUrl(): String {
         val raw = rawHost()
         if (raw.isBlank()) throw IllegalStateException("Configura primero la IP o nombre del teléfono")
