@@ -108,17 +108,41 @@ if 'KEYCODE_MENU) { toggleTranslation()' not in s:
 
 if 'ACTIVAR TRADUCCIÓN A ESPAÑOL' not in s:
     btn_anchor='''        val micTestButton = Button(this).apply {'''
-    btns='''        val translationStartButton = Button(this).apply { text = "ACTIVAR TRADUCCIÓN A ESPAÑOL"; setOnClickListener { startTranslation("es") } }
-        val translationStopButton = Button(this).apply { text = "DETENER TRADUCCIÓN"; setOnClickListener { stopTranslation() } }
+    btns='''        val translationLanguageButton = Button(this).apply {
+            fun refresh() {
+                val code = prefs.getString("translation_target", "es") ?: "es"
+                val label = when (code) { "en" -> "INGLÉS"; "fr" -> "FRANCÉS"; "de" -> "ALEMÁN"; "it" -> "ITALIANO"; "pt" -> "PORTUGUÉS"; else -> "ESPAÑOL" }
+                text = "IDIOMA DE DOBLAJE: $label"
+            }
+            refresh()
+            setOnClickListener {
+                val labels = arrayOf("Español","Inglés","Francés","Alemán","Italiano","Portugués")
+                val codes = arrayOf("es","en","fr","de","it","pt")
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Idioma del doblaje")
+                    .setItems(labels) { _, which ->
+                        prefs.edit().putString("translation_target", codes[which]).apply()
+                        refresh()
+                        if (prefs.getBoolean("translation_active", false)) {
+                            runCatching { startService(Intent(this@MainActivity, TranslationService::class.java).setAction(TranslationService.ACTION_SET_LANGUAGE).putExtra(TranslationService.EXTRA_LANGUAGE, codes[which])) }
+                        }
+                    }.show()
+            }
+        }
+        val translationStartButton = Button(this).apply {
+            text = "ACTIVAR DOBLAJE EN TIEMPO REAL"
+            setOnClickListener { startTranslation(prefs.getString("translation_target", "es") ?: "es") }
+        }
+        val translationStopButton = Button(this).apply { text = "DETENER DOBLAJE"; setOnClickListener { stopTranslation() } }
 '''
     if btn_anchor in s:
         s=s.replace(btn_anchor,btns+btn_anchor,1)
     add_anchor='box.addView(name);'
     if add_anchor in s:
-        s=s.replace(add_anchor,'box.addView(translationStartButton); box.addView(translationStopButton); '+add_anchor,1)
+        s=s.replace(add_anchor,'box.addView(translationLanguageButton); box.addView(translationStartButton); box.addView(translationStopButton); '+add_anchor,1)
 
-s=s.replace('Ajustes de Javistv v0.6.16','Ajustes de Javistv v0.6.18')
-s=s.replace('Javistv/0.6.16','Javistv/0.6.18')
+s=s.replace('Ajustes de Javistv v0.6.16','Ajustes de Javistv v0.6.22')
+s=s.replace('Javistv/0.6.16','Javistv/0.6.22')
 p.write_text(s)
 
 p=Path('app/src/main/java/com/jarvis/tv/TvCommandService.kt')
@@ -148,4 +172,4 @@ if '/translate/start' not in s:
     s=s.replace(brief,block+brief,1)
 p.write_text(s)
 
-print('Javistv 0.6.18 translation patch applied')
+print('Javistv 0.6.22 translation patch applied')
