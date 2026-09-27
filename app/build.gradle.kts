@@ -10,9 +10,10 @@ android {
     defaultConfig {
         applicationId = "com.jarvis.tv"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 23
-        versionName = "0.6.16"
+        targetSdk = 28
+        versionCode = 24
+        versionName = "0.6.17"
+        ndk { abiFilters += listOf("armeabi-v7a") }
     }
 
     compileOptions {
