@@ -48,8 +48,9 @@ new = '''    private fun bindUi() {
         findViewById<Button>(R.id.homeControlButton).setOnClickListener { closeMenu(); showHomeControls(); ask("Muéstrame el estado de mi domótica") }
         findViewById<Button>(R.id.routinesButton).setOnClickListener { closeMenu(); showRoutines() }
         findViewById<Button>(R.id.notificationsButton).setOnClickListener { closeMenu(); showNotifications() }
+        findViewById<Button>(R.id.sleepDetectorButton).apply { text = "◉  Sueño · " + if (prefs.getBoolean("sofaVisionEnabled", false)) "ACTIVO" else "APAGADO"; setOnClickListener { closeMenu(); showVision() } }
 
-        findViewById<TextView>(R.id.cardNow).setOnClickListener { ask("Dame mi resumen del día con agenda, recordatorios, tareas y asuntos importantes") }
+        findViewById<TextView>(R.id.cardNow).setOnClickListener { closeMenu(); showNotifications() }
         findViewById<TextView>(R.id.cardHome).setOnClickListener { ask("Muéstrame el estado de mi domótica") }
         findViewById<TextView>(R.id.cardMessages).setOnClickListener { ask("¿Qué me cuentas hoy? Muéstrame las noticias importantes en widgets") }
         findViewById<WeatherWidgetView>(R.id.cardWeather).setOnClickListener { ask("¿Qué tiempo hace en mi ubicación actual?") }
