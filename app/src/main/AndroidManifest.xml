@@ -56,7 +56,7 @@
             android:name=".JarvisAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
-            android:label="Javistv bubble">
+            android:label="Javistv · burbuja y traducción">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
