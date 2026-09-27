@@ -27,6 +27,13 @@ export default async function handler(req, res) {
     automaticProviderOrder: ['qwen','gemini','groq','openrouter','openai'],
     transcriptionOrder: ['groq','gemini','openai'],
     groqTranscriptionConfigured: Boolean(process.env.GROQ_API_KEY),
-    geminiTranscriptionConfigured: Boolean(process.env.GEMINI_API_KEY)
+    geminiTranscriptionConfigured: Boolean(process.env.GEMINI_API_KEY),
+    dubbing: {
+      transientVoiceReference: Boolean(process.env.NOIZ_API_KEY || process.env.OPENVOICE_URL || 'http://165.22.83.150:8000'),
+      noiz: Boolean(process.env.NOIZ_API_KEY),
+      openvoice: Boolean(process.env.OPENVOICE_URL || 'http://165.22.83.150:8000'),
+      genericFallback: Boolean(process.env.OPENAI_API_KEY),
+      mode: 'private-playback-only'
+    }
   });
 }
