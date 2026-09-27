@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.tv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.6.15"
+        versionCode = 23
+        versionName = "0.6.16"
     }
 
     compileOptions {
@@ -26,5 +26,5 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")\n    implementation("com.google.mlkit:face-detection:16.1.7")
 }
