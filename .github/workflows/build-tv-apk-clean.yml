@@ -1,5 +1,5 @@
 name: Build Javistv APK Clean
-# Javistv translation build 0.6.22
+# Javistv translation build 0.6.23
 
 on:
   push:
@@ -84,7 +84,9 @@ jobs:
         run: python3 scripts/apply_tv_fixpack_v0619.py
       - name: Enforce personal streaming and real Mi dia
         run: python3 scripts/apply_tv_personal_streaming_v0622.py
-      - name: Diagnose TV 0.6.22 generated features
+      - name: Add explicit phone sync and Fire accessibility controls
+        run: python3 scripts/apply_tv_sync_accessibility_v0623.py
+      - name: Diagnose TV 0.6.23 generated features
         run: |
           check() { if grep -q "$1" "$2"; then echo "OK: $1"; else echo "MISSING: $1 in $2"; fi; }
           check 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
@@ -100,6 +102,10 @@ jobs:
           check 'inlineDetailLabel' app/src/main/res/layout/activity_main.xml
           check 'TvCommandService' app/src/main/AndroidManifest.xml
           check 'updateCallOverlay' app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
+          check 'Sincronización con teléfono' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'EMPAREJAR CON TELÉFONO' app/src/main/java/com/jarvis/tv/MainActivity.kt
+          check 'WRITE_SECURE_SETTINGS' app/src/debug/AndroidManifest.xml
+          check 'canRetrieveWindowContent="true"' app/src/main/res/xml/accessibility_service_config.xml
       - name: Compile Javistv
         id: compile
         continue-on-error: true
@@ -110,7 +116,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TV-BUILD-DIAGNOSTICS-v0.6.22
+          name: TV-BUILD-DIAGNOSTICS-v0.6.23
           path: |
             tv-build.log
             app/src/main/java/com/jarvis/tv/MainActivity.kt
@@ -122,17 +128,17 @@ jobs:
       - name: Stop if compilation failed
         if: steps.compile.outcome == 'failure'
         run: exit 1
-      - name: Verify APK is Javistv 0.6.22
+      - name: Verify APK is Javistv 0.6.23
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='29' versionName='0.6.22'"
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='30' versionName='0.6.23'"
       - name: Sign TV APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Javistv-v0.6.22-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Javistv-v0.6.22-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Javistv-v0.6.23-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Javistv-v0.6.23-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Javistv-v0.6.22
-          path: Javistv-v0.6.22-debug.apk
+          name: TV-ONLY-Javistv-v0.6.23
+          path: Javistv-v0.6.23-debug.apk
           if-no-files-found: error
