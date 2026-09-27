@@ -64,6 +64,9 @@ class MainActivity : AppCompatActivity() {
         refreshDrawerRecents()
         restoreSelectedTools()
         warmLocation()
+        if (prefs.getBoolean("remote_control_enabled", false)) {
+            runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)) }
+        }
 
         findViewById<View>(R.id.send).setOnClickListener { sendMessage() }
         findViewById<View>(R.id.mic).setOnClickListener { Toast.makeText(this, "Habla con Jarvis", Toast.LENGTH_SHORT).show() }
