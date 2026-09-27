@@ -19,7 +19,7 @@
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"
         android:icon="@drawable/app_icon"
-        android:label="Jarvis TV"
+        android:label="Javistv"
         android:theme="@style/Theme.JarvisTV"
         android:usesCleartextTraffic="true">
 
@@ -62,7 +62,7 @@
             android:name=".JarvisAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
-            android:label="Jarvis TV bubble">
+            android:label="Javistv bubble">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
