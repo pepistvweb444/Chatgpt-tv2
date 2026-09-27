@@ -1,5 +1,33 @@
 from pathlib import Path
 
+def replace_function(text, signature, replacement):
+    start=text.find(signature)
+    if start<0:
+        raise SystemExit(f'{signature} not found')
+    brace=text.find('{',start)
+    depth=0
+    in_string=False
+    escaped=False
+    for i in range(brace,len(text)):
+        ch=text[i]
+        if in_string:
+            if escaped:
+                escaped=False
+            elif ch=='\\':
+                escaped=True
+            elif ch=='"':
+                in_string=False
+        else:
+            if ch=='"':
+                in_string=True
+            elif ch=='{':
+                depth+=1
+            elif ch=='}':
+                depth-=1
+                if depth==0:
+                    return text[:start]+replacement+text[i+1:]
+    raise SystemExit(f'end not found for {signature}')
+
 p = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
 s = p.read_text()
 
@@ -58,9 +86,7 @@ new = '''    private fun bindUi() {
         input.setOnEditorActionListener { _, _, _ -> sendMessage(); true }
     }
 '''
-if old not in s:
-    raise SystemExit('bindUi marker not found')
-s = s.replace(old, new, 1)
+s = replace_function(s, '    private fun bindUi()', new.rstrip())
 
 old_home = '''    private fun showHome() {
         title.text = "${assistantName()} · Now Brief"
