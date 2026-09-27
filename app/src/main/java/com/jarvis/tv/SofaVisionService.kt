@@ -16,8 +16,10 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.media.AudioManager
 import android.media.Image
 import android.media.ImageReader
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -27,6 +29,9 @@ import android.util.Size
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseLandmark
@@ -34,12 +39,15 @@ import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * Local-only sofa presence detector for Jarvis TV.
- * Frames never leave Fire TV. Only a Homey presence pulse is sent.
+ * Detector local de probable sueño para Javistv.
+ * El vídeo nunca sale del Fire TV: solo se procesan postura/rostro localmente.
+ * Cuando se confirma un posible sueño se emite un aviso local y, si existe,
+ * un pulso al webhook de Homey configurado por el usuario.
  */
 class SofaVisionService : Service() {
     private val prefs by lazy { getSharedPreferences("jarvis", MODE_PRIVATE) }
@@ -52,10 +60,22 @@ class SofaVisionService : Service() {
     private var cameraThread: HandlerThread? = null
     private var cameraHandler: Handler? = null
 
-    private val detector by lazy {
+    private val poseDetector by lazy {
         PoseDetection.getClient(
             PoseDetectorOptions.Builder()
                 .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
+                .build()
+        )
+    }
+
+    private val faceDetector by lazy {
+        FaceDetection.getClient(
+            FaceDetectorOptions.Builder()
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+                .setMinFaceSize(0.12f)
+                .enableTracking()
                 .build()
         )
     }
@@ -65,6 +85,9 @@ class SofaVisionService : Service() {
     private var lastCandidateX = Float.NaN
     private var lastCandidateY = Float.NaN
     private var lastPulseAt = 0L
+    private var lastFaceSeenAt = 0L
+    private var lastEyesOpenAt = 0L
+    private var closedEyeFrames = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -74,11 +97,11 @@ class SofaVisionService : Service() {
         openBestCamera()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startCameraThread() {
-        cameraThread = HandlerThread("JarvisSofaVision").also { it.start() }
+        cameraThread = HandlerThread("JavistvSofaVision").also { it.start() }
         cameraHandler = Handler(cameraThread!!.looper)
     }
 
@@ -88,10 +111,10 @@ class SofaVisionService : Service() {
             nm.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "Jarvis · detector sofá",
+                    "Javistv · detector de sueño",
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = "Detección local de presencia en el sofá mediante la webcam USB"
+                    description = "Detección local de probable sueño en el sofá mediante webcam USB"
                     setSound(null, null)
                     enableVibration(false)
                 }
@@ -99,7 +122,7 @@ class SofaVisionService : Service() {
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.app_icon)
-            .setContentTitle("Jarvis · visión local")
+            .setContentTitle("Javistv · visión local")
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -225,7 +248,7 @@ class SofaVisionService : Service() {
                             set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                         }.build()
                         session.setRepeatingRequest(request, null, cameraHandler)
-                        updateStatus("Vigilando sofá localmente · sin grabar vídeo")
+                        updateStatus("Vigilando sofá · postura + rostro · sin grabar vídeo")
                     }.onFailure {
                         updateStatus("Error iniciando análisis: ${it.message ?: "error"}")
                     }
@@ -253,25 +276,43 @@ class SofaVisionService : Service() {
             return
         }
 
-        detector.process(input)
-            .addOnSuccessListener { pose -> evaluatePose(pose, image.width, image.height) }
-            .addOnFailureListener { updateStatus("IA de postura: ${it.message ?: "error"}") }
-            .addOnCompleteListener {
+        val width = image.width
+        val height = image.height
+        val remaining = AtomicInteger(2)
+        var pose: Pose? = null
+        var faces: List<Face> = emptyList()
+
+        fun finishOne() {
+            if (remaining.decrementAndGet() != 0) return
+            try {
+                val detectedPose = pose
+                if (detectedPose != null) evaluatePose(detectedPose, faces, width, height)
+                else resetCandidate()
+            } finally {
                 image.close()
                 busy.set(false)
             }
+        }
+
+        poseDetector.process(input)
+            .addOnSuccessListener { pose = it }
+            .addOnFailureListener { updateStatus("IA de postura: ${it.message ?: "error"}") }
+            .addOnCompleteListener { finishOne() }
+
+        faceDetector.process(input)
+            .addOnSuccessListener { faces = it }
+            .addOnFailureListener {
+                // La postura sigue funcionando aunque el rostro no pueda analizarse.
+            }
+            .addOnCompleteListener { finishOne() }
     }
 
-    private fun evaluatePose(pose: Pose, width: Int, height: Int) {
-        val ls = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        val rs = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
-        val lh = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-        val rh = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+    private fun evaluatePose(pose: Pose, faces: List<Face>, width: Int, height: Int) {
+        val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) ?: run { resetCandidate(); return }
+        val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER) ?: run { resetCandidate(); return }
+        val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP) ?: run { resetCandidate(); return }
+        val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP) ?: run { resetCandidate(); return }
 
-        val leftShoulder = ls ?: run { resetCandidate(); return }
-        val rightShoulder = rs ?: run { resetCandidate(); return }
-        val leftHip = lh ?: run { resetCandidate(); return }
-        val rightHip = rh ?: run { resetCandidate(); return }
         val points = listOf(leftShoulder, rightShoulder, leftHip, rightHip)
         if (points.any { it.inFrameLikelihood < MIN_LANDMARK_CONFIDENCE }) {
             resetCandidate()
@@ -306,19 +347,73 @@ class SofaVisionService : Service() {
 
         val now = SystemClock.elapsedRealtime()
         val moved = if (lastCandidateX.isNaN()) 0f else hypot(centerX - lastCandidateX, centerY - lastCandidateY)
-        if (candidateSince == 0L || moved > MAX_NORMALIZED_MOVEMENT) candidateSince = now
+        if (candidateSince == 0L || moved > MAX_NORMALIZED_MOVEMENT) {
+            candidateSince = now
+            closedEyeFrames = 0
+        }
         lastCandidateX = centerX
         lastCandidateY = centerY
 
+        val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+        var eyesClosedNow = false
+        if (face != null) {
+            lastFaceSeenAt = now
+            val leftOpen = face.leftEyeOpenProbability
+            val rightOpen = face.rightEyeOpenProbability
+            if (leftOpen != null && rightOpen != null) {
+                val averageOpen = (leftOpen + rightOpen) / 2f
+                if (averageOpen <= CLOSED_EYE_PROBABILITY) {
+                    closedEyeFrames++
+                    eyesClosedNow = true
+                } else if (averageOpen >= OPEN_EYE_PROBABILITY) {
+                    closedEyeFrames = 0
+                    lastEyesOpenAt = now
+                }
+            }
+        }
+
         val stableFor = now - candidateSince
+        val lastTvInteractionAt = prefs.getLong("lastTvInteractionElapsed", 0L)
+        val userIdleFor = if (lastTvInteractionAt > 0L) now - lastTvInteractionAt else Long.MAX_VALUE
+
+        val confirmedByEyes =
+            stableFor >= MIN_STABLE_WITH_CLOSED_EYES_MS &&
+            userIdleFor >= MIN_USER_IDLE_WITH_EYES_MS &&
+            closedEyeFrames >= CLOSED_EYE_FRAMES_REQUIRED
+
+        val noRecentFace = lastFaceSeenAt == 0L || now - lastFaceSeenAt >= FALLBACK_STABLE_MS
+        val noRecentOpenEyes = lastEyesOpenAt == 0L || now - lastEyesOpenAt >= FALLBACK_STABLE_MS
+        val confirmedByFallback =
+            stableFor >= FALLBACK_STABLE_MS &&
+            userIdleFor >= FALLBACK_STABLE_MS &&
+            noRecentFace &&
+            noRecentOpenEyes
+
+        val eyeStatus = when {
+            face == null -> "rostro no visible"
+            eyesClosedNow -> "ojos cerrados ${closedEyeFrames}/${CLOSED_EYE_FRAMES_REQUIRED}"
+            else -> "rostro visible"
+        }
+
         prefs.edit()
             .putLong("sofaLastSeenAt", System.currentTimeMillis())
-            .putString("sofaVisionStatus", "Persona tumbada en sofá · confirmando ${stableFor / 1000}s")
+            .putString(
+                "sofaVisionStatus",
+                "Tumbado · inmóvil ${stableFor / 1000}s · $eyeStatus"
+            )
             .apply()
 
-        if (stableFor >= CONFIRM_LYING_MS && now - lastPulseAt >= HOMEY_PULSE_MS) {
+        if ((confirmedByEyes || confirmedByFallback) && now - lastPulseAt >= ALERT_COOLDOWN_MS) {
             lastPulseAt = now
-            sendHomeyPulse()
+            prefs.edit()
+                .putLong("sofaProbableSleepAt", System.currentTimeMillis())
+                .putString(
+                    "sofaVisionStatus",
+                    if (confirmedByEyes) "Probable sueño · ojos cerrados confirmados" else "Probable sueño · inmovilidad prolongada"
+                )
+                .apply()
+            localWakeAlert()
+            sendHomeyPulse(if (confirmedByEyes) "eyes_closed" else "prolonged_stillness")
         }
     }
 
@@ -326,12 +421,21 @@ class SofaVisionService : Service() {
         candidateSince = 0L
         lastCandidateX = Float.NaN
         lastCandidateY = Float.NaN
+        closedEyeFrames = 0
     }
 
-    private fun sendHomeyPulse() {
+    private fun localWakeAlert() {
+        runCatching {
+            val tone = ToneGenerator(AudioManager.STREAM_ALARM, 90)
+            tone.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1800)
+            cameraHandler?.postDelayed({ runCatching { tone.release() } }, 2200L)
+        }
+    }
+
+    private fun sendHomeyPulse(reason: String) {
         val url = prefs.getString("homeySofaWebhook", "").orEmpty().trim()
         if (url.isBlank()) {
-            updateStatus("Sofá detectado · falta configurar webhook de Homey")
+            updateStatus("Probable sueño detectado · falta configurar webhook de Homey")
             return
         }
 
@@ -341,7 +445,9 @@ class SofaVisionService : Service() {
                     requestMethod = "GET"
                     connectTimeout = 6_000
                     readTimeout = 8_000
-                    setRequestProperty("User-Agent", "JarvisTV-SofaVision/1")
+                    setRequestProperty("User-Agent", "Javistv-SofaVision/2")
+                    setRequestProperty("X-Javistv-Event", "probable_sleep")
+                    setRequestProperty("X-Javistv-Reason", reason)
                 }
                 val code = c.responseCode
                 (if (code in 200..299) c.inputStream else c.errorStream)?.close()
@@ -353,12 +459,12 @@ class SofaVisionService : Service() {
             if (code != null && code in 200..299) {
                 prefs.edit()
                     .putLong("sofaLastPulseAt", System.currentTimeMillis())
-                    .putString("sofaVisionStatus", "Persona tumbada en sofá · pulso enviado a Homey")
+                    .putString("sofaVisionStatus", "Probable sueño · aviso enviado a Homey")
                     .apply()
             } else {
                 prefs.edit().putString(
                     "sofaVisionStatus",
-                    "Sofá detectado · fallo Homey ${result.exceptionOrNull()?.message ?: result.getOrNull() ?: ""}"
+                    "Probable sueño · fallo Homey ${result.exceptionOrNull()?.message ?: result.getOrNull() ?: ""}"
                 ).apply()
             }
         }.start()
@@ -369,7 +475,8 @@ class SofaVisionService : Service() {
         runCatching { captureSession?.close() }
         runCatching { cameraDevice?.close() }
         runCatching { imageReader?.close() }
-        runCatching { detector.close() }
+        runCatching { poseDetector.close() }
+        runCatching { faceDetector.close() }
         cameraThread?.quitSafely()
         captureSession = null
         cameraDevice = null
@@ -378,12 +485,17 @@ class SofaVisionService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "jarvis_sofa_vision"
+        private const val CHANNEL_ID = "javistv_sofa_vision"
         private const val NOTIFICATION_ID = 2307
-        private const val ANALYSIS_INTERVAL_MS = 900L
-        private const val CONFIRM_LYING_MS = 30_000L
-        private const val HOMEY_PULSE_MS = 60_000L
-        private const val MAX_NORMALIZED_MOVEMENT = 0.10f
+        private const val ANALYSIS_INTERVAL_MS = 1_500L
+        private const val MIN_STABLE_WITH_CLOSED_EYES_MS = 45_000L
+        private const val MIN_USER_IDLE_WITH_EYES_MS = 60_000L
+        private const val FALLBACK_STABLE_MS = 180_000L
+        private const val ALERT_COOLDOWN_MS = 300_000L
+        private const val CLOSED_EYE_FRAMES_REQUIRED = 4
+        private const val CLOSED_EYE_PROBABILITY = 0.32f
+        private const val OPEN_EYE_PROBABILITY = 0.58f
+        private const val MAX_NORMALIZED_MOVEMENT = 0.045f
         private const val MIN_LANDMARK_CONFIDENCE = 0.55f
         private const val LYING_RATIO = 0.80f
     }
