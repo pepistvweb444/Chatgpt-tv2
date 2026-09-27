@@ -42,7 +42,7 @@ async function gemini(key, model, input) {
   const contents = input.filter(m => m.role !== 'developer').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content || '') }] }));
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...(system ? { systemInstruction: { parts: [{ text: system }] } : {}), contents, generationConfig: { temperature: 0.3 } })
+    body: JSON.stringify({ ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), contents, generationConfig: { temperature: 0.3 } })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || `gemini_http_${response.status}`);
