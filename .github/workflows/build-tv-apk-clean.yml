@@ -1,5 +1,5 @@
 name: Build Javistv APK Clean
-# Javistv translation build 0.6.23
+# Javistv translation build 0.6.24
 
 on:
   push:
@@ -86,7 +86,9 @@ jobs:
         run: python3 scripts/apply_tv_personal_streaming_v0622.py
       - name: Add explicit phone sync and Fire accessibility controls
         run: python3 scripts/apply_tv_sync_accessibility_v0623.py
-      - name: Diagnose TV 0.6.23 generated features
+      - name: Fix dubbing mic permission ambient capture and audio diagnostics
+        run: python3 scripts/apply_tv_translation_fix_v0624.py
+      - name: Diagnose TV 0.6.24 generated features
         run: |
           check() { if grep -q "$1" "$2"; then echo "OK: $1"; else echo "MISSING: $1 in $2"; fi; }
           check 'fun incomingCall()' app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
@@ -116,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TV-BUILD-DIAGNOSTICS-v0.6.23
+          name: TV-BUILD-DIAGNOSTICS-v0.6.24
           path: |
             tv-build.log
             app/src/main/java/com/jarvis/tv/MainActivity.kt
@@ -128,17 +130,17 @@ jobs:
       - name: Stop if compilation failed
         if: steps.compile.outcome == 'failure'
         run: exit 1
-      - name: Verify APK is Javistv 0.6.23
+      - name: Verify APK is Javistv 0.6.24
         run: |
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk)
-          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='30' versionName='0.6.23'"
+          echo "$BADGING" | grep "package: name='com.jarvis.tv' versionCode='31' versionName='0.6.24'"
       - name: Sign TV APK
         run: |
           K="$HOME/.jarvis-signing/jarvis-debug.keystore"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Javistv-v0.6.23-debug.apk app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Javistv-v0.6.23-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$K" --ks-pass pass:jarvis123 --key-pass pass:jarvis123 --out Javistv-v0.6.24-debug.apk app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Javistv-v0.6.24-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TV-ONLY-Javistv-v0.6.23
-          path: Javistv-v0.6.23-debug.apk
+          name: TV-ONLY-Javistv-v0.6.24
+          path: Javistv-v0.6.24-debug.apk
           if-no-files-found: error
