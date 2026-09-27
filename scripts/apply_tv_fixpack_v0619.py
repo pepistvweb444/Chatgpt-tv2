@@ -87,7 +87,7 @@ post_audio=r'''    private fun postAudio(endpoint: String, file: File): String {
             setRequestProperty("Content-Type", "audio/mp4")
             setRequestProperty("Accept", "application/json")
             setRequestProperty("X-Filename", "javistv-voice.m4a")
-            setRequestProperty("User-Agent", "Javistv/0.6.20")
+            setRequestProperty("User-Agent", "Javistv/0.6.21")
         }
         c.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
         val code = c.responseCode
@@ -168,7 +168,7 @@ new_dl='''        if (imageUrl.isNotBlank()) Thread {
             val bmp = runCatching {
                 val conn=URL(imageUrl).openConnection().apply {
                     connectTimeout=5000; readTimeout=8000
-                    setRequestProperty("User-Agent","Mozilla/5.0 Javistv/0.6.20")
+                    setRequestProperty("User-Agent","Mozilla/5.0 Javistv/0.6.21")
                 }
                 conn.getInputStream().use { BitmapFactory.decodeStream(it) }
             }.getOrNull()
@@ -176,9 +176,72 @@ new_dl='''        if (imageUrl.isNotBlank()) Thread {
         }.start()'''
 if old_dl in s: s=s.replace(old_dl,new_dl,1)
 
-s=s.replace('Ajustes de Javistv v0.6.18','Ajustes de Javistv v0.6.20')
-s=s.replace('Javistv/0.6.18','Javistv/0.6.20')
+s=s.replace('Ajustes de Javistv v0.6.18','Ajustes de Javistv v0.6.21')
+s=s.replace('Javistv/0.6.18','Javistv/0.6.21')
 p.write_text(s)
+
+
+# Unified inbox from the paired phone: email/SMS/RCS/app messages inside Mi día/Centro personal.
+helper_anchor='    private fun renderPersonalDashboard(agenda:JSONObject?, calls:JSONObject?, mobility:JSONObject?) {'
+if 'private fun appendUnifiedInbox(' not in s:
+    helper=r'''    private fun appendUnifiedInbox(data: JSONObject?) {
+        addDashboardHeading("Mensajes y correo")
+        if (data == null) {
+            addDashboardCard("Mensajes no sincronizados","Javistv no ha recibido la bandeja del móvil. Comprueba el emparejamiento y el acceso a notificaciones.",Color.rgb(92,58,38))
+            return
+        }
+        val items=data.optJSONArray("items") ?: JSONArray()
+        if(items.length()==0) {
+            addDashboardCard("Sin mensajes pendientes","No hay SMS, RCS, WhatsApp o correo pendiente detectado en el móvil.")
+            return
+        }
+        for(i in 0 until minOf(items.length(),12)) {
+            val m=items.optJSONObject(i)?:continue
+            val source=m.optString("source").ifBlank{"Mensaje"}
+            val from=m.optString("from").ifBlank{source}
+            val body=m.optString("text").trim().take(700)
+            addDashboardCard("✉ $source · $from",body,Color.rgb(42,55,78))
+        }
+    }
+
+'''
+    if helper_anchor not in s: raise SystemExit('renderPersonalDashboard anchor missing')
+    s=s.replace(helper_anchor,helper+helper_anchor,1)
+
+# showNotifications: fetch inbox together with calendar/calls/mobility.
+old='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
+            val calls=runCatching{mobileRemote.calls()}.getOrNull()
+            val mobility=runCatching{mobileRemote.mobility()}.getOrNull()
+            runOnUiThread { renderPersonalDashboard(agenda,calls,mobility); status.text="● Agenda, llamadas y pedidos actualizados" }'''
+new='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
+            val calls=runCatching{mobileRemote.calls()}.getOrNull()
+            val mobility=runCatching{mobileRemote.mobility()}.getOrNull()
+            val inbox=runCatching{mobileRemote.unreadMessages()}.getOrNull()
+            runOnUiThread {
+                renderPersonalDashboard(agenda,calls,mobility)
+                appendUnifiedInbox(inbox)
+                status.text="● Mi día sincronizado desde el móvil"
+            }'''
+if old in s: s=s.replace(old,new,1)
+
+# Morning briefing uses same source set.
+old2='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
+            val calls=runCatching{mobileRemote.calls()}.getOrNull()
+            val mobility=runCatching{mobileRemote.mobility()}.getOrNull()
+            val home=runCatching{mobileRemote.domotics()}.getOrNull()
+            runOnUiThread {
+                renderPersonalDashboard(agenda,calls,mobility)'''
+new2='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
+            val calls=runCatching{mobileRemote.calls()}.getOrNull()
+            val mobility=runCatching{mobileRemote.mobility()}.getOrNull()
+            val inbox=runCatching{mobileRemote.unreadMessages()}.getOrNull()
+            val home=runCatching{mobileRemote.domotics()}.getOrNull()
+            runOnUiThread {
+                renderPersonalDashboard(agenda,calls,mobility)
+                appendUnifiedInbox(inbox)'''
+if old2 in s: s=s.replace(old2,new2,1)
+
+s=s.replace('subtitle.text = "Agenda · recordatorios · llamadas · pedidos · finanzas"','subtitle.text = "Agenda · mensajes · correo · llamadas · pedidos · casa"',1)
 
 # --- Accessibility: one permission drives bubble, translated subtitles and app UI reading ---
 p=Path('app/src/main/res/xml/accessibility_service_config.xml')
@@ -271,4 +334,4 @@ m=m.replace('android:label="Javistv bubble"','android:label="Javistv · burbuja 
 m=m.replace('            android:stopWithTask="false"\n            android:foregroundServiceType="microphone" />','            android:stopWithTask="false" />')
 p.write_text(m)
 
-print('Javistv 0.6.20 fixpack applied')
+print('Javistv 0.6.21 fixpack applied')
