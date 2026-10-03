@@ -110,7 +110,7 @@ helpers=r'''    private fun showPhonePairing() {
                         runOnUiThread {
                             val events=agenda.optInt("eventCount",0)
                             val cal=agenda.optBoolean("calendarPermission",false)
-                            refresh("Móvil conectado ✓ · Calendario "+if(cal)"OK ($events eventos)" else "sin permiso")
+                            refresh("Móvil conectado ✓ · Calendario " + (if (cal) "OK ($events eventos)" else "sin permiso"))
                         }
                     }.onFailure { e ->
                         runOnUiThread { refresh("ERROR: "+(e.message?:e.javaClass.simpleName)) }
