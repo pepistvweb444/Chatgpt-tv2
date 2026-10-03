@@ -52,10 +52,12 @@ stream=r'''    private fun loadStreamingPreview(spec: StreamingAppSpec, pkg: Str
         val items=runCatching{JSONArray(prefs.getString(key,"[]"))}.getOrElse{JSONArray()}
         if(items.length()==0) {
             title.text="${spec.label} · tu perfil"
-            addPreviewTextCard(host,"Sin datos personalizados todavía","Abre ${spec.label} con Accesibilidad de Javistv activa. Solo mostraré Mi lista, Continuar viendo, nuevos episodios/temporadas y estrenos visibles en tu perfil.",pkg)
+            addPreviewTextCard(host,"Sin datos personalizados todavía","Activa Accesibilidad de Javistv y abre ${spec.label}. Guardaré Mi lista, Continuar viendo, Recomendados para ti, Porque viste…, nuevos episodios y estrenos visibles en tu perfil.",pkg)
+            host.addView(Button(this).apply { text="ACTIVAR ACCESIBILIDAD JAVISTV"; isAllCaps=false; setOnClickListener{showAccessibilityPanel()}; layoutParams=LinearLayout.LayoutParams(tvDp(280),tvDp(78)).apply{marginEnd=tvDp(12)} })
+            host.addView(Button(this).apply { text="ABRIR ${spec.label}"; isAllCaps=false; setOnClickListener{launchStreamingPackage(pkg)}; layoutParams=LinearLayout.LayoutParams(tvDp(220),tvDp(78)) })
             return
         }
-        title.text="${spec.label} · Mi lista y novedades"
+        title.text="${spec.label} · tu perfil y recomendaciones"
         var shown=0
         for(i in 0 until items.length()) {
             val o=items.optJSONObject(i)?:continue
@@ -96,6 +98,10 @@ cache=r'''    private fun cacheStreamingContent(pkg: String) {
                 x.contains("nuevos episodios") || x.contains("new episodes") -> "Nuevos episodios"
                 x.contains("nueva temporada") || x.contains("new season") -> "Nueva temporada"
                 x.contains("estreno") || x.contains("new release") || x.contains("recién añadido") || x.contains("recently added") -> "Estreno / recién añadido"
+                x.contains("recomendado para ti") || x.contains("recomendados para ti") || x.contains("recommended for you") || x.contains("top picks for you") -> "Recomendados para ti"
+                x.contains("porque viste") || x.contains("because you watched") || x.contains("porque te gustó") || x.contains("because you liked") -> "Porque viste / te gustó"
+                x.contains("tendencias para ti") || x.contains("trending for you") || x.contains("popular para ti") -> "Tendencias para ti"
+                x.contains("top 10") || x.contains("más vistos") || x.contains("most watched") -> "Top / más vistos"
                 else -> null
             }
         }
