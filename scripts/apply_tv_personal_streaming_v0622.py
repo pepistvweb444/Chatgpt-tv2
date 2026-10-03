@@ -1,4 +1,12 @@
 from pathlib import Path
+import runpy
+
+# This patch depends on the streaming-app UI/accessibility base. Some build
+# pipelines omitted that earlier step, so make the dependency self-healing.
+main_source = Path('app/src/main/java/com/jarvis/tv/MainActivity.kt')
+if main_source.exists() and 'private fun cachedPersonalTitles(provider: String)' not in main_source.read_text():
+    runpy.run_path('scripts/apply_tv_streaming_focus.py', run_name='__main__')
+
 
 def replace_function(text, signature, replacement):
     start=text.find(signature)
