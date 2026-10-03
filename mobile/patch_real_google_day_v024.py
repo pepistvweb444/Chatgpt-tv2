@@ -170,3 +170,6 @@ print('Jarvis Mobile real Google Calendar day applied')
 import runpy
 runpy.run_path("mobile/patch_caller_identity_tv_audio_v026.py", run_name="__main__")
 runpy.run_path("mobile/patch_attachments_morning_brief_v026.py", run_name="__main__")
+
+import runpy
+runpy.run_path("mobile/patch_activity_hub_v026.py", run_name="__main__")
