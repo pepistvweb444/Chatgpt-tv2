@@ -165,3 +165,8 @@ s=replace_function(s,'    private fun agendaForTv()',agenda_tv)
 p.write_text(s)
 
 print('Jarvis Mobile real Google Calendar day applied')
+
+# Final 0.2.25 signed hotfix features.
+import runpy
+runpy.run_path("mobile/patch_caller_identity_tv_audio_v026.py", run_name="__main__")
+runpy.run_path("mobile/patch_attachments_morning_brief_v026.py", run_name="__main__")
