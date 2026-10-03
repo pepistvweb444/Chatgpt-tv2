@@ -260,3 +260,8 @@ if '@+id/pairPhoneButton' not in xml:
 x.write_text(xml)
 
 print("Javistv 0.6.25 pairing/accessibility/camera diagnostics patch applied")
+
+
+# Final signed hotfix: calls, attachments and morning briefing.
+import runpy
+runpy.run_path("scripts/apply_tv_calls_attachments_briefing_v0626.py", run_name="__main__")
