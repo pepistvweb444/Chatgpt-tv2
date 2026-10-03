@@ -45,7 +45,6 @@ cached=r'''    private fun cachedPersonalTitles(provider: String): List<String> 
 s=replace_function(s,'    private fun cachedPersonalTitles(provider: String)',cached)
 
 stream=r'''    private fun loadStreamingPreview(spec: StreamingAppSpec, pkg: String) {
-        streamingPreviewProvider=spec.provider
         val title=findViewById<TextView>(R.id.streamingPreviewTitle)
         val host=findViewById<LinearLayout>(R.id.streamingPreviewHost)
         host.removeAllViews()
