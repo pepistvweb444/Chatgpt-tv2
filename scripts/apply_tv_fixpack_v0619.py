@@ -205,8 +205,10 @@ if 'private fun appendUnifiedInbox(' not in s:
     }
 
 '''
-    if helper_anchor not in s: raise SystemExit('renderPersonalDashboard anchor missing')
-    s=s.replace(helper_anchor,helper+helper_anchor,1)
+    if helper_anchor in s:
+        s=s.replace(helper_anchor,helper+helper_anchor,1)
+    else:
+        print('Legacy renderPersonalDashboard not present; skipping unified inbox dashboard hook')
 
 # showNotifications: fetch inbox together with calendar/calls/mobility.
 old='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
@@ -222,7 +224,7 @@ new='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
                 appendUnifiedInbox(inbox)
                 status.text="● Mi día sincronizado desde el móvil"
             }'''
-if old in s: s=s.replace(old,new,1)
+if helper_anchor in s and old in s: s=s.replace(old,new,1)
 
 # Morning briefing uses same source set.
 old2='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
@@ -239,7 +241,7 @@ new2='''            val agenda=runCatching{mobileRemote.agenda()}.getOrNull()
             runOnUiThread {
                 renderPersonalDashboard(agenda,calls,mobility)
                 appendUnifiedInbox(inbox)'''
-if old2 in s: s=s.replace(old2,new2,1)
+if helper_anchor in s and old2 in s: s=s.replace(old2,new2,1)
 
 s=s.replace('subtitle.text = "Agenda · recordatorios · llamadas · pedidos · finanzas"','subtitle.text = "Agenda · mensajes · correo · llamadas · pedidos · casa"',1)
 
