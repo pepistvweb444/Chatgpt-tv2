@@ -1,1 +1,3 @@
-Trigger Jarvis Mobile 0.2.16 rebuild on 2026-08-28 22:03 Europe/Madrid with latest fixes: incoming call screening and TV bridge, WhatsApp/VoIP call state, Makro shopping, new messages since last check, real Home Connect devices, domotics rooms, inline widgets, continuous TTS, wake overlay, and duplicate-response suppression.
+Jarvis Mobile bridge rebuild
+Harvest TV sync endpoints: unread, agenda, domotics
+Triggered after compatibility fix for patch_tv_activity_feed_v020.py
