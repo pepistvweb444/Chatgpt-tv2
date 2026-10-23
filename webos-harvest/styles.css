@@ -359,3 +359,14 @@ section{margin-bottom:20px}
   .media-zone{height:302px}
   .home-zone{height:136px}
 }
+
+.sync-card{display:flex;flex-direction:column;gap:10px;background:#111924;border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:22px;margin-bottom:16px}
+.sync-card h3{font-size:26px;margin:0 0 4px}.sync-card p{font-size:16px;line-height:1.45;color:#aebac9;margin:0 0 8px}
+.sync-card label{font-size:15px;color:#c7d2df;font-weight:700;margin-top:4px}
+.sync-card input{height:54px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:#0c131d;color:#fff;padding:0 16px;font-size:22px;outline:none}
+.sync-card input:focus{box-shadow:0 0 0 4px rgba(255,255,255,.85)}
+.primary-action{height:56px;border:0;border-radius:18px;background:#edf7ff;color:#071018;font-size:20px;font-weight:900;margin-top:8px}
+.sync-status{padding:14px 16px;border-radius:18px;background:#0f1722;color:#d8e7f4;font-size:16px;margin-bottom:14px}
+.phone-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.phone-chip{background:#101824;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:15px}
+.phone-chip b{display:block;font-size:18px;margin-bottom:5px}.phone-chip span{font-size:14px;color:#9eacbd}
