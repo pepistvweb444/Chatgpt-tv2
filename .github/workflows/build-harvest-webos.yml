@@ -1,0 +1,36 @@
+name: Build Harvest TV webOS IPK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "webos-harvest/**"
+      - ".github/workflows/build-harvest-webos.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install webOS CLI
+        run: npm install -g @webos-tools/cli
+      - name: Validate JavaScript
+        run: node --check webos-harvest/app.js
+      - name: Package IPK
+        run: |
+          mkdir -p out
+          ares-package webos-harvest -o out
+          ls -lah out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Harvest-TV-webOS-IPK-${{ github.run_id }}
+          path: out/*.ipk
+          retention-days: 30
+          if-no-files-found: error
