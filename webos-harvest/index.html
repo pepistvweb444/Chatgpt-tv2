@@ -9,48 +9,71 @@
 <body>
   <div class="wallpaper"></div><div class="shade"></div>
 
-  <header class="topbar">
-    <div class="identity">
+  <header class="fire-topbar">
+    <div class="brand-cluster">
       <button class="menu-trigger" tabindex="0" data-focusable="true" data-action="chats">☰</button>
       <div class="jarvis-mark"><span class="dot"></span> JARVIS</div>
-      <div><div id="greeting" class="greeting">Buenas tardes</div><div class="sub">Harvest TV · Casa</div></div>
     </div>
-    <div class="top-status">
-      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="home-summary">🏠 <b id="homeStatus">Casa</b></button>
-      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="drawer">🔔 <b id="notificationStatus">0</b></button>
+    <nav class="quick-apps" id="quickApps"></nav>
+    <div class="top-actions">
+      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="apps">▦ Apps</button>
+      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="sync">⇄ Sync</button>
       <button class="mic-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
       <div class="time-block"><b id="clock">--:--</b><span id="date">--</span></div>
     </div>
   </header>
 
-  <main class="screen">
-    <section class="hero-zone">
-      <div class="section-title"><h1>Ahora</h1><span>Información que Jarvis considera relevante</span></div>
-      <div id="heroGrid" class="hero-grid"></div>
+  <main class="fire-layout">
+    <section class="media-stage">
+      <div id="heroPreview" class="hero-preview">
+        <div id="heroBackdrop" class="hero-backdrop"></div>
+        <video id="heroVideo" class="hero-video" muted playsinline preload="metadata"></video>
+        <div class="hero-overlay"></div>
+        <div class="hero-copy">
+          <span id="heroProvider" class="hero-provider">Jarvis TV</span>
+          <h1 id="heroTitle">Selecciona una película o serie</h1>
+          <div id="heroMeta" class="hero-meta"></div>
+          <p id="heroSummary">La ficha del contenido aparecerá aquí con imagen, sinopsis y progreso.</p>
+          <div class="hero-actions">
+            <button tabindex="0" data-focusable="true" data-action="play-selected">▶ Reproducir</button>
+            <button tabindex="0" data-focusable="true" data-action="details-selected">ⓘ Detalles</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="catalogRows" class="catalog-rows fire-rows"></div>
     </section>
 
-    <section class="media-zone">
-      <div class="section-title compact"><h2>Ver</h2><span>Biblioteca multimedia · estilo Plex</span></div>
-      <div id="featureDetail" class="feature-detail"></div>
-      <div id="catalogRows" class="catalog-rows"></div>
-      <div id="appsRow" class="apps-row"></div>
-    </section>
+    <aside class="jarvis-rail">
+      <div class="rail-head">
+        <div><span class="drawer-kicker">NOW BRIEF</span><h2>Tu día</h2></div>
+        <button tabindex="0" data-focusable="true" data-action="drawer">Ver todo</button>
+      </div>
 
-    <section class="home-zone">
-      <div class="section-title compact"><h2>Casa</h2><span id="homeProviderLabel">Homey · estado real</span></div>
-      <div id="homeRow" class="home-row"></div>
-    </section>
+      <div id="liveWidgets" class="live-widgets">
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="call">
+          <div class="widget-icon">☎</div><div><b>Llamadas</b><span id="widgetCall">Sin llamada activa</span></div>
+        </article>
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="messages">
+          <div class="widget-icon">✉</div><div><b>Mensajes</b><span id="widgetMessages">Sin sincronizar</span></div>
+        </article>
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="calendar">
+          <div class="widget-icon">◫</div><div><b>Próxima cita</b><span id="widgetCalendar">Sin sincronizar</span></div>
+        </article>
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="weather">
+          <div class="widget-icon">☀</div><div><b>Tiempo</b><span id="widgetWeather">Conectar ubicación</span></div>
+        </article>
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="home">
+          <div class="widget-icon">⌂</div><div><b>Casa</b><span id="widgetHome">Homey sin sincronizar</span></div>
+        </article>
+        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="tasks">
+          <div class="widget-icon">✓</div><div><b>Tareas</b><span id="widgetTasks">0 pendientes</span></div>
+        </article>
+      </div>
+
+      <button class="rail-sync" tabindex="0" data-focusable="true" data-action="sync">⇄ Sincronizar con Jarvis Mobile</button>
+    </aside>
   </main>
-
-  <nav class="dock">
-    <button tabindex="0" data-focusable="true" data-action="dock" data-target="home">⌂ <span>Inicio</span></button>
-    <button tabindex="0" data-focusable="true" data-action="dock" data-target="watch">▣ <span>Ver</span></button>
-    <button tabindex="0" data-focusable="true" data-action="apps">▦ <span>Apps</span></button>
-    <button tabindex="0" data-focusable="true" data-action="chats">☰ <span>Chats</span></button>
-    <button tabindex="0" data-focusable="true" data-action="drawer">🔔 <span>Ahora</span></button>
-    <button tabindex="0" data-focusable="true" data-action="sync">⇄ <span>Sincronizar</span></button>
-    <button tabindex="0" data-focusable="true" data-action="voice">✦ <span>Jarvis</span></button>
-  </nav>
 
   <aside id="chatDrawer" class="side-drawer left-drawer">
     <div class="drawer-head">
@@ -58,7 +81,7 @@
       <button tabindex="0" data-focusable="true" data-action="new-chat">＋ Nuevo</button>
     </div>
     <div id="chatList" class="chat-list"></div>
-    <div class="drawer-foot">Continúa aquí una conversación iniciada en TV, móvil o PC.</div>
+    <div class="drawer-foot">Continúa conversaciones de TV, móvil o PC.</div>
   </aside>
 
   <aside id="nowDrawer" class="side-drawer right-drawer">
@@ -81,7 +104,7 @@
     </div>
     <div class="sync-card">
       <h3>Conectar Jarvis Mobile</h3>
-      <p>En el móvil abre Jarvis → Dispositivos → “Preparar emparejamiento con TV”. Introduce aquí la IP y el PIN que te muestra.</p>
+      <p>En el móvil abre Jarvis → Dispositivos → Preparar emparejamiento con TV.</p>
       <label>IP del teléfono</label>
       <input id="syncHost" tabindex="0" data-focusable="true" inputmode="decimal" placeholder="192.168.0.xxx">
       <label>PIN de 4 dígitos</label>
@@ -102,10 +125,7 @@
 
   <aside id="jarvisOverlay" class="jarvis-overlay">
     <div class="jarvis-orb">J</div>
-    <div class="jarvis-text">
-      <strong>Jarvis</strong>
-      <span id="jarvisState">Pulsa Voice o selecciona Jarvis</span>
-    </div>
+    <div class="jarvis-text"><strong>Jarvis</strong><span id="jarvisState">Listo</span></div>
     <div id="conversation" class="conversation"></div>
   </aside>
 
