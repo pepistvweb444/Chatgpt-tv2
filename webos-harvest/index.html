@@ -48,6 +48,7 @@
     <button tabindex="0" data-focusable="true" data-action="apps">▦ <span>Apps</span></button>
     <button tabindex="0" data-focusable="true" data-action="chats">☰ <span>Chats</span></button>
     <button tabindex="0" data-focusable="true" data-action="drawer">🔔 <span>Ahora</span></button>
+    <button tabindex="0" data-focusable="true" data-action="sync">⇄ <span>Sincronizar</span></button>
     <button tabindex="0" data-focusable="true" data-action="voice">✦ <span>Jarvis</span></button>
   </nav>
 
@@ -71,6 +72,24 @@
       <button tabindex="0" data-focusable="true" data-action="tab" data-tab="tasks">Tareas</button>
     </div>
     <div id="nowContent" class="now-content"></div>
+  </aside>
+
+  <aside id="syncDrawer" class="side-drawer right-drawer wide-drawer">
+    <div class="drawer-head">
+      <div><span class="drawer-kicker">JARVIS LINK</span><h2>Sincronizar teléfono</h2></div>
+      <button tabindex="0" data-focusable="true" data-action="sync-close">Cerrar</button>
+    </div>
+    <div class="sync-card">
+      <h3>Conectar Jarvis Mobile</h3>
+      <p>En el móvil abre Jarvis → Dispositivos → “Preparar emparejamiento con TV”. Introduce aquí la IP y el PIN que te muestra.</p>
+      <label>IP del teléfono</label>
+      <input id="syncHost" tabindex="0" data-focusable="true" inputmode="decimal" placeholder="192.168.0.xxx">
+      <label>PIN de 4 dígitos</label>
+      <input id="syncPin" tabindex="0" data-focusable="true" inputmode="numeric" maxlength="4" placeholder="0000">
+      <button class="primary-action" tabindex="0" data-focusable="true" data-action="pair-phone">Emparejar</button>
+    </div>
+    <div id="syncStatus" class="sync-status"></div>
+    <div id="phoneSummary" class="phone-summary"></div>
   </aside>
 
   <aside id="appsDrawer" class="side-drawer right-drawer wide-drawer">
