@@ -285,3 +285,77 @@ section{margin-bottom:20px}
   .hero-zone{height:290px}.hero-grid{grid-template-rows:112px 112px}.tile.hero-primary h3{font-size:34px}
   .media-zone{height:334px}.home-zone{height:126px}.dock button{width:104px}
 }
+
+/* 0.4 Sofa UI: optimized for a 65-inch TV viewed from a distance */
+:root{--gap:22px}
+.topbar{height:128px;padding:28px 58px 18px}
+.jarvis-mark{font-size:32px}
+.greeting{font-size:29px}
+.sub{font-size:17px}
+.menu-trigger{width:58px;height:58px;font-size:29px;border-radius:20px}
+.mini-pill{height:52px;padding:0 18px;font-size:18px;border-radius:26px}
+.mini-pill b{font-size:19px}
+.mic-btn{height:54px;padding:0 24px;font-size:20px;border-radius:27px}
+.time-block{width:134px}.time-block b{font-size:34px}.time-block span{font-size:14px}
+
+.screen{height:820px;padding:0 58px 108px}
+.section-title{height:52px;margin-bottom:14px}.section-title h1{font-size:40px}.section-title h2{font-size:30px}.section-title span{font-size:16px}
+.section-title.compact{height:40px}
+
+.hero-zone{height:338px}
+.hero-grid{grid-template-columns:2.15fr 1fr 1fr;grid-template-rows:132px 132px;gap:22px}
+.tile{padding:24px 26px;border-radius:30px}
+.tile .kicker{font-size:15px}
+.tile h3{font-size:30px;margin:10px 0 8px}
+.tile.hero-primary h3{font-size:47px;max-width:590px}
+.tile p{font-size:18px;line-height:1.38}
+.tile.hero-primary p{font-size:20px;max-width:560px}
+.badge{height:32px;padding:0 12px;font-size:14px;border-radius:16px}
+.metric{font-size:39px}
+.tile .meta{left:26px;bottom:21px}
+
+.media-zone{height:316px}
+.media-rail{height:132px;gap:18px;margin-bottom:10px}
+.poster-card{flex:0 0 128px;height:122px;border-radius:20px}
+.poster-card .poster-title{font-size:16px;left:11px;right:11px;bottom:10px}
+.poster-card .poster-episode{font-size:12px;top:10px;left:10px}
+.apps-row{height:84px;gap:17px}
+.app-card{height:75px;flex-basis:210px;padding:12px 17px;border-radius:24px}
+.app-card strong{font-size:27px;margin-top:15px}
+.app-card small{font-size:13px}
+.context-shelf{height:92px;padding:12px 16px;border-radius:22px}
+.shelf-title{margin-bottom:10px}.shelf-title h3{font-size:25px}.shelf-title span{font-size:14px}
+.content-card{flex:0 0 260px;height:52px;padding:8px 12px}.content-card b{font-size:18px}.content-card span{display:none}
+
+.home-zone{height:146px}
+.home-row{height:108px;gap:17px}
+.home-card{height:100px;flex-basis:270px;padding:13px 16px;border-radius:23px}
+.home-card .eyebrow{font-size:14px}.home-card .value{font-size:34px;margin-top:7px}.home-card .state{font-size:15px}
+
+.dock{bottom:22px;padding:10px;border-radius:31px;gap:9px}
+.dock button{width:126px;height:56px;border-radius:22px;font-size:20px}
+.dock button span{font-size:17px}
+
+.side-drawer{width:610px;padding:38px 34px}
+.wide-drawer{width:800px}
+.drawer-head h2{font-size:38px}.drawer-kicker{font-size:14px}
+.drawer-head button{font-size:18px;padding:13px 17px}
+.drawer-tabs button{font-size:18px;padding:13px 16px}
+.chat-item,.now-item{padding:17px 19px;border-radius:21px}
+.chat-item b,.now-item b{font-size:22px}
+.chat-item span,.now-item span{font-size:17px}
+.installed-app{height:110px;font-size:19px;padding:15px}.installed-app span{font-size:13px}
+.empty-state{font-size:18px}
+
+.jarvis-overlay{width:720px;height:86px;bottom:98px}
+.jarvis-orb{width:58px;height:58px;font-size:25px}
+.jarvis-text strong{font-size:22px}.jarvis-text span{font-size:15px}.conversation{font-size:18px}
+
+@media(max-width:1500px){
+  .topbar{height:116px;padding:22px 42px 14px}
+  .screen{padding:0 42px 104px}
+  .hero-zone{height:322px}.hero-grid{grid-template-rows:124px 124px}
+  .tile.hero-primary h3{font-size:43px}
+  .media-zone{height:302px}
+  .home-zone{height:136px}
+}
