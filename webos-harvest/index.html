@@ -7,57 +7,70 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="ambient"></div>
+  <div class="wallpaper"></div>
+  <div class="shade"></div>
+
   <header class="topbar">
-    <div>
-      <div class="brand">JARVIS <span>HARVEST TV</span></div>
-      <div id="greeting" class="muted">Buenas tardes</div>
+    <div class="identity">
+      <div class="jarvis-mark"><span class="dot"></span> JARVIS</div>
+      <div>
+        <div id="greeting" class="greeting">Buenas tardes</div>
+        <div class="sub">Harvest TV · Casa</div>
+      </div>
     </div>
-    <div class="statusbar">
-      <div class="status-pill" id="homeStatus">Casa · conectando</div>
-      <div class="status-pill" id="notificationStatus">0 avisos</div>
-      <div class="clock"><b id="clock">--:--</b><span id="date"></span></div>
-      <button class="voice" data-focusable="true" data-action="voice">🎙 <span>Jarvis</span></button>
+
+    <div class="top-status">
+      <div class="mini-pill">🏠 <b id="homeStatus">Casa conectada</b></div>
+      <div class="mini-pill">🔔 <b id="notificationStatus">3</b></div>
+      <button class="mic-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
+      <div class="time-block"><b id="clock">--:--</b><span id="date">--</span></div>
     </div>
   </header>
 
-  <main>
-    <section>
-      <div class="section-head">
+  <main class="screen">
+    <section class="hero-zone">
+      <div class="section-title">
         <h1>Ahora</h1>
-        <span>Información relevante en este momento</span>
+        <span>Jarvis organiza lo importante en este momento</span>
       </div>
       <div id="heroGrid" class="hero-grid"></div>
     </section>
 
-    <section>
-      <div class="section-head">
-        <h2>Streaming y TV</h2>
-        <span>Selecciona una app para ver su información</span>
+    <section class="media-zone">
+      <div class="section-title compact">
+        <h2>Ver</h2>
+        <span>Apps, TV en directo y contenido</span>
       </div>
       <div id="appsRow" class="apps-row"></div>
       <div id="contextShelf" class="context-shelf"></div>
     </section>
 
-    <section>
-      <div class="section-head">
+    <section class="home-zone">
+      <div class="section-title compact">
         <h2>Casa</h2>
-        <span>Controles rápidos</span>
+        <span>Homey · estado en tiempo real</span>
       </div>
-      <div id="homeRow" class="tile-row"></div>
-    </section>
-
-    <section class="jarvis-section">
-      <div class="jarvis-panel">
-        <div class="orb">J</div>
-        <div class="jarvis-copy">
-          <strong>Jarvis</strong>
-          <span id="jarvisState">Pulsa el micrófono para hablar</span>
-        </div>
-        <div id="conversation" class="conversation"></div>
-      </div>
+      <div id="homeRow" class="home-row"></div>
     </section>
   </main>
+
+  <nav class="dock">
+    <button tabindex="0" data-focusable="true" data-action="dock" data-target="home">⌂ <span>Inicio</span></button>
+    <button tabindex="0" data-focusable="true" data-action="dock" data-target="watch">▣ <span>Ver</span></button>
+    <button tabindex="0" data-focusable="true" data-action="dock" data-target="homey">⌁ <span>Casa</span></button>
+    <button tabindex="0" data-focusable="true" data-action="dock" data-target="comms">✉ <span>Ahora</span></button>
+    <button tabindex="0" data-focusable="true" data-action="voice">✦ <span>Jarvis</span></button>
+    <button tabindex="0" data-focusable="true" data-action="settings">⚙ <span>Ajustes</span></button>
+  </nav>
+
+  <aside id="jarvisOverlay" class="jarvis-overlay">
+    <div class="jarvis-orb">J</div>
+    <div class="jarvis-text">
+      <strong>Jarvis</strong>
+      <span id="jarvisState">Pulsa el botón Voice del mando o selecciona Jarvis</span>
+    </div>
+    <div id="conversation" class="conversation"></div>
+  </aside>
 
   <div id="toast" class="toast"></div>
   <script src="app.js"></script>
