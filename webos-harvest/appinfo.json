@@ -1,6 +1,6 @@
 {
   "id": "com.jarvis.harvesttv",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "vendor": "Jarvis",
   "type": "web",
   "main": "index.html",
@@ -8,5 +8,8 @@
   "requiredMemory": 64,
   "disableBackHistoryAPI": true,
   "icon": "icon.png",
-  "requiredACG": []
+  "requiredACG": [
+    "application.launcher",
+    "application.query"
+  ]
 }
