@@ -100,6 +100,9 @@ class PhoneBridgeService : Service() {
         }
         if (!authorized(headers, path)) return 401 to JSONObject().put("error", "unauthorized").toString()
         if (path.startsWith("/permissions")) return 200 to permissionStatus().toString()
+        if (path.startsWith("/unread")) return 200 to unreadForTv().toString()
+        if (path.startsWith("/agenda")) return 200 to agendaForTv().toString()
+        if (path.startsWith("/domotics")) return 200 to domoticsForTv().toString()
         if (path.startsWith("/incoming-call")) return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
         if (path.startsWith("/incoming-call-action") || path.startsWith("/call-action?")) {
             val action = URLDecoder.decode(path.substringAfter("action=", "ignore").substringBefore("&"), StandardCharsets.UTF_8.name()).lowercase()
@@ -138,6 +141,112 @@ class PhoneBridgeService : Service() {
         .put("contacts", ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED)
         .put("callPhone", ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED)
         .put("answerCalls", ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED)
+
+    private fun unreadForTv(): JSONObject {
+        val recent = recentMessages("all")
+        val messages = recent.optJSONArray("messages") ?: JSONArray()
+        val items = JSONArray()
+        for (i in 0 until messages.length()) {
+            val m = messages.optJSONObject(i) ?: continue
+            items.put(JSONObject()
+                .put("source", m.optString("source"))
+                .put("from", m.optString("from"))
+                .put("text", m.optString("text"))
+                .put("time", m.optLong("time")))
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("unreadCount", items.length())
+            .put("items", items)
+            .put("permissions", permissionStatus())
+    }
+
+    private fun agendaForTv(): JSONObject {
+        val now = System.currentTimeMillis()
+        val end = now + 7L * 24L * 60L * 60L * 1000L
+        val events = JSONArray()
+        val reminders = JSONArray()
+        val hasCalendar = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+        if (hasCalendar) runCatching {
+            val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon()
+            android.content.ContentUris.appendId(uri, now)
+            android.content.ContentUris.appendId(uri, end)
+            val projection = arrayOf(
+                android.provider.CalendarContract.Instances.TITLE,
+                android.provider.CalendarContract.Instances.BEGIN,
+                android.provider.CalendarContract.Instances.END,
+                android.provider.CalendarContract.Instances.EVENT_LOCATION,
+                android.provider.CalendarContract.Instances.ALL_DAY,
+                android.provider.CalendarContract.Instances.CALENDAR_DISPLAY_NAME
+            )
+            contentResolver.query(uri.build(), projection, null, null, android.provider.CalendarContract.Instances.BEGIN + " ASC")?.use { c ->
+                val ti=c.getColumnIndex(android.provider.CalendarContract.Instances.TITLE)
+                val bi=c.getColumnIndex(android.provider.CalendarContract.Instances.BEGIN)
+                val ei=c.getColumnIndex(android.provider.CalendarContract.Instances.END)
+                val li=c.getColumnIndex(android.provider.CalendarContract.Instances.EVENT_LOCATION)
+                val ai=c.getColumnIndex(android.provider.CalendarContract.Instances.ALL_DAY)
+                val ci=c.getColumnIndex(android.provider.CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
+                while(c.moveToNext() && events.length()<40){
+                    val title=if(ti>=0)c.getString(ti).orEmpty() else "Evento"
+                    if(title.isBlank()) continue
+                    events.put(JSONObject()
+                        .put("title",title)
+                        .put("begin",if(bi>=0)c.getLong(bi) else 0L)
+                        .put("end",if(ei>=0)c.getLong(ei) else 0L)
+                        .put("location",if(li>=0)c.getString(li).orEmpty() else "")
+                        .put("allDay",ai>=0&&c.getInt(ai)!=0)
+                        .put("calendar",if(ci>=0)c.getString(ci).orEmpty() else ""))
+                }
+            }
+        }
+
+        val feed=runCatching{JSONArray(getSharedPreferences("jarvis_mobile",MODE_PRIVATE).getString("notification_feed","[]"))}.getOrElse{JSONArray()}
+        for(i in feed.length()-1 downTo 0){
+            val n=feed.optJSONObject(i)?:continue
+            val pkg=n.optString("package").lowercase()
+            val title=n.optString("title").trim()
+            val text=n.optString("text").trim()
+            val combined="$title $text".lowercase()
+            val relevant=pkg.contains("calendar")||pkg.contains("tasks")||pkg.contains("todo")||pkg.contains("reminder")||combined.contains("recordatorio")||combined.contains("cita")||combined.contains("evento")
+            if(!relevant) continue
+            reminders.put(JSONObject().put("title",title.ifBlank{"Recordatorio"}).put("text",text).put("time",n.optLong("time")))
+            if(reminders.length()>=20) break
+        }
+
+        return JSONObject()
+            .put("ok",true)
+            .put("calendarPermission",hasCalendar)
+            .put("events",events)
+            .put("reminders",reminders)
+            .put("eventCount",events.length())
+            .put("reminderCount",reminders.length())
+    }
+
+    private fun domoticsForTv(): JSONObject {
+        val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE)
+        val snapshot=prefs.getString("domotics_tv_snapshot_json","").orEmpty()
+        if(snapshot.isNotBlank()) runCatching {
+            val o=JSONObject(snapshot)
+            if(o.optJSONArray("items")!=null) return o.put("bridgeAt",System.currentTimeMillis())
+        }
+
+        val items=JSONArray()
+        runCatching {
+            val a=JSONArray(prefs.getString("homey_devices_json","[]"))
+            for(i in 0 until a.length()){
+                val d=a.optJSONObject(i)?:continue
+                items.put(JSONObject()
+                    .put("provider","homey")
+                    .put("id",d.optString("id"))
+                    .put("name",d.optString("name").ifBlank{"Homey"})
+                    .put("room",d.optString("zone").ifBlank{"Casa"})
+                    .put("type",d.optString("class").ifBlank{d.optString("type")})
+                    .put("state",d.optJSONObject("state")?:JSONObject()))
+            }
+        }
+        return JSONObject().put("ok",true).put("items",items).put("updatedAt",System.currentTimeMillis())
+    }
 
     private fun recentMessages(source: String): JSONObject {
         val out = JSONArray(); val normalized = source.lowercase()
