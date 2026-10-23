@@ -403,3 +403,17 @@ section{margin-bottom:20px}
 .app-card strong{margin-top:0}
 .now-brief-card{background:linear-gradient(145deg,rgba(31,49,69,.96),rgba(14,22,32,.98));border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:18px}
 .hero-grid .tile:nth-child(2),.hero-grid .tile:nth-child(3){background:linear-gradient(145deg,#162436,#0d141e)}
+
+/* 0.7 Fire TV scale refinements */
+.quick-app{width:108px;height:62px;border-radius:16px;font-size:15px}
+.quick-app img{object-fit:contain;padding:4px}
+.media-card{flex:0 0 238px;height:138px;border-radius:20px}
+.media-card .title{font-size:18px;left:12px;right:12px;bottom:12px}
+.catalog-track{gap:16px}
+.catalog-row-head h4{font-size:25px}
+.hero-preview{height:430px}
+.hero-copy h1{font-size:50px}
+.hero-copy p{font-size:19px}
+.live-widget{min-height:100px}
+.live-widget b{font-size:20px}
+.live-widget span{font-size:15px}
