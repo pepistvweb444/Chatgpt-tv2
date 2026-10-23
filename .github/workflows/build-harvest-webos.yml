@@ -23,6 +23,29 @@ jobs:
         run: npm install -g @webos-tools/cli
       - name: Validate JavaScript
         run: node --check webos-harvest/app.js
+      - name: Generate webOS icon
+        run: |
+          python3 - <<'PY'
+          import struct,zlib
+          w=h=256
+          raw=bytearray()
+          for y in range(h):
+              raw.append(0)
+              for x in range(w):
+                  dx=x-128; dy=y-128
+                  d=(dx*dx+dy*dy)**0.5
+                  if d<92:
+                      t=max(0,min(1,(d-20)/72))
+                      r=int(235*(1-t)+73*t); g=int(250*(1-t)+174*t); b=int(255*(1-t)+255*t)
+                  else:
+                      r,g,b=8,12,18
+                  raw.extend((r,g,b,255))
+          def chunk(tag,data):
+              import binascii
+              return struct.pack(">I",len(data))+tag+data+struct.pack(">I",binascii.crc32(tag+data)&0xffffffff)
+          png=b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">IIBBBBB",w,h,8,6,0,0,0))+chunk(b"IDAT",zlib.compress(bytes(raw),9))+chunk(b"IEND",b"")
+          open("webos-harvest/icon.png","wb").write(png)
+          PY
       - name: Package IPK
         run: |
           mkdir -p out
