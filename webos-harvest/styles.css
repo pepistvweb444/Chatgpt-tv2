@@ -370,3 +370,8 @@ section{margin-bottom:20px}
 .phone-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .phone-chip{background:#101824;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:15px}
 .phone-chip b{display:block;font-size:18px;margin-bottom:5px}.phone-chip span{font-size:14px;color:#9eacbd}
+
+.app-icon{width:34px;height:34px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:8px;background:rgba(255,255,255,.08)}
+.installed-app{position:relative;padding-left:58px}
+.installed-icon{position:absolute;left:14px;top:18px;width:34px;height:34px;object-fit:contain;border-radius:8px}
+.installed-app b{display:block;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
