@@ -7,21 +7,17 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="wallpaper"></div>
-  <div class="shade"></div>
+  <div class="wallpaper"></div><div class="shade"></div>
 
   <header class="topbar">
     <div class="identity">
+      <button class="menu-trigger" tabindex="0" data-focusable="true" data-action="chats">☰</button>
       <div class="jarvis-mark"><span class="dot"></span> JARVIS</div>
-      <div>
-        <div id="greeting" class="greeting">Buenas tardes</div>
-        <div class="sub">Harvest TV · Casa</div>
-      </div>
+      <div><div id="greeting" class="greeting">Buenas tardes</div><div class="sub">Harvest TV · Casa</div></div>
     </div>
-
     <div class="top-status">
-      <div class="mini-pill">🏠 <b id="homeStatus">Casa conectada</b></div>
-      <div class="mini-pill">🔔 <b id="notificationStatus">3</b></div>
+      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="home-summary">🏠 <b id="homeStatus">Casa</b></button>
+      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="drawer">🔔 <b id="notificationStatus">0</b></button>
       <button class="mic-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
       <div class="time-block"><b id="clock">--:--</b><span id="date">--</span></div>
     </div>
@@ -29,27 +25,19 @@
 
   <main class="screen">
     <section class="hero-zone">
-      <div class="section-title">
-        <h1>Ahora</h1>
-        <span>Jarvis organiza lo importante en este momento</span>
-      </div>
+      <div class="section-title"><h1>Ahora</h1><span>Información que Jarvis considera relevante</span></div>
       <div id="heroGrid" class="hero-grid"></div>
     </section>
 
     <section class="media-zone">
-      <div class="section-title compact">
-        <h2>Ver</h2>
-        <span>Apps, TV en directo y contenido</span>
-      </div>
+      <div class="section-title compact"><h2>Ver</h2><span>Películas, series, episodios y aplicaciones</span></div>
+      <div id="mediaRail" class="media-rail"></div>
       <div id="appsRow" class="apps-row"></div>
       <div id="contextShelf" class="context-shelf"></div>
     </section>
 
     <section class="home-zone">
-      <div class="section-title compact">
-        <h2>Casa</h2>
-        <span>Homey · estado en tiempo real</span>
-      </div>
+      <div class="section-title compact"><h2>Casa</h2><span id="homeProviderLabel">Homey · estado real</span></div>
       <div id="homeRow" class="home-row"></div>
     </section>
   </main>
@@ -57,17 +45,47 @@
   <nav class="dock">
     <button tabindex="0" data-focusable="true" data-action="dock" data-target="home">⌂ <span>Inicio</span></button>
     <button tabindex="0" data-focusable="true" data-action="dock" data-target="watch">▣ <span>Ver</span></button>
-    <button tabindex="0" data-focusable="true" data-action="dock" data-target="homey">⌁ <span>Casa</span></button>
-    <button tabindex="0" data-focusable="true" data-action="dock" data-target="comms">✉ <span>Ahora</span></button>
+    <button tabindex="0" data-focusable="true" data-action="apps">▦ <span>Apps</span></button>
+    <button tabindex="0" data-focusable="true" data-action="chats">☰ <span>Chats</span></button>
+    <button tabindex="0" data-focusable="true" data-action="drawer">🔔 <span>Ahora</span></button>
     <button tabindex="0" data-focusable="true" data-action="voice">✦ <span>Jarvis</span></button>
-    <button tabindex="0" data-focusable="true" data-action="settings">⚙ <span>Ajustes</span></button>
   </nav>
+
+  <aside id="chatDrawer" class="side-drawer left-drawer">
+    <div class="drawer-head">
+      <div><span class="drawer-kicker">JARVIS</span><h2>Conversaciones</h2></div>
+      <button tabindex="0" data-focusable="true" data-action="new-chat">＋ Nuevo</button>
+    </div>
+    <div id="chatList" class="chat-list"></div>
+    <div class="drawer-foot">Continúa aquí una conversación iniciada en TV, móvil o PC.</div>
+  </aside>
+
+  <aside id="nowDrawer" class="side-drawer right-drawer">
+    <div class="drawer-head">
+      <div><span class="drawer-kicker">NOW</span><h2>Ahora</h2></div>
+      <button tabindex="0" data-focusable="true" data-action="drawer-close">Cerrar</button>
+    </div>
+    <div class="drawer-tabs">
+      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="notifications">Notificaciones</button>
+      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="agenda">Agenda</button>
+      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="tasks">Tareas</button>
+    </div>
+    <div id="nowContent" class="now-content"></div>
+  </aside>
+
+  <aside id="appsDrawer" class="side-drawer right-drawer wide-drawer">
+    <div class="drawer-head">
+      <div><span class="drawer-kicker">WEBOS</span><h2>Aplicaciones</h2></div>
+      <button tabindex="0" data-focusable="true" data-action="apps-close">Cerrar</button>
+    </div>
+    <div id="appsGrid" class="apps-grid"></div>
+  </aside>
 
   <aside id="jarvisOverlay" class="jarvis-overlay">
     <div class="jarvis-orb">J</div>
     <div class="jarvis-text">
       <strong>Jarvis</strong>
-      <span id="jarvisState">Pulsa el botón Voice del mando o selecciona Jarvis</span>
+      <span id="jarvisState">Pulsa Voice o selecciona Jarvis</span>
     </div>
     <div id="conversation" class="conversation"></div>
   </aside>
