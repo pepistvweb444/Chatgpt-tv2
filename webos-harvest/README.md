@@ -1,25 +1,31 @@
 # Harvest TV for LG webOS
 
-Primera versión nativa webOS de la interfaz Jarvis/Harvest TV.
+## 0.2.0
+Primera Home diseñada específicamente para LG GX / webOS 5.
 
-## Incluye
-- Home dinámica estilo Apple TV / Live Tiles.
-- Navegación con flechas + OK del Magic Remote.
-- Fila de streaming con panel contextual.
-- Apertura de apps instaladas mediante Luna applicationManager.
-- Tiles de casa preparados para Homey.
-- Panel Jarvis preparado para conectar al backend común.
-- Diseño pensado para OLED 4K y webOS 5.
+### Interfaz
+- Home 16:9 fija y legible a distancia.
+- Tiles tipo Live Tiles + Apple TV.
+- "Ahora" con información priorizada por Jarvis.
+- Carrusel de streaming.
+- Panel contextual inferior al enfocar cada servicio.
+- Widgets de casa/Homey.
+- Dock estable para Inicio, Ver, Casa, Ahora, Jarvis y Ajustes.
+- JavaScript compatible con el Chromium de webOS 5.
 
-## Empaquetado local
-Con webOS CLI:
-```
-ares-package webos-harvest
-```
+### Botón Voice del Magic Remote
+Harvest incluye un target seguro para LG Input Hook:
+`voice/launch-harvest.sh`
 
-## Instalación
-```
-ares-install -d tv com.jarvis.harvesttv_0.1.0_all.ipk
-```
+Instala **LG Input Hook** desde Homebrew Channel, lánzalo una vez y usa su visor de logs para identificar el ID exacto del botón Voice de tu mando. El proyecto upstream indica que el ID se obtiene pulsando el botón y leyendo una línea tipo `id => N`.
 
-La integración con voz, Homey, notificaciones del móvil, chats sincronizados y tiles generados por IA se añadirá sobre esta base.
+Crea después un keybind:
+- ID: el ID de Voice detectado
+- Acción: Execute
+- Comando:
+  `/usr/bin/luna-send-pub -n 1 -f luna://com.webos.applicationManager/launch '{"id":"com.jarvis.harvesttv"}'`
+
+Así el botón físico abrirá Harvest/Jarvis en lugar de dejar el flujo en la guía/asistente de LG. El audio real del Magic Remote se conectará al daemon Jarvis en la siguiente fase.
+
+### Seguridad
+No modifica kernel, rootfs ni TVService. El remapeo de Voice debe probarse primero solo con ese botón y conservar BACK/HOME sin modificar hasta verificar el comportamiento.
