@@ -6,5 +6,7 @@
   "main": "index.html",
   "title": "Harvest TV",
   "requiredMemory": 64,
-  "disableBackHistoryAPI": true
+  "disableBackHistoryAPI": true,
+  "icon": "icon.png",
+  "requiredACG": []
 }
