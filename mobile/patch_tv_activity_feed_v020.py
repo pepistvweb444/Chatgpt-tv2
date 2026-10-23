@@ -11,9 +11,15 @@ new=r'''            val knownAgendaApp = pkg.contains("calendar") || pkg.contain
             val agendaWord = Regex("""(?iu)(?:^|[^\p{L}])(recordatorios?|reminders?|citas?|eventos?|reuniones?|tareas?)(?:$|[^\p{L}])""").containsMatchIn(combined)
             val securityNoise = listOf("huella digital","fingerprint","verificación de huella","verificacion de huella","verifica la transferencia","transferencia bancaria","autoriza la compra","autorización de pago","autorizacion de pago").any { combined.contains(it) }
             val relevant=(knownAgendaApp || agendaWord) && !securityNoise'''
-if old not in s:
+alternates = [
+    old,
+    '            val relevant=pkg.contains("calendar")||pkg.contains("tasks")||pkg.contains("todo")||pkg.contains("reminder")||combined.contains("recordatorio")||combined.contains("cita")||combined.contains("evento")'
+]
+agenda_anchor = next((x for x in alternates if x in s), None)
+if agenda_anchor:
+    s=s.replace(agenda_anchor,new,1)
+elif 'val knownAgendaApp =' not in s:
     raise SystemExit('agenda relevance anchor not found')
-s=s.replace(old,new,1)
 
 # 2) /mobility: return both the dedicated mobility history and recently captured
 # notifications from Glovo/rides/delivery apps. This makes current orders visible
