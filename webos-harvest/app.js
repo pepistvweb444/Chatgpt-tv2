@@ -9,6 +9,8 @@
     focusIndex:0,
     nowTab:'notifications',
     media:[],
+    mediaRows:[],
+    selectedMedia:null,
     chats:loadChats(),
     currentChatId:localStorage.getItem('jarvisCurrentChat')||'tv-main',
     phoneHost:localStorage.getItem('jarvisPhoneHost')||'',
@@ -88,29 +90,84 @@
     }).join('');
   }
 
-  function renderMedia(){
-    if(!state.media.length){
-      $('mediaRail').innerHTML='<div class="empty-state">Cargando carátulas y episodios…</div>';
+  function mediaImage(x){return (x&&x.episode&&x.episode.image)||x.image||'';}
+  function mediaMeta(x){
+    var bits=[];
+    if(x&&x.network)bits.push(x.network);
+    if(x&&x.rating)bits.push('★ '+x.rating);
+    if(x&&x.genres&&x.genres.length)bits.push(x.genres.slice(0,2).join(' · '));
+    if(x&&x.episode&&x.episode.season)bits.push('T'+x.episode.season+(x.episode.number?' · E'+x.episode.number:''));
+    return bits;
+  }
+  function renderFeature(x,rowTitle){
+    if(!x){$('featureDetail').innerHTML='<div class="empty-state">Selecciona una película o serie para ver su ficha.</div>';return;}
+    state.selectedMedia=x;
+    var img=mediaImage(x),meta=mediaMeta(x);
+    $('featureDetail').innerHTML=
+      '<div class="feature-bg" style="background-image:url(\''+esc(img)+'\')"></div>'+
+      '<div class="feature-shade"></div>'+
+      '<div class="feature-copy">'+
+        '<span class="eyebrow">'+esc(rowTitle||x.network||'Contenido')+'</span>'+
+        '<h3>'+esc(x.title||'')+'</h3>'+
+        '<p>'+esc((x.summary||'Sinopsis no disponible').slice(0,240))+'</p>'+
+        '<div class="feature-meta">'+meta.map(function(m){return '<span>'+esc(m)+'</span>';}).join('')+'</div>'+
+      '</div>';
+  }
+  function renderCatalogRows(){
+    var rows=state.mediaRows||[];
+    if(!rows.length){
+      $('catalogRows').innerHTML='<div class="empty-state">Cargando biblioteca multimedia…</div>';
+      renderFeature(null,'');
       return;
     }
-    $('mediaRail').innerHTML=state.media.slice(0,12).map(function(x){
-      var ep=x.episode&&x.episode.season?'T'+x.episode.season+(x.episode.number?' · E'+x.episode.number:''):'';
-      var img=(x.episode&&x.episode.image)||x.image||'';
-      return '<article class="poster-card" tabindex="0" data-focusable="true" data-action="media" data-title="'+esc(x.title)+'">'+
-        (img?'<img src="'+esc(img)+'" alt="">':'')+
-        '<div class="poster-fade"></div>'+
-        (ep?'<span class="poster-episode">'+esc(ep)+'</span>':'')+
-        '<div class="poster-title">'+esc(x.title)+'</div></article>';
+    $('catalogRows').innerHTML=rows.slice(0,2).map(function(row,ri){
+      var cards=(row.items||[]).slice(0,10).map(function(x,ci){
+        var img=mediaImage(x);
+        var progress=row.kind==='continue'?Math.min(92,18+(ci*11)%70):0;
+        return '<article class="media-card" tabindex="0" data-focusable="true" data-action="media" data-row="'+ri+'" data-index="'+ci+'">'+
+          (img?'<img src="'+esc(img)+'" alt="">':'')+
+          '<div class="shade"></div><div class="title">'+esc(x.title||'')+'</div>'+
+          (progress?'<div class="progress"><i style="width:'+progress+'%"></i></div>':'')+
+        '</article>';
+      }).join('');
+      return '<div class="catalog-row"><div class="catalog-row-head"><h4>'+esc(row.title)+'</h4><span>'+esc(row.provider||'')+'</span></div><div class="catalog-track">'+cards+'</div></div>';
     }).join('');
+    var first=rows[0]&&rows[0].items&&rows[0].items[0];
+    renderFeature(first,rows[0]&&rows[0].title);
   }
-
   function loadCatalog(){
-    timeoutFetch(BACKEND+'/api/harvest/catalog?mode=schedule&country=US',{},6000)
+    timeoutFetch(BACKEND+'/api/harvest/catalog?mode=home',{},9000)
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-      .then(function(j){state.media=j.items||[];renderMedia(); if(state.media[0]&&state.media[0].title){heroTiles[0].title=state.media[0].title;heroTiles[0].body=(state.media[0].summary||'Nuevo contenido disponible').slice(0,170);renderHero();}})
-      .catch(function(){$('mediaRail').innerHTML='<div class="empty-state">No se pudo cargar el catálogo ahora. Harvest seguirá funcionando con las apps instaladas.</div>';});
+      .then(function(j){
+        state.media=j.items||[];
+        state.mediaRows=j.rows||[];
+        renderCatalogRows();
+        if(state.media[0]&&state.media[0].title){
+          heroTiles[0].title=state.media[0].title;
+          heroTiles[0].body=(state.media[0].summary||'Nuevo contenido disponible').slice(0,170);
+          renderHero();
+        }
+      })
+      .catch(function(){
+        $('catalogRows').innerHTML='<div class="empty-state">No se pudo cargar el catálogo ahora. Las aplicaciones siguen disponibles.</div>';
+        renderFeature(null,'');
+      });
   }
-
+  function loadProviderRow(name){
+    if(name==='YouTube'){
+      state.mediaRows=[{id:'youtube-auth',title:'YouTube',kind:'private',provider:'YouTube',items:[]}];
+      $('catalogRows').innerHTML='<div class="catalog-row"><div class="catalog-row-head"><h4>YouTube</h4><span>Cuenta no vinculada</span></div><div class="empty-state">Conecta Google/YouTube para mostrar Suscripciones, Ver más tarde y Últimos vídeos. Harvest no inventará contenido privado.</div></div>';
+      renderFeature({title:'YouTube',summary:'Conecta tu cuenta para personalizar esta sección.',network:'YouTube',image:''},'YouTube');
+      return;
+    }
+    timeoutFetch(BACKEND+'/api/harvest/catalog?provider='+encodeURIComponent(name),{},8000)
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(j){
+        var items=j.items||[];
+        state.mediaRows=[{id:'provider',title:name+' · Catálogo',kind:'provider',provider:name,items:items}];
+        renderCatalogRows();
+      }).catch(function(){toast('No se pudo cargar el catálogo de '+name);});
+  }
   function renderApps(){
     $('appsRow').innerHTML=streaming.map(function(a){
       var installed=state.appStatus[a.name]===true;
@@ -120,15 +177,8 @@
         '<strong>'+esc(a.name)+'</strong>'+
         '<small>'+(installed?'Instalada':'Comprobar')+'</small></article>';
     }).join('');
-    renderShelf(state.selectedApp);
   }
 
-  function renderShelf(name){
-    state.selectedApp=name;
-    var items=shelfData[name]||['Información','Recomendaciones','Favoritos','Actividad'];
-    $('contextShelf').innerHTML='<div class="shelf-title"><h3>'+esc(name)+'</h3><span>OK abre la app · contenido contextual debajo</span></div>'+
-      '<div class="content-row">'+items.map(function(x,i){return '<div class="content-card"><b>'+esc(x)+'</b><span>'+(i===0?'Personalizado por Jarvis':'Contenido dinámico')+'</span></div>';}).join('')+'</div>';
-  }
 
   function getKnownInstalled(label){
     var ids=APP_IDS[label]||[],i;
@@ -371,7 +421,7 @@
     setTimeout(function(){overlay.className='jarvis-overlay';},4200);
   }
 
-  document.addEventListener('focusin',function(e){var el=e.target;if(el&&el.getAttribute&&el.getAttribute('data-action')==='app')renderShelf(el.getAttribute('data-name'));});
+  document.addEventListener('focusin',function(e){var el=e.target;if(el&&el.getAttribute&&el.getAttribute('data-action')==='app')loadProviderRow(el.getAttribute('data-name'));if(el&&el.getAttribute&&el.getAttribute('data-action')==='media'){var r=parseInt(el.getAttribute('data-row'),10)||0,i=parseInt(el.getAttribute('data-index'),10)||0,row=state.mediaRows[r],item=row&&row.items&&row.items[i];if(item)renderFeature(item,row.title);}});
   document.addEventListener('click',function(e){
     var el=e.target;while(el&&el!==document.body&&(!el.getAttribute||!el.getAttribute('data-action')))el=el.parentNode;
     if(!el||!el.getAttribute)return;
@@ -396,7 +446,7 @@
     if(action==='voice'){$('jarvisState').textContent='Esperando audio del botón Voice…';showJarvis('Jarvis está listo.');return;}
     if(action==='home-device'){toast((el.querySelector('.eyebrow')||{}).textContent+' · control disponible vía Homey/Jarvis Mobile');return;}
     if(action==='settings-phone'||action==='home-summary'){configurePhone();return;}
-    if(action==='media'){toast('Seleccionado: '+el.getAttribute('data-title'));return;}
+    if(action==='media'){var r=parseInt(el.getAttribute('data-row'),10)||0,i=parseInt(el.getAttribute('data-index'),10)||0,row=state.mediaRows[r],item=row&&row.items&&row.items[i];if(item)renderFeature(item,row.title);return;}
     if(action==='hero'){if(el.getAttribute('data-index')==='1')openDrawer('nowDrawer');else if(el.getAttribute('data-index')==='2'){openDrawer('nowDrawer');loadNow('agenda');}else toast('Tile dinámico de Jarvis');return;}
   });
 
@@ -409,7 +459,7 @@
 
   function init(){
     updateClock();setInterval(updateClock,30000);
-    renderHero();renderMedia();renderApps();renderChats();renderHome([]);
+    renderHero();renderCatalogRows();renderApps();renderChats();renderHome([]);
     if($('syncHost'))$('syncHost').value=state.phoneHost;
     loadCatalog();
     loadInstalledApps().then(function(){renderAppsDrawer();return checkKnownApps();}).then(function(){focusAt(0);});
