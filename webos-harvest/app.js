@@ -114,7 +114,9 @@
   function renderApps(){
     $('appsRow').innerHTML=streaming.map(function(a){
       var installed=state.appStatus[a.name]===true;
+      var found=findInstalled(a.name),icon=found&&found.icon?found.icon:'';
       return '<article tabindex="0" data-focusable="true" data-action="app" data-name="'+esc(a.name)+'" class="app-card '+a.cls+'">'+
+        (icon?'<img class="app-icon" src="'+esc(icon)+'" alt="">':'')+
         '<strong>'+esc(a.name)+'</strong>'+
         '<small>'+(installed?'Instalada':'Comprobar')+'</small></article>';
     }).join('');
@@ -158,7 +160,7 @@
   function loadInstalledApps(){
     return luna('luna://com.webos.applicationManager/listApps',{}).then(function(r){
       var apps=r.apps||[];
-      state.installedApps=apps.map(function(a){return{id:a.id,title:a.title||a.id};}).filter(function(a){return a.id;});
+      state.installedApps=apps.map(function(a){return{id:a.id,title:a.title||a.id,icon:a.largeIcon||a.icon||''};}).filter(function(a){return a.id;});
       state.installedApps.sort(function(a,b){return a.title.localeCompare(b.title);});
     }).catch(function(){state.installedApps=[];});
   }
@@ -195,15 +197,66 @@
     }
     $('appsGrid').innerHTML=all.slice(0,60).map(function(a){
       return '<button tabindex="0" data-focusable="true" class="installed-app" data-action="launch-id" data-id="'+esc(a.id)+'" data-title="'+esc(a.title)+'">'+
-        esc(a.title)+'<span>'+esc(a.id)+'</span></button>';
+        (a.icon?'<img class="installed-icon" src="'+esc(a.icon)+'" alt="">':'')+
+        '<b>'+esc(a.title)+'</b><span>'+esc(a.id)+'</span></button>';
     }).join('');
   }
 
   function phoneUrl(path){if(!state.phoneHost)return'';return'http://'+state.phoneHost+':8765'+path;}
-  function phoneFetch(path){
+  function rawPhoneFetch(path,auth){
     var url=phoneUrl(path);if(!url)return Promise.reject(new Error('phone_not_configured'));
-    var headers={};if(state.phoneToken)headers.Authorization='Bearer '+state.phoneToken;
-    return timeoutFetch(url,{headers:headers},3500).then(function(r){if(!r.ok)throw new Error('phone_http_'+r.status);return r.json();});
+    var headers={};if(auth!==false&&state.phoneToken)headers.Authorization='Bearer '+state.phoneToken;
+    return timeoutFetch(url,{headers:headers},4500).then(function(r){
+      return r.json().catch(function(){return{};}).then(function(j){if(!r.ok){var e=new Error(j.error||('phone_http_'+r.status));e.status=r.status;throw e;}return j;});
+    });
+  }
+  function phoneFetch(path){return rawPhoneFetch(path,true);}
+  function pairPhone(host,pin){
+    state.phoneHost=safe(host).trim().replace(/^https?:\/\//,'').replace(/:\d+$/,'');
+    localStorage.setItem('jarvisPhoneHost',state.phoneHost);
+    $('syncStatus').textContent='Buscando Jarvis Mobile en '+state.phoneHost+'…';
+    return rawPhoneFetch('/ping',false).then(function(){
+      return rawPhoneFetch('/pair?pin='+encodeURIComponent(pin),false);
+    }).then(function(j){
+      if(!j.token)throw new Error('pair_no_token');
+      state.phoneToken=j.token;localStorage.setItem('jarvisPhoneToken',j.token);
+      $('syncStatus').textContent='✓ Teléfono enlazado con Harvest TV';
+      return refreshPhoneSummary();
+    });
+  }
+  function refreshPhoneSummary(){
+    if(!state.phoneHost||!state.phoneToken){
+      $('syncStatus').textContent='Sin teléfono enlazado';
+      $('phoneSummary').innerHTML='';
+      return Promise.resolve();
+    }
+    $('syncHost').value=state.phoneHost;
+    $('syncStatus').textContent='Comprobando teléfono…';
+    var checks=[
+      phoneFetch('/permissions').catch(function(){return{};}),
+      phoneFetch('/incoming-call').catch(function(){return{};}),
+      phoneFetch('/messages?source=all').catch(function(){return{};}),
+      phoneFetch('/agenda').catch(function(){return{unsupported:true};}),
+      phoneFetch('/domotics').catch(function(){return{unsupported:true};})
+    ];
+    return Promise.all(checks).then(function(r){
+      var perms=r[0]||{},call=r[1]&&r[1].call||{},msgs=r[2]&&r[2].messages||[],agenda=r[3]||{},home=r[4]||{};
+      var callText=(call&&Object.keys(call).length)?(call.name||call.number||call.state||'Llamada activa'):'Sin llamada activa';
+      var agendaText=agenda.unsupported?'Requiere actualizar Jarvis Mobile':String((agenda.events||[]).length)+' eventos';
+      var homeText=home.unsupported?'Requiere actualizar Jarvis Mobile':String((home.items||home.devices||[]).length)+' dispositivos';
+      $('syncStatus').textContent='✓ Jarvis Mobile conectado';
+      $('phoneSummary').innerHTML=
+        '<div class="phone-chip"><b>Mensajes</b><span>'+msgs.length+' recientes</span></div>'+
+        '<div class="phone-chip"><b>Llamadas</b><span>'+esc(callText)+'</span></div>'+
+        '<div class="phone-chip"><b>Agenda</b><span>'+esc(agendaText)+'</span></div>'+
+        '<div class="phone-chip"><b>Domótica</b><span>'+esc(homeText)+'</span></div>'+
+        '<div class="phone-chip"><b>SMS</b><span>'+(perms.readSms?'Permitido':'Sin permiso')+'</span></div>'+
+        '<div class="phone-chip"><b>Contactos</b><span>'+(perms.contacts?'Permitido':'Sin permiso')+'</span></div>';
+      return r;
+    }).catch(function(e){
+      $('syncStatus').textContent='No se pudo conectar con el móvil: '+safe(e.message);
+      throw e;
+    });
   }
 
   function renderHome(items){
@@ -285,7 +338,7 @@
     host=String(host).trim().replace(/^https?:\/\//,'').replace(/:\d+$/,'');
     state.phoneHost=host;localStorage.setItem('jarvisPhoneHost',host);
     toast(host?'Móvil configurado: '+host:'Móvil desconectado');
-    loadHome();loadNow('notifications');
+    loadHome();loadNow('notifications');refreshPhoneSummary();
   }
 
   function openDrawer(which){
@@ -296,7 +349,7 @@
     if(which==='appsDrawer')renderAppsDrawer();
   }
   function closeDrawers(){
-    ['chatDrawer','nowDrawer','appsDrawer'].forEach(function(id){
+    ['chatDrawer','nowDrawer','appsDrawer','syncDrawer'].forEach(function(id){
       var el=$(id);if(el)el.className=el.className.replace(/\sopen/g,'');
     });
   }
@@ -325,6 +378,14 @@
     var action=el.getAttribute('data-action');
     if(action==='app'){launch(el.getAttribute('data-name'));return;}
     if(action==='apps'){openDrawer('appsDrawer');return;}
+    if(action==='sync'){openDrawer('syncDrawer');refreshPhoneSummary();return;}
+    if(action==='sync-close'){closeDrawers();return;}
+    if(action==='pair-phone'){
+      var host=$('syncHost').value,pin=$('syncPin').value;
+      if(!host||!/^\d{4}$/.test(pin)){toast('Introduce la IP del móvil y el PIN de 4 dígitos');return;}
+      pairPhone(host,pin).then(function(){loadHome();loadNow('notifications');toast('Jarvis Mobile sincronizado');}).catch(function(e){toast('No se pudo emparejar: '+safe(e.message));});
+      return;
+    }
     if(action==='apps-close'||action==='drawer-close'){closeDrawers();return;}
     if(action==='launch-id'){launchById(el.getAttribute('data-id'),el.getAttribute('data-title'));return;}
     if(action==='drawer'){openDrawer('nowDrawer');return;}
@@ -349,6 +410,7 @@
   function init(){
     updateClock();setInterval(updateClock,30000);
     renderHero();renderMedia();renderApps();renderChats();renderHome([]);
+    if($('syncHost'))$('syncHost').value=state.phoneHost;
     loadCatalog();
     loadInstalledApps().then(function(){renderAppsDrawer();return checkKnownApps();}).then(function(){focusAt(0);});
     loadHome();loadNow('notifications');
