@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Harvest TV</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="topbar">
+    <div>
+      <div class="brand">JARVIS <span>HARVEST TV</span></div>
+      <div id="greeting" class="muted">Buenas tardes</div>
+    </div>
+    <div class="statusbar">
+      <div class="status-pill" id="homeStatus">Casa · conectando</div>
+      <div class="status-pill" id="notificationStatus">0 avisos</div>
+      <div class="clock"><b id="clock">--:--</b><span id="date"></span></div>
+      <button class="voice" data-focusable="true" data-action="voice">🎙 <span>Jarvis</span></button>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-head">
+        <h1>Ahora</h1>
+        <span>Información relevante en este momento</span>
+      </div>
+      <div id="heroGrid" class="hero-grid"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Streaming y TV</h2>
+        <span>Selecciona una app para ver su información</span>
+      </div>
+      <div id="appsRow" class="apps-row"></div>
+      <div id="contextShelf" class="context-shelf"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Casa</h2>
+        <span>Controles rápidos</span>
+      </div>
+      <div id="homeRow" class="tile-row"></div>
+    </section>
+
+    <section class="jarvis-section">
+      <div class="jarvis-panel">
+        <div class="orb">J</div>
+        <div class="jarvis-copy">
+          <strong>Jarvis</strong>
+          <span id="jarvisState">Pulsa el micrófono para hablar</span>
+        </div>
+        <div id="conversation" class="conversation"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
