@@ -7,7 +7,9 @@ log(){ echo "$(date '+%H:%M:%S') $*" >>"$LOG"; }
 
 suppress_lg(){
   touch "$DISABLE_FILE" 2>/dev/null
-  systemctl stop voiceconductor.service >/dev/null 2>&1 || true
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop voiceconductor.service >/dev/null 2>&1 || true
+  fi
 }
 
 launch_jarvis(){
@@ -15,6 +17,7 @@ launch_jarvis(){
 }
 
 pick_log(){
+  [ -f /tmp/lginput-hook-lginput2.log ] && { echo /tmp/lginput-hook-lginput2.log; return; }
   [ -f /var/log/messages ] && { echo /var/log/messages; return; }
   [ -f /var/log/lginput2.log ] && { echo /var/log/lginput2.log; return; }
   echo /tmp/lginput-hook-lginput2.log
@@ -22,18 +25,30 @@ pick_log(){
 
 suppress_lg
 SRC="$(pick_log)"
-log "Harvest Voice shell watcher using $SRC"
+log "watcher source=$SRC"
 
+# BusyBox-compatible polling watcher; avoids tail -F and GNU-specific options.
+last_lines=0
 while true; do
-  tail -F -n 0 "$SRC" 2>/dev/null | while IFS= read -r line; do
-    case "$line" in
-      *'button_type":"KEY_VOICE"'*|*"button_type": "KEY_VOICE"*|*"keyid=17"*'uinput_code=428'*)
-        suppress_lg
-        log "KEY_VOICE detected"
-        launch_jarvis
-        sleep 1
-        ;;
-    esac
-  done
+  if [ -f "$SRC" ]; then
+    lines=$(wc -l <"$SRC" 2>/dev/null)
+    [ -z "$lines" ] && lines=0
+    if [ "$lines" -lt "$last_lines" ]; then
+      last_lines=0
+    fi
+    if [ "$lines" -gt "$last_lines" ]; then
+      start=$((last_lines + 1))
+      tail -n +"$start" "$SRC" 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+          *"keyid=17"*"uinput_code=428"*|*'button_type":"KEY_VOICE"'*|*"button_type": "KEY_VOICE"*)
+            suppress_lg
+            log "KEY_VOICE detected"
+            launch_jarvis
+            ;;
+        esac
+      done
+      last_lines="$lines"
+    fi
+  fi
   sleep 1
 done
