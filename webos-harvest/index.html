@@ -7,152 +7,80 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="wallpaper"></div><div class="shade"></div>
-
-  <header class="fire-topbar">
-    <div class="brand-cluster">
-      <button class="menu-trigger" tabindex="0" data-focusable="true" data-action="chats">☰</button>
-      <div class="jarvis-mark"><span class="dot"></span> JARVIS</div>
-    </div>
-    <nav class="quick-apps" id="quickApps"></nav>
+  <div class="wallpaper"></div>
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span>JARVIS <small>HARVEST TV</small></div>
     <div class="top-actions">
-      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="apps">▦ Apps</button>
-      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="remote-debug">🎮 Mando</button>
-      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="sync">⇄ Sync</button>
-      <button class="mic-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
-      <div class="time-block"><b id="clock">--:--</b><span id="date">--</span></div>
+      <button tabindex="0" data-focusable="true" data-action="chats">☰ Chats</button>
+      <button tabindex="0" data-focusable="true" data-action="apps">▦ Apps</button>
+      <button tabindex="0" data-focusable="true" data-action="remote-debug">🎮 Mando</button>
+      <button tabindex="0" data-focusable="true" data-action="sync">⇄ Sincronizar</button>
+      <button class="voice-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
+      <div class="clock"><b id="clock">--:--</b><span id="date">--</span></div>
     </div>
   </header>
 
-  <main class="fire-layout">
-    <section class="media-stage">
-      <div id="heroPreview" class="hero-preview">
-        <div id="heroBackdrop" class="hero-backdrop"></div>
-        <video id="heroVideo" class="hero-video" muted playsinline preload="metadata"></video>
-        <div class="hero-overlay"></div>
-        <div class="hero-copy">
-          <span id="heroProvider" class="hero-provider">Jarvis TV</span>
-          <h1 id="heroTitle">Selecciona una película o serie</h1>
-          <div id="heroMeta" class="hero-meta"></div>
-          <p id="heroSummary">La ficha del contenido aparecerá aquí con imagen, sinopsis y progreso.</p>
-          <div class="hero-actions">
-            <button tabindex="0" data-focusable="true" data-action="play-selected">▶ Reproducir</button>
-            <button tabindex="0" data-focusable="true" data-action="details-selected">ⓘ Detalles</button>
-          </div>
+  <main class="home-grid">
+    <section class="hero-pane">
+      <div id="heroBackdrop" class="hero-backdrop"></div>
+      <div class="hero-shade"></div>
+      <div class="hero-copy">
+        <span id="heroProvider" class="provider-label">Jarvis TV</span>
+        <h1 id="heroTitle">Selecciona algo para ver</h1>
+        <div id="heroMeta" class="hero-meta"></div>
+        <p id="heroSummary">Aquí aparecerá la información ampliada de la película, serie o episodio seleccionado.</p>
+        <div class="hero-buttons">
+          <button tabindex="0" data-focusable="true" data-action="play-selected">▶ Reproducir</button>
+          <button tabindex="0" data-focusable="true" data-action="details-selected">ⓘ Detalles</button>
         </div>
       </div>
-
-      <div id="catalogRows" class="catalog-rows fire-rows"></div>
     </section>
 
-    <aside class="jarvis-rail">
-      <div class="rail-head">
-        <div><span class="drawer-kicker">NOW BRIEF</span><h2>Tu día</h2></div>
+    <aside class="brief-pane">
+      <div class="brief-title">
+        <div><span>NOW BRIEF</span><h2>Tu día</h2></div>
         <button tabindex="0" data-focusable="true" data-action="drawer">Ver todo</button>
       </div>
-
-      <div id="liveWidgets" class="live-widgets">
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="call">
-          <div class="widget-icon">☎</div><div><b>Llamadas</b><span id="widgetCall">Sin llamada activa</span></div>
-        </article>
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="messages">
-          <div class="widget-icon">✉</div><div><b>Mensajes</b><span id="widgetMessages">Sin sincronizar</span></div>
-        </article>
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="calendar">
-          <div class="widget-icon">◫</div><div><b>Próxima cita</b><span id="widgetCalendar">Sin sincronizar</span></div>
-        </article>
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="weather">
-          <div class="widget-icon">☀</div><div><b>Tiempo</b><span id="widgetWeather">Conectar ubicación</span></div>
-        </article>
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="home">
-          <div class="widget-icon">⌂</div><div><b>Casa</b><span id="widgetHome">Homey sin sincronizar</span></div>
-        </article>
-        <article class="live-widget" tabindex="0" data-focusable="true" data-action="widget" data-widget="tasks">
-          <div class="widget-icon">✓</div><div><b>Tareas</b><span id="widgetTasks">0 pendientes</span></div>
-        </article>
+      <div class="brief-grid">
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="call" class="brief-widget"><i>☎</i><div><b>Llamadas</b><span id="widgetCall">Sin llamada activa</span></div></article>
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="messages" class="brief-widget"><i>✉</i><div><b>Mensajes</b><span id="widgetMessages">Sin sincronizar</span></div></article>
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="calendar" class="brief-widget"><i>◫</i><div><b>Próxima cita</b><span id="widgetCalendar">Sin sincronizar</span></div></article>
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="weather" class="brief-widget"><i>☀</i><div><b>Tiempo</b><span id="widgetWeather">Conectar ubicación</span></div></article>
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="home" class="brief-widget"><i>⌂</i><div><b>Casa</b><span id="widgetHome">Homey sin sincronizar</span></div></article>
+        <article tabindex="0" data-focusable="true" data-action="widget" data-widget="tasks" class="brief-widget"><i>✓</i><div><b>Tareas</b><span id="widgetTasks">0 pendientes</span></div></article>
       </div>
+    </aside>
 
-      <button class="rail-sync" tabindex="0" data-focusable="true" data-action="sync">⇄ Sincronizar con Jarvis Mobile</button>
+    <section class="apps-band">
+      <div class="band-head"><h3>Aplicaciones</h3><span id="selectedAppDescription">Selecciona una aplicación para ver su contenido</span></div>
+      <div id="appCards" class="app-cards"></div>
+    </section>
+
+    <section class="content-pane">
+      <div id="providerHeader" class="provider-header">
+        <div id="providerLogo" class="provider-logo"></div>
+        <div><span id="providerKicker">CONTENIDO</span><h2 id="providerName">Para ti</h2><p id="providerDescription">Recomendaciones y novedades.</p></div>
+      </div>
+      <div id="providerRows" class="provider-rows"></div>
+    </section>
+
+    <aside class="context-pane">
+      <div class="context-title"><span>JARVIS</span><h3>Actividad</h3></div>
+      <div id="contextCards" class="context-cards">
+        <div class="context-card"><b>Continuar viendo</b><span>Jarvis irá mostrando aquí lo último reproducido.</span></div>
+        <div class="context-card"><b>Reciente</b><span>Contenido nuevo y actividad reciente.</span></div>
+        <div class="context-card"><b>Atajos</b><span>Acciones rápidas del proveedor seleccionado.</span></div>
+      </div>
     </aside>
   </main>
 
-  <aside id="chatDrawer" class="side-drawer left-drawer">
-    <div class="drawer-head">
-      <div><span class="drawer-kicker">JARVIS</span><h2>Conversaciones</h2></div>
-      <button tabindex="0" data-focusable="true" data-action="new-chat">＋ Nuevo</button>
-    </div>
-    <div id="chatList" class="chat-list"></div>
-    <div class="drawer-foot">Continúa conversaciones de TV, móvil o PC.</div>
-  </aside>
+  <aside id="chatDrawer" class="drawer drawer-left"><div class="drawer-head"><h2>Conversaciones</h2><button tabindex="0" data-focusable="true" data-action="new-chat">＋ Nuevo</button></div><div id="chatList" class="drawer-list"></div></aside>
+  <aside id="nowDrawer" class="drawer drawer-right"><div class="drawer-head"><h2>Ahora</h2><button tabindex="0" data-focusable="true" data-action="drawer-close">Cerrar</button></div><div class="drawer-tabs"><button tabindex="0" data-focusable="true" data-action="tab" data-tab="notifications">Notificaciones</button><button tabindex="0" data-focusable="true" data-action="tab" data-tab="agenda">Agenda</button><button tabindex="0" data-focusable="true" data-action="tab" data-tab="tasks">Tareas</button></div><div id="nowContent" class="drawer-list"></div></aside>
+  <aside id="syncDrawer" class="drawer drawer-right drawer-wide"><div class="drawer-head"><h2>Sincronizar Jarvis Mobile</h2><button tabindex="0" data-focusable="true" data-action="sync-close">Cerrar</button></div><div class="sync-card"><label>IP del móvil</label><input id="syncHost" tabindex="0" data-focusable="true" placeholder="192.168.0.xxx"><label>PIN</label><input id="syncPin" tabindex="0" data-focusable="true" maxlength="4" placeholder="0000"><button tabindex="0" data-focusable="true" data-action="pair-phone">Emparejar</button></div><div id="syncStatus" class="sync-status"></div><div id="phoneSummary" class="phone-summary"></div></aside>
+  <aside id="appsDrawer" class="drawer drawer-right drawer-wide"><div class="drawer-head"><h2>Aplicaciones instaladas</h2><button tabindex="0" data-focusable="true" data-action="apps-close">Cerrar</button></div><div id="appsGrid" class="apps-grid"></div></aside>
+  <aside id="remoteDrawer" class="drawer drawer-right drawer-wide"><div class="drawer-head"><h2>Diagnóstico del mando</h2><button tabindex="0" data-focusable="true" data-action="remote-close">Cerrar</button></div><div class="remote-card"><strong id="remoteKey">—</strong><div class="remote-codes"><span>key <b id="remoteKeyName">—</b></span><span>keyCode <b id="remoteKeyCode">—</b></span><span>which <b id="remoteWhich">—</b></span><span>hora <b id="remoteTime">—</b></span></div></div></aside>
 
-  <aside id="nowDrawer" class="side-drawer right-drawer">
-    <div class="drawer-head">
-      <div><span class="drawer-kicker">NOW</span><h2>Ahora</h2></div>
-      <button tabindex="0" data-focusable="true" data-action="drawer-close">Cerrar</button>
-    </div>
-    <div class="drawer-tabs">
-      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="notifications">Notificaciones</button>
-      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="agenda">Agenda</button>
-      <button tabindex="0" data-focusable="true" data-action="tab" data-tab="tasks">Tareas</button>
-    </div>
-    <div id="nowContent" class="now-content"></div>
-  </aside>
-
-  <aside id="syncDrawer" class="side-drawer right-drawer wide-drawer">
-    <div class="drawer-head">
-      <div><span class="drawer-kicker">JARVIS LINK</span><h2>Sincronizar teléfono</h2></div>
-      <button tabindex="0" data-focusable="true" data-action="sync-close">Cerrar</button>
-    </div>
-    <div class="sync-card">
-      <h3>Conectar Jarvis Mobile</h3>
-      <p>En el móvil abre Jarvis → Dispositivos → Preparar emparejamiento con TV.</p>
-      <label>IP del teléfono</label>
-      <input id="syncHost" tabindex="0" data-focusable="true" inputmode="decimal" placeholder="192.168.0.xxx">
-      <label>PIN de 4 dígitos</label>
-      <input id="syncPin" tabindex="0" data-focusable="true" inputmode="numeric" maxlength="4" placeholder="0000">
-      <button class="primary-action" tabindex="0" data-focusable="true" data-action="pair-phone">Emparejar</button>
-    </div>
-    <div id="syncStatus" class="sync-status"></div>
-    <div id="phoneSummary" class="phone-summary"></div>
-  </aside>
-
-  <aside id="remoteDrawer" class="side-drawer right-drawer wide-drawer">
-    <div class="drawer-head">
-      <div><span class="drawer-kicker">MAGIC REMOTE</span><h2>Diagnóstico del mando</h2></div>
-      <button tabindex="0" data-focusable="true" data-action="remote-close">Cerrar</button>
-    </div>
-    <div class="remote-debug-card">
-      <p>Pulsa una tecla del Magic Remote. Harvest mostrará aquí el evento que recibe la aplicación.</p>
-      <div class="remote-key-display">
-        <span>Última tecla</span>
-        <strong id="remoteKey">—</strong>
-      </div>
-      <div class="remote-code-grid">
-        <div><span>key</span><b id="remoteKeyName">—</b></div>
-        <div><span>keyCode</span><b id="remoteKeyCode">—</b></div>
-        <div><span>which</span><b id="remoteWhich">—</b></div>
-        <div><span>Hora</span><b id="remoteTime">—</b></div>
-      </div>
-      <div class="remote-help">
-        Prueba en este orden: ↑, ↓, ←, →, OK, BACK y 🎙. Las flechas deben mover el foco exactamente en esa dirección.
-      </div>
-    </div>
-  </aside>
-
-  <aside id="appsDrawer" class="side-drawer right-drawer wide-drawer">
-    <div class="drawer-head">
-      <div><span class="drawer-kicker">WEBOS</span><h2>Aplicaciones</h2></div>
-      <button tabindex="0" data-focusable="true" data-action="apps-close">Cerrar</button>
-    </div>
-    <div id="appsGrid" class="apps-grid"></div>
-  </aside>
-
-  <aside id="jarvisOverlay" class="jarvis-overlay">
-    <div class="jarvis-orb">J</div>
-    <div class="jarvis-text"><strong>Jarvis</strong><span id="jarvisState">Listo</span></div>
-    <div id="conversation" class="conversation"></div>
-  </aside>
-
+  <aside id="jarvisOverlay" class="jarvis-overlay"><div class="jarvis-orb">J</div><div><b>Jarvis</b><span id="jarvisState">Listo</span></div><div id="conversation"></div></aside>
   <div id="toast" class="toast"></div>
   <script src="app.js"></script>
 </body>
