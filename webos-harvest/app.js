@@ -268,6 +268,21 @@
     $('date').textContent=d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'});
   }
 
+
+  function launchParams(){
+    try{
+      if(window.PalmSystem&&PalmSystem.launchParams){
+        return JSON.parse(PalmSystem.launchParams||'{}');
+      }
+    }catch(e){}
+    return {};
+  }
+
+  function activateVoiceMode(){
+    if($('jarvisState'))$('jarvisState').textContent='Escuchando…';
+    showJarvis('Jarvis activado desde el botón Voice');
+  }
+
   function showJarvis(msg){
     var overlay=$('jarvisOverlay');overlay.className='jarvis-overlay show';$('conversation').textContent=msg||'¿Qué necesitas?';
     setTimeout(function(){overlay.className='jarvis-overlay';},4200);
@@ -367,6 +382,8 @@
     loadCatalog();
     loadInstalledApps().then(function(){renderQuickApps();renderAppsDrawer();focusAt(0);});
     refreshPhoneWidgets();
+    var lp=launchParams();
+    if(lp&&lp.jarvisVoice===true){setTimeout(activateVoiceMode,350);}
   }
 
   init();
