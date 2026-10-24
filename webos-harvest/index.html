@@ -17,6 +17,7 @@
     <nav class="quick-apps" id="quickApps"></nav>
     <div class="top-actions">
       <button class="mini-pill" tabindex="0" data-focusable="true" data-action="apps">▦ Apps</button>
+      <button class="mini-pill" tabindex="0" data-focusable="true" data-action="remote-debug">🎮 Mando</button>
       <button class="mini-pill" tabindex="0" data-focusable="true" data-action="sync">⇄ Sync</button>
       <button class="mic-btn" tabindex="0" data-focusable="true" data-action="voice">🎙 Jarvis</button>
       <div class="time-block"><b id="clock">--:--</b><span id="date">--</span></div>
@@ -113,6 +114,29 @@
     </div>
     <div id="syncStatus" class="sync-status"></div>
     <div id="phoneSummary" class="phone-summary"></div>
+  </aside>
+
+  <aside id="remoteDrawer" class="side-drawer right-drawer wide-drawer">
+    <div class="drawer-head">
+      <div><span class="drawer-kicker">MAGIC REMOTE</span><h2>Diagnóstico del mando</h2></div>
+      <button tabindex="0" data-focusable="true" data-action="remote-close">Cerrar</button>
+    </div>
+    <div class="remote-debug-card">
+      <p>Pulsa una tecla del Magic Remote. Harvest mostrará aquí el evento que recibe la aplicación.</p>
+      <div class="remote-key-display">
+        <span>Última tecla</span>
+        <strong id="remoteKey">—</strong>
+      </div>
+      <div class="remote-code-grid">
+        <div><span>key</span><b id="remoteKeyName">—</b></div>
+        <div><span>keyCode</span><b id="remoteKeyCode">—</b></div>
+        <div><span>which</span><b id="remoteWhich">—</b></div>
+        <div><span>Hora</span><b id="remoteTime">—</b></div>
+      </div>
+      <div class="remote-help">
+        Prueba en este orden: ↑, ↓, ←, →, OK, BACK y 🎙. Las flechas deben mover el foco exactamente en esa dirección.
+      </div>
+    </div>
   </aside>
 
   <aside id="appsDrawer" class="side-drawer right-drawer wide-drawer">
