@@ -17,35 +17,50 @@ launch_jarvis(){
 }
 
 pick_log(){
-  [ -f /tmp/lginput-hook-lginput2.log ] && { echo /tmp/lginput-hook-lginput2.log; return; }
-  [ -f /var/log/messages ] && { echo /var/log/messages; return; }
-  [ -f /var/log/lginput2.log ] && { echo /var/log/lginput2.log; return; }
+  if [ -f /tmp/lginput-hook-lginput2.log ]; then
+    echo /tmp/lginput-hook-lginput2.log
+    return
+  fi
+  if [ -f /var/log/messages ]; then
+    echo /var/log/messages
+    return
+  fi
+  if [ -f /var/log/lginput2.log ]; then
+    echo /var/log/lginput2.log
+    return
+  fi
   echo /tmp/lginput-hook-lginput2.log
+}
+
+is_voice_line(){
+  echo "$1" | grep -q 'keyid=17.*uinput_code=428' && return 0
+  echo "$1" | grep -q 'KEY_VOICE' && return 0
+  return 1
 }
 
 suppress_lg
 SRC="$(pick_log)"
 log "watcher source=$SRC"
 
-# BusyBox-compatible polling watcher; avoids tail -F and GNU-specific options.
 last_lines=0
 while true; do
   if [ -f "$SRC" ]; then
     lines=$(wc -l <"$SRC" 2>/dev/null)
     [ -z "$lines" ] && lines=0
+
     if [ "$lines" -lt "$last_lines" ]; then
       last_lines=0
     fi
+
     if [ "$lines" -gt "$last_lines" ]; then
       start=$((last_lines + 1))
       tail -n +"$start" "$SRC" 2>/dev/null | while IFS= read -r line; do
-        case "$line" in
-          *"keyid=17"*"uinput_code=428"*|*'button_type":"KEY_VOICE"'*|*"button_type": "KEY_VOICE"*)
-            suppress_lg
-            log "KEY_VOICE detected"
-            launch_jarvis
-            ;;
-        esac
+        if is_voice_line "$line"; then
+          suppress_lg
+          log "KEY_VOICE detected"
+          launch_jarvis
+          sleep 1
+        fi
       done
       last_lines="$lines"
     fi
