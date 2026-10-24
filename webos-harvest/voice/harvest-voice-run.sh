@@ -1,18 +1,20 @@
 #!/bin/sh
 APPDIR=/media/developer/apps/usr/palm/applications/com.jarvis.harvesttv
-DAEMON="$APPDIR/voice/harvest_voice_daemon.py"
+WATCHER="$APPDIR/voice/harvest_voice_watch.sh"
 PID=/tmp/harvest-voice.pid
 LOG=/tmp/harvest-voice.log
+
 case "$1" in
  start)
    p=$(cat "$PID" 2>/dev/null)
    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "running pid=$p"; exit 0; fi
-   mkdir -p /var/lib/webosbrew/init.d
    touch /tmp/voiceinput_disable_set_input_event
    systemctl stop voiceconductor.service >/dev/null 2>&1 || true
-   PYTHONUNBUFFERED=1 nohup python3 "$DAEMON" >>"$LOG" 2>&1 </dev/null &
+   nohup sh "$WATCHER" >>"$LOG" 2>&1 </dev/null &
    echo $! >"$PID"
-   echo "started pid=$(cat "$PID")"
+   sleep 1
+   p=$(cat "$PID" 2>/dev/null)
+   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "started pid=$p"; else echo start_failed; fi
    ;;
  stop)
    p=$(cat "$PID" 2>/dev/null)
