@@ -293,12 +293,46 @@
     if(e.key==='Escape'||e.keyCode===461){e.preventDefault();if(document.querySelector('.drawer.open'))closeDrawers();else window.close();}
   });
 
+
+  function speakReply(text){
+    if(!text)return;
+    timeoutFetch(BACKEND+'/api/speech',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:text,provider:'openai'})
+    },60000).then(function(r){
+      if(!r.ok)throw new Error('tts_'+r.status);
+      return r.blob();
+    }).then(function(blob){
+      var url=URL.createObjectURL(blob),a=new Audio(url);
+      a.onended=function(){try{URL.revokeObjectURL(url);}catch(e){}};
+      return a.play();
+    }).catch(function(){});
+  }
+
+  function applyVoiceLaunchParams(lp){
+    if(!lp||lp.jarvisVoice!==true)return;
+    var stateName=lp.voiceState||'listening';
+    if($('jarvisState'))$('jarvisState').textContent=stateName==='answer'?'Respondiendo…':(stateName==='error'?'Error de voz':'Escuchando…');
+    if(lp.transcript)showJarvis('Tú: '+lp.transcript);
+    else if(lp.reply)showJarvis(lp.reply);
+    else showJarvis('Jarvis está escuchando…');
+    if(lp.reply){setTimeout(function(){showJarvis(lp.reply);speakReply(lp.reply);},180);}
+  }
+
+  window.webOSRelaunch=function(params){
+    var p=params;
+    if(typeof params==='string'){try{p=JSON.parse(params);}catch(e){p={};}}
+    applyVoiceLaunchParams(p||{});
+    return true;
+  };
+
   function init(){
     updateClock();setInterval(updateClock,30000);
     renderChats();if($('syncHost'))$('syncHost').value=state.phoneHost;
     loadInstalledApps().then(function(){renderAppCards();renderAppsDrawer();selectProvider('Netflix');renderContext();focusAt(0);});
     refreshPhoneWidgets();
-    var lp=launchParams();if(lp&&lp.jarvisVoice===true)setTimeout(activateVoiceMode,350);
+    var lp=launchParams();if(lp&&lp.jarvisVoice===true)setTimeout(function(){applyVoiceLaunchParams(lp);},350);
   }
   init();
 })();
