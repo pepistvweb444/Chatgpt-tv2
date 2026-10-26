@@ -292,7 +292,7 @@ class PhoneBridgeService : Service() {
         }
         if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
             val feed=runCatching{JSONArray(getSharedPreferences("jarvis_mobile",MODE_PRIVATE).getString("notification_feed","[]"))}.getOrElse{JSONArray()}
-            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)).put("dm",n.optBoolean("dm",false)).put("kind",if(n.optBoolean("dm",false))"message" else "social"))}
+            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)).put("dm",n.optBoolean("dm",false)).put("kind",if(n.optBoolean("dm",false))"message" else "social").put("avatar",img64(n.optString("avatarFile"))).put("picture",img64(n.optString("pictureFile"))))}
         }
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
@@ -301,4 +301,5 @@ class PhoneBridgeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
     companion object { const val PORT=8765; private const val CHANNEL="jarvis_phone_bridge" }
     private fun appLabel(pkg:String):String=when{pkg.contains("instagram",true)->"Instagram";pkg.contains("whatsapp",true)->"WhatsApp";pkg.contains("orca",true)||pkg.contains("mlite",true)->"Messenger";pkg.contains("facebook",true)->"Facebook";pkg.contains("twitter",true)||pkg=="com.twitter.android"->"X";pkg.contains("tiktok",true)||pkg.contains("musically",true)->"TikTok";pkg.contains("telegram",true)->"Telegram";else->runCatching{packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg,0)).toString()}.getOrDefault(pkg.substringAfterLast('.'))}
+    private fun img64(name:String):String{if(name.isBlank()||name.contains("/"))return "";val f=java.io.File(java.io.File(cacheDir,"notif"),name);if(!f.exists())return "";return "data:image/jpeg;base64,"+android.util.Base64.encodeToString(f.readBytes(),android.util.Base64.NO_WRAP)}
 }
