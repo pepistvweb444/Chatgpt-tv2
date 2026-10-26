@@ -140,7 +140,13 @@ class DeviceHubActivity : Activity() {
         add("Abrir WhatsApp") { packageManager.getLaunchIntentForPackage("com.whatsapp")?.let { startActivity(it) } ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")?.let { startActivity(it) } ?: Toast.makeText(this, "WhatsApp no está instalado", Toast.LENGTH_SHORT).show() }
         add("Ajustes de llamadas predeterminadas") { runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } }
         add("Volver a Jarvis") { finish() }
-        setContentView(root)
+        // 0.2.25-galeria2: sync buttons first + scrollable list
+        val syncLabels = listOf("PREPARAR SINCRONIZACIÓN CON JAVISTV", "VER DATOS DE SINCRONIZACIÓN TV")
+        val syncButtons = (0 until root.childCount).map { root.getChildAt(it) }.filter { it is Button && syncLabels.contains(it.text.toString()) }
+        syncButtons.forEach { root.removeView(it) }
+        syncButtons.sortedBy { syncLabels.indexOf((it as Button).text.toString()) }.forEachIndexed { i, v -> root.addView(v, 3 + i) }
+        val scroll = android.widget.ScrollView(this).apply { isFillViewport = true; setBackgroundColor(0xFF0B0B0B.toInt()); addView(root, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)) }
+        setContentView(scroll)
     }
 
     private fun requestCallScreeningRole() {
