@@ -37,8 +37,11 @@ export default async function handler(req, res) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return res.status(401).json({ error: 'unauthorized' });
 
-  let parts = req.query.path;
-  if (!Array.isArray(parts)) parts = String(parts || '').split('/').filter(Boolean);
+  // vercel.json rewrites /api/sync/<rest> -> /api/sync?p=<rest>
+  let raw = req.query.p;
+  if (Array.isArray(raw)) raw = raw.join('/');
+  if (!raw) raw = String(req.url || '').split('?')[0].replace(/^\/api\/sync\/?/, '');
+  const parts = String(raw || '').split('/').filter(Boolean);
   const since = req.query.since ? String(req.query.since) : null;
 
   try {
