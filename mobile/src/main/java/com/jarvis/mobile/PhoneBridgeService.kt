@@ -39,6 +39,7 @@ class PhoneBridgeService : Service() {
             getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", true).remove("bridge_start_error").apply()
             running = true
             Thread { serve() }.start()
+            runCatching { GalleryServer.start(this) }
         } catch (e: Throwable) {
             running = false
             getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}").apply()
@@ -296,7 +297,7 @@ class PhoneBridgeService : Service() {
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
 
-    override fun onDestroy() { running=false; getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().putBoolean("bridge_running",false).apply(); runCatching{server?.close()}; super.onDestroy() }
+    override fun onDestroy() { running=false; getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().putBoolean("bridge_running",false).apply(); runCatching{server?.close()}; GalleryServer.stop(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
     companion object { const val PORT=8765; private const val CHANNEL="jarvis_phone_bridge" }
 }
