@@ -109,7 +109,13 @@ class PhoneBridgeService : Service() {
             val (ok, message) = CallActionManager.perform(this, action)
             return (if (ok) 200 else 409) to JSONObject().put("ok", ok).put("message", message).put("call", CallStateStore.current(this)).toString()
         }
-        if (path.startsWith("/incoming-call")) return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
+        if (path.startsWith("/incoming-call")) {
+            // 0.2.26: never report a stale ringing call. If Android says the line is idle, clear the stored call.
+            val call = CallStateStore.current(this)
+            val idle = runCatching { ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED && getSystemService(android.telephony.TelephonyManager::class.java).callState == android.telephony.TelephonyManager.CALL_STATE_IDLE }.getOrDefault(false)
+            if (idle && call.optBoolean("active") && System.currentTimeMillis() - call.optLong("updatedAt", 0L) > 3000L) { CallStateStore.clear(this, "ended"); return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString() }
+            return 200 to JSONObject().put("ok", true).put("call", call).toString()
+        }
         if (path.startsWith("/contacts")) {
             val q = URLDecoder.decode(path.substringAfter("q=", "").substringBefore("&"), StandardCharsets.UTF_8.name()).trim()
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "contacts-permission-required").toString()
