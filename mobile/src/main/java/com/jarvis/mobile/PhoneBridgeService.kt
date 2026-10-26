@@ -103,11 +103,17 @@ class PhoneBridgeService : Service() {
         if (path.startsWith("/unread")) return 200 to unreadForTv().toString()
         if (path.startsWith("/agenda")) return 200 to agendaForTv().toString()
         if (path.startsWith("/domotics")) return 200 to domoticsForTv().toString()
-        if (path.startsWith("/incoming-call")) return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
+        // 1.0.42 fix: the action route must be matched before the generic /incoming-call route (it used to swallow /incoming-call-action)
         if (path.startsWith("/incoming-call-action") || path.startsWith("/call-action?")) {
             val action = URLDecoder.decode(path.substringAfter("action=", "ignore").substringBefore("&"), StandardCharsets.UTF_8.name()).lowercase()
             val (ok, message) = CallActionManager.perform(this, action)
             return (if (ok) 200 else 409) to JSONObject().put("ok", ok).put("message", message).put("call", CallStateStore.current(this)).toString()
+        }
+        if (path.startsWith("/incoming-call")) return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
+        if (path.startsWith("/contacts")) {
+            val q = URLDecoder.decode(path.substringAfter("q=", "").substringBefore("&"), StandardCharsets.UTF_8.name()).trim()
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "contacts-permission-required").toString()
+            return 200 to contactsForTv(q).toString()
         }
         if (path.startsWith("/remote?")) {
             val rawTask = path.substringAfter("task=", "").substringBefore("&")
@@ -128,10 +134,31 @@ class PhoneBridgeService : Service() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "call-permission-required").toString()
             return try {
                 startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                if (path.contains("speaker=1")) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { val am = getSystemService(android.media.AudioManager::class.java); am.mode = android.media.AudioManager.MODE_IN_CALL; am.isSpeakerphoneOn = true } }, 2500)
                 200 to JSONObject().put("ok", true).put("status", "calling").toString()
             } catch (e: Exception) { 500 to JSONObject().put("error", e.message ?: "call-failed").toString() }
         }
         return 404 to JSONObject().put("error", "not-found").toString()
+    }
+
+    private fun contactsForTv(q: String): JSONObject {
+        val out = JSONArray()
+        val norm = { x: String -> java.text.Normalizer.normalize(x.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "") }
+        val nq = norm(q)
+        runCatching {
+            contentResolver.query(android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER, android.provider.ContactsContract.CommonDataKinds.Phone.STARRED),
+                null, null, android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { c ->
+                val seen = HashSet<String>()
+                while (c.moveToNext() && out.length() < 400) {
+                    val name = c.getString(0).orEmpty(); val num = c.getString(1).orEmpty().replace(" ", "")
+                    if (num.isBlank() || !seen.add(name + num)) continue
+                    if (nq.isNotBlank() && !norm(name).contains(nq)) continue
+                    out.put(JSONObject().put("name", name).put("number", num).put("starred", c.getInt(2) == 1))
+                }
+            }
+        }
+        return JSONObject().put("ok", true).put("q", q).put("contacts", out)
     }
 
     private fun permissionStatus(): JSONObject = JSONObject()
