@@ -104,13 +104,7 @@ class DeviceHubActivity : Activity() {
             runCatching { ContextCompat.startForegroundService(this,Intent(this,PhoneBridgeService::class.java)) }
             val calendar=ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED
             if(!calendar) ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.READ_CALENDAR),174)
-            Toast.makeText(
-                this,
-                "Datos para Javistv TV:\n\nIP: " + localIp() + "\nPuerto: 8765\nPIN: " + pin +
-                    "\nGoogle Calendar: " + if(calendar) "permiso ✓" else "permiso solicitado" +
-                    "\n\nEn TV: Ajustes > Sincronización con teléfono.",
-                Toast.LENGTH_LONG
-            ).show()
+            showSyncDialog("Sincronización preparada")
         }
         add("VER DATOS DE SINCRONIZACIÓN TV") {
             val prefs=getSharedPreferences("jarvis_mobile",MODE_PRIVATE)
@@ -118,14 +112,7 @@ class DeviceHubActivity : Activity() {
             val bridge=prefs.getBoolean("bridge_running",false)
             val remote=prefs.getBoolean("remote_control_enabled",false)
             val calendar=ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED
-            Toast.makeText(
-                this,
-                "IP: " + localIp() + ":8765\nPIN: " + pin +
-                    "\nRemote: " + if(remote) "ACTIVO" else "APAGADO" +
-                    "\nPuente: " + if(bridge) "ACTIVO" else "APAGADO" +
-                    "\nGoogle Calendar: " + if(calendar) "PERMITIDO" else "SIN PERMISO",
-                Toast.LENGTH_LONG
-            ).show()
+            showSyncDialog("Datos de sincronización TV")
         }
         add("Activar puente con Jarvis TV") { runCatching { ContextCompat.startForegroundService(this, Intent(this, PhoneBridgeService::class.java)); Toast.makeText(this, "Puente TV activo en ${localIp()}:${PhoneBridgeService.PORT}", Toast.LENGTH_LONG).show() }.onFailure { Toast.makeText(this, "No se pudo iniciar el puente TV", Toast.LENGTH_LONG).show() } }
         add("Detener puente con TV") { stopService(Intent(this, PhoneBridgeService::class.java)) }
@@ -193,4 +180,28 @@ class DeviceHubActivity : Activity() {
         permissionStatus.text = "Contactos $contacts · prioritarios $priorityCount   Teléfono $phone\nIdentificador llamadas $screening\nSMS lectura $smsRead   SMS envío $smsSend\nWhatsApp/redes/correo $notifications · lector $listener\nPhilips Hue $hue · Homey Cloud $homey · LG ThinQ $thinQ"
     }
     private fun localIp(): String = runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { !it.isLoopbackAddress && it is Inet4Address }?.hostAddress ?: "IP-del-móvil" }.getOrDefault("IP-del-móvil")
+
+    private fun showSyncDialog(title: String) {
+        val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
+        val pin = prefs.getString("pairing_pin", "").orEmpty().ifBlank { "sin generar" }
+        val token = prefs.getString("remote_token", "").orEmpty()
+        val bridge = prefs.getBoolean("bridge_running", false)
+        val remote = prefs.getBoolean("remote_control_enabled", false)
+        val pairing = prefs.getBoolean("pairing_enabled", false)
+        val calendar = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+        val ip = localIp()
+        val msg = buildString {
+            append("IP del móvil: ").append(ip).append("\n")
+            append("Puerto: 8765 (galería: 8766)\n")
+            append("PIN: ").append(pin).append("\n")
+            append("Esperando vinculación: ").append(if (pairing) "SÍ (introduce el PIN en la TV)" else "NO (pulsa PREPARAR antes)").append("\n")
+            append("Token: ").append(if (token.isBlank()) "sin generar" else "OK (…" + token.takeLast(4) + ")").append("\n")
+            append("Control remoto: ").append(if (remote) "ACTIVO" else "APAGADO").append("\n")
+            append("Puente TV: ").append(if (bridge) "ACTIVO" else "APAGADO").append("\n")
+            append("Google Calendar: ").append(if (calendar) "PERMITIDO" else "SIN PERMISO").append("\n\n")
+            append("En la TV: Jarvis → Fotos → Móvil (Wi-Fi). Si pide PIN, escríbelo con el mando y pulsa OK.")
+        }
+        android.app.AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show()
+    }
+
 }
