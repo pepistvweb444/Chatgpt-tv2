@@ -102,6 +102,7 @@ class PhoneBridgeService : Service() {
         if (!authorized(headers, path)) return 401 to JSONObject().put("error", "unauthorized").toString()
         if (path.startsWith("/permissions")) return 200 to permissionStatus().toString()
         if (path.startsWith("/unread")) return 200 to unreadForTv().toString()
+        if (path.startsWith("/notifications") || path.startsWith("/social/feed")) { val r = recentMessages("social"); return 200 to JSONObject().put("ok", true).put("items", r.optJSONArray("messages") ?: JSONArray()).toString() }
         if (path.startsWith("/agenda")) return 200 to agendaForTv().toString()
         if (path.startsWith("/domotics")) return 200 to domoticsForTv().toString()
         // 1.0.42 fix: the action route must be matched before the generic /incoming-call route (it used to swallow /incoming-call-action)
@@ -186,7 +187,10 @@ class PhoneBridgeService : Service() {
                 .put("source", m.optString("source"))
                 .put("from", m.optString("from"))
                 .put("text", m.optString("text"))
-                .put("time", m.optLong("time")))
+                .put("time", m.optLong("time"))
+                .put("app", m.optString("app")).put("package", m.optString("package"))
+                .put("dm", m.optBoolean("dm", false)).put("kind", m.optString("kind"))
+                .put("avatar", m.optString("avatar")).put("picture", m.optString("picture")))
         }
         return JSONObject()
             .put("ok", true)
@@ -290,9 +294,9 @@ class PhoneBridgeService : Service() {
                 while(c.moveToNext() && out.length()<15) out.put(JSONObject().put("source","sms").put("from",if(ai>=0)c.getString(ai).orEmpty() else "").put("text",if(bi>=0)c.getString(bi).orEmpty() else "").put("time",if(di>=0)c.getLong(di) else 0L))
             }
         }
-        if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
+        if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications" || normalized == "social") {
             val feed=runCatching{JSONArray(getSharedPreferences("jarvis_mobile",MODE_PRIVATE).getString("notification_feed","[]"))}.getOrElse{JSONArray()}
-            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)).put("dm",n.optBoolean("dm",false)).put("kind",if(n.optBoolean("dm",false))"message" else "social").put("avatar",img64(n.optString("avatarFile"))).put("picture",img64(n.optString("pictureFile"))))}
+            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;val dm=n.optBoolean("dm",false);if(normalized=="all"&&!dm&&!(wa&&!n.has("dm"))&&!pkg.contains("messag",true))continue;if(normalized=="social"&&dm)continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)).put("dm",n.optBoolean("dm",false)).put("kind",if(n.optBoolean("dm",false))"message" else "social").put("avatar",img64(n.optString("avatarFile"))).put("picture",img64(n.optString("pictureFile"))))}
         }
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
