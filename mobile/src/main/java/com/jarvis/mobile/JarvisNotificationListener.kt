@@ -68,6 +68,7 @@ class JarvisNotificationListener : NotificationListenerService() {
         if (title.isBlank() && body.isBlank()) return
         val item = JSONObject().put("key", source.key).put("package", packageName).put("title", title).put("text", body)
             .put("subText", subText).put("conversation", conversation).put("time", System.currentTimeMillis())
+            .put("category", n.category.orEmpty()).put("dm", n.category == Notification.CATEGORY_MESSAGE || messagingLines.isNotEmpty() || packageName.contains("orca", true) || packageName.contains("mlite", true))
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
         val history = runCatching { JSONArray(prefs.getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
         history.put(item)
