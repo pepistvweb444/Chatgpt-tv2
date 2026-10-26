@@ -12,6 +12,21 @@ object CallActionManager {
     @Suppress("DEPRECATION")
     fun perform(context: Context, action: String): Pair<Boolean, String> {
         val call = CallStateStore.current(context)
+        // TV in-call controls (outgoing calls placed from the TV too): speaker / mute / hang up
+        val n0 = action.lowercase().trim()
+        if (n0 == "speaker" || n0 == "speaker_on" || n0 == "speaker_off" || n0 == "mute" || n0 == "unmute" || n0 == "end" || n0 == "hangup") {
+            val am = context.getSystemService(android.media.AudioManager::class.java)
+            return runCatching {
+                when (n0) {
+                    "speaker", "speaker_on", "speaker_off" -> { am.mode = android.media.AudioManager.MODE_IN_CALL; am.isSpeakerphoneOn = if (n0 == "speaker") !am.isSpeakerphoneOn else n0 == "speaker_on"; true to (if (am.isSpeakerphoneOn) "Altavoz activado." else "Altavoz desactivado.") }
+                    "mute", "unmute" -> { am.isMicrophoneMute = if (n0 == "mute") !am.isMicrophoneMute else false; true to (if (am.isMicrophoneMute) "Micrófono silenciado." else "Micrófono activado.") }
+                    else -> {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) false to "Falta el permiso ANSWER_PHONE_CALLS."
+                        else { val ok = context.getSystemService(TelecomManager::class.java).endCall(); CallStateStore.clear(context, "ended"); ok to (if (ok) "Llamada colgada." else "No había llamada que colgar.") }
+                    }
+                }
+            }.getOrElse { false to (it.message ?: "call-control-failed") }
+        }
         if (!call.optBoolean("active", false)) return false to "No hay una llamada entrante activa."
         val normalized = action.lowercase().trim()
         if (normalized == "ignore" || normalized == "leave" || normalized == "ring") return true to "La llamada seguirá sonando."

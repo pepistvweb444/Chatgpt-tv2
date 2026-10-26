@@ -39,6 +39,7 @@ class PhoneBridgeService : Service() {
             getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", true).remove("bridge_start_error").apply()
             running = true
             Thread { serve() }.start()
+            runCatching { GalleryServer.start(this) }
         } catch (e: Throwable) {
             running = false
             getSharedPreferences("jarvis_mobile", MODE_PRIVATE).edit().putBoolean("bridge_running", false).putString("bridge_start_error", "${e.javaClass.simpleName}: ${e.message.orEmpty()}").apply()
@@ -101,13 +102,26 @@ class PhoneBridgeService : Service() {
         if (!authorized(headers, path)) return 401 to JSONObject().put("error", "unauthorized").toString()
         if (path.startsWith("/permissions")) return 200 to permissionStatus().toString()
         if (path.startsWith("/unread")) return 200 to unreadForTv().toString()
+        if (path.startsWith("/notifications") || path.startsWith("/social/feed")) { val r = recentMessages("social"); return 200 to JSONObject().put("ok", true).put("items", r.optJSONArray("messages") ?: JSONArray()).toString() }
         if (path.startsWith("/agenda")) return 200 to agendaForTv().toString()
         if (path.startsWith("/domotics")) return 200 to domoticsForTv().toString()
-        if (path.startsWith("/incoming-call")) return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString()
+        // 1.0.42 fix: the action route must be matched before the generic /incoming-call route (it used to swallow /incoming-call-action)
         if (path.startsWith("/incoming-call-action") || path.startsWith("/call-action?")) {
             val action = URLDecoder.decode(path.substringAfter("action=", "ignore").substringBefore("&"), StandardCharsets.UTF_8.name()).lowercase()
             val (ok, message) = CallActionManager.perform(this, action)
             return (if (ok) 200 else 409) to JSONObject().put("ok", ok).put("message", message).put("call", CallStateStore.current(this)).toString()
+        }
+        if (path.startsWith("/incoming-call")) {
+            // 0.2.26: never report a stale ringing call. If Android says the line is idle, clear the stored call.
+            val call = CallStateStore.current(this)
+            val idle = runCatching { ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED && getSystemService(android.telephony.TelephonyManager::class.java).callState == android.telephony.TelephonyManager.CALL_STATE_IDLE }.getOrDefault(false)
+            if (idle && call.optBoolean("active") && System.currentTimeMillis() - call.optLong("updatedAt", 0L) > 3000L) { CallStateStore.clear(this, "ended"); return 200 to JSONObject().put("ok", true).put("call", CallStateStore.current(this)).toString() }
+            return 200 to JSONObject().put("ok", true).put("call", call).toString()
+        }
+        if (path.startsWith("/contacts")) {
+            val q = URLDecoder.decode(path.substringAfter("q=", "").substringBefore("&"), StandardCharsets.UTF_8.name()).trim()
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "contacts-permission-required").toString()
+            return 200 to contactsForTv(q).toString()
         }
         if (path.startsWith("/remote?")) {
             val rawTask = path.substringAfter("task=", "").substringBefore("&")
@@ -128,10 +142,31 @@ class PhoneBridgeService : Service() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return 403 to JSONObject().put("error", "call-permission-required").toString()
             return try {
                 startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                if (path.contains("speaker=1")) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { val am = getSystemService(android.media.AudioManager::class.java); am.mode = android.media.AudioManager.MODE_IN_CALL; am.isSpeakerphoneOn = true } }, 2500)
                 200 to JSONObject().put("ok", true).put("status", "calling").toString()
             } catch (e: Exception) { 500 to JSONObject().put("error", e.message ?: "call-failed").toString() }
         }
         return 404 to JSONObject().put("error", "not-found").toString()
+    }
+
+    private fun contactsForTv(q: String): JSONObject {
+        val out = JSONArray()
+        val norm = { x: String -> java.text.Normalizer.normalize(x.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "") }
+        val nq = norm(q)
+        runCatching {
+            contentResolver.query(android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER, android.provider.ContactsContract.CommonDataKinds.Phone.STARRED),
+                null, null, android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { c ->
+                val seen = HashSet<String>()
+                while (c.moveToNext() && out.length() < 400) {
+                    val name = c.getString(0).orEmpty(); val num = c.getString(1).orEmpty().replace(" ", "")
+                    if (num.isBlank() || !seen.add(name + num)) continue
+                    if (nq.isNotBlank() && !norm(name).contains(nq)) continue
+                    out.put(JSONObject().put("name", name).put("number", num).put("starred", c.getInt(2) == 1))
+                }
+            }
+        }
+        return JSONObject().put("ok", true).put("q", q).put("contacts", out)
     }
 
     private fun permissionStatus(): JSONObject = JSONObject()
@@ -152,7 +187,10 @@ class PhoneBridgeService : Service() {
                 .put("source", m.optString("source"))
                 .put("from", m.optString("from"))
                 .put("text", m.optString("text"))
-                .put("time", m.optLong("time")))
+                .put("time", m.optLong("time"))
+                .put("app", m.optString("app")).put("package", m.optString("package"))
+                .put("dm", m.optBoolean("dm", false)).put("kind", m.optString("kind"))
+                .put("avatar", m.optString("avatar")).put("picture", m.optString("picture")))
         }
         return JSONObject()
             .put("ok", true)
@@ -256,14 +294,16 @@ class PhoneBridgeService : Service() {
                 while(c.moveToNext() && out.length()<15) out.put(JSONObject().put("source","sms").put("from",if(ai>=0)c.getString(ai).orEmpty() else "").put("text",if(bi>=0)c.getString(bi).orEmpty() else "").put("time",if(di>=0)c.getLong(di) else 0L))
             }
         }
-        if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
+        if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications" || normalized == "social") {
             val feed=runCatching{JSONArray(getSharedPreferences("jarvis_mobile",MODE_PRIVATE).getString("notification_feed","[]"))}.getOrElse{JSONArray()}
-            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")))}
+            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;val dm=n.optBoolean("dm",false);if(normalized=="all"&&!dm&&!(wa&&!n.has("dm"))&&!pkg.contains("messag",true))continue;if(normalized=="social"&&dm)continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)).put("dm",n.optBoolean("dm",false)).put("kind",if(n.optBoolean("dm",false))"message" else "social").put("avatar",img64(n.optString("avatarFile"))).put("picture",img64(n.optString("pictureFile"))))}
         }
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
 
-    override fun onDestroy() { running=false; getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().putBoolean("bridge_running",false).apply(); runCatching{server?.close()}; super.onDestroy() }
+    override fun onDestroy() { running=false; getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().putBoolean("bridge_running",false).apply(); runCatching{server?.close()}; GalleryServer.stop(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
     companion object { const val PORT=8765; private const val CHANNEL="jarvis_phone_bridge" }
+    private fun appLabel(pkg:String):String=when{pkg.contains("instagram",true)->"Instagram";pkg.contains("whatsapp",true)->"WhatsApp";pkg.contains("orca",true)||pkg.contains("mlite",true)->"Messenger";pkg.contains("facebook",true)->"Facebook";pkg.contains("twitter",true)||pkg=="com.twitter.android"->"X";pkg.contains("tiktok",true)||pkg.contains("musically",true)->"TikTok";pkg.contains("telegram",true)->"Telegram";else->runCatching{packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg,0)).toString()}.getOrDefault(pkg.substringAfterLast('.'))}
+    private fun img64(name:String):String{if(name.isBlank()||name.contains("/"))return "";val f=java.io.File(java.io.File(cacheDir,"notif"),name);if(!f.exists())return "";return "data:image/jpeg;base64,"+android.util.Base64.encodeToString(f.readBytes(),android.util.Base64.NO_WRAP)}
 }

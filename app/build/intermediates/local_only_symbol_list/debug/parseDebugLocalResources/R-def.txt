@@ -1,0 +1,34 @@
+R_DEF: Internal format may change without notice
+local
+drawable app_icon
+drawable tv_banner
+id assistantBubble
+id cardHome
+id cardMessages
+id cardNow
+id cardRoutine
+id cardWeather
+id chatButton
+id chatsButton
+id connectionsButton
+id currentChatLabel
+id homeButton
+id homeControlButton
+id mainScroll
+id messageInput
+id micButton
+id notificationsButton
+id pageSubtitle
+id pageTitle
+id routinesButton
+id sendButton
+id settingsButton
+id sleepDetectorButton
+id statusText
+id transcript
+id tvSideMenu
+id visionButton
+layout activity_main
+string app_name
+style Theme.JarvisTV
+xml accessibility_service_config

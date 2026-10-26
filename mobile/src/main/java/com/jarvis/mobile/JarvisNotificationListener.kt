@@ -68,6 +68,23 @@ class JarvisNotificationListener : NotificationListenerService() {
         if (title.isBlank() && body.isBlank()) return
         val item = JSONObject().put("key", source.key).put("package", packageName).put("title", title).put("text", body)
             .put("subText", subText).put("conversation", conversation).put("time", System.currentTimeMillis())
+            .put("category", n.category.orEmpty()).put("dm", n.category == Notification.CATEGORY_MESSAGE || messagingLines.isNotEmpty() || packageName.contains("orca", true) || packageName.contains("mlite", true))
+        runCatching {
+            val id = Integer.toHexString(source.key.hashCode()) + "_" + (System.currentTimeMillis() / 1000)
+            var avatar: android.graphics.drawable.Drawable? = null
+            runCatching {
+                val msgs = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+                val last = msgs?.lastOrNull() as? Bundle
+                if (Build.VERSION.SDK_INT >= 28) {
+                    @Suppress("DEPRECATION") val person = last?.getParcelable<android.app.Person>("sender_person")
+                    avatar = person?.icon?.loadDrawable(this)
+                }
+            }
+            if (avatar == null) avatar = runCatching { n.getLargeIcon()?.loadDrawable(this) }.getOrNull()
+            saveImg(avatar, 96, "a_$id")?.let { item.put("avatarFile", it) }
+            @Suppress("DEPRECATION") val pic = runCatching { extras.get(Notification.EXTRA_PICTURE) as? android.graphics.Bitmap }.getOrNull()
+            if (pic != null) saveImg(android.graphics.drawable.BitmapDrawable(resources, pic), 320, "p_$id")?.let { item.put("pictureFile", it) }
+        }
         val prefs = getSharedPreferences("jarvis_mobile", MODE_PRIVATE)
         val history = runCatching { JSONArray(prefs.getString("notification_feed", "[]")) }.getOrElse { JSONArray() }
         history.put(item)
@@ -167,5 +184,17 @@ class JarvisNotificationListener : NotificationListenerService() {
     companion object {
         const val ACTION_CALL_CONTROL = "com.jarvis.mobile.action.CALL_CONTROL"
         const val ACTION_CALL_NOTIFICATION = "com.jarvis.mobile.action.VOIP_CALL_ACTION"
+    }
+    private fun saveImg(d: android.graphics.drawable.Drawable?, max: Int, name: String): String? {
+        if (d == null) return null
+        val w = d.intrinsicWidth.takeIf { it > 0 } ?: max; val h = d.intrinsicHeight.takeIf { it > 0 } ?: max
+        val sc = minOf(1f, max.toFloat() / maxOf(w, h))
+        val b = android.graphics.Bitmap.createBitmap(maxOf(1, (w * sc).toInt()), maxOf(1, (h * sc).toInt()), android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b); c.drawColor(android.graphics.Color.WHITE); d.setBounds(0, 0, b.width, b.height); d.draw(c)
+        val dir = java.io.File(cacheDir, "notif").apply { mkdirs() }
+        dir.listFiles()?.sortedBy { it.lastModified() }?.let { fs -> if (fs.size > 300) fs.take(fs.size - 300).forEach { it.delete() } }
+        val f = java.io.File(dir, "$name.jpg")
+        f.outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, it) }
+        return f.name
     }
 }

@@ -128,6 +128,9 @@ if 'private fun callsForTv()' not in s:
 '''
     if helper_anchor not in s:
         raise SystemExit('PhoneBridgeService helper anchor not found')
+    if 'private fun domoticsForTv()' in s:
+        import re as _re
+        helpers = _re.sub(r'    private fun domoticsForTv\(\): JSONObject \{.*?\n    \}\n(?=\n|    private fun |$)', '', helpers, count=1, flags=_re.S)
     s = s.replace(helper_anchor, helpers + helper_anchor, 1)
 
 p.write_text(s)
