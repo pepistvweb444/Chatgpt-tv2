@@ -292,7 +292,7 @@ class PhoneBridgeService : Service() {
         }
         if (normalized == "all" || normalized == "whatsapp" || normalized == "notifications") {
             val feed=runCatching{JSONArray(getSharedPreferences("jarvis_mobile",MODE_PRIVATE).getString("notification_feed","[]"))}.getOrElse{JSONArray()}
-            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")))}
+            for(i in feed.length()-1 downTo 0){if(out.length()>=30)break;val n=feed.optJSONObject(i)?:continue;val pkg=n.optString("package");val wa=pkg.contains("whatsapp",true);if(normalized=="whatsapp"&&!wa)continue;if(normalized=="all"&&!wa&&!pkg.contains("messag",true))continue;out.put(JSONObject().put("source",if(wa)"whatsapp" else "notification").put("from",n.optString("conversation").ifBlank{n.optString("title")}).put("text",n.optString("text")).put("time",n.optLong("time")).put("package",pkg).put("packageName",pkg).put("app",appLabel(pkg)))}
         }
         return JSONObject().put("permissions", permissionStatus()).put("messages", out)
     }
@@ -300,4 +300,5 @@ class PhoneBridgeService : Service() {
     override fun onDestroy() { running=false; getSharedPreferences("jarvis_mobile",MODE_PRIVATE).edit().putBoolean("bridge_running",false).apply(); runCatching{server?.close()}; GalleryServer.stop(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
     companion object { const val PORT=8765; private const val CHANNEL="jarvis_phone_bridge" }
+    private fun appLabel(pkg:String):String=when{pkg.contains("instagram",true)->"Instagram";pkg.contains("whatsapp",true)->"WhatsApp";pkg.contains("facebook",true)->"Facebook";pkg.contains("twitter",true)||pkg=="com.twitter.android"->"X";pkg.contains("tiktok",true)||pkg.contains("musically",true)->"TikTok";pkg.contains("telegram",true)->"Telegram";else->runCatching{packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg,0)).toString()}.getOrDefault(pkg.substringAfterLast('.'))}
 }
