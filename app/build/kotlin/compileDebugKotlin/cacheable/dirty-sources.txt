@@ -1,0 +1,17 @@
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/SofaVisionService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/TvCommandService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/MainActivity.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/gallery/GalleryActivity.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/WeatherWidgetView.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/gallery/Http.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/WakeWordService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/TvAppAgentController.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/JarvisAccessibilityService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/OverlayService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/gallery/Providers.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/BootReceiver.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/gallery/GalleryConfig.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/TranslationService.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/MediaViewer.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/MobileRemoteClient.kt
+/workspace/ctv2/app/src/main/java/com/jarvis/tv/TvAppController.kt

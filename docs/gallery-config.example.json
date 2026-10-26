@@ -1,0 +1,10 @@
+{
+  "googleClientId": "PEGA_AQUI.apps.googleusercontent.com",
+  "googleClientSecret": "PEGA_AQUI",
+  "microsoftClientId": "PEGA_AQUI-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "microsoftTenant": "consumers",
+  "oneDriveFolders": ["special/cameraroll", "root:/Pictures/Samsung Gallery:", "root:/Imágenes/Samsung Gallery:"],
+  "supabaseUrl": "https://<PREVIEW_PROJECT_REF>.supabase.co",
+  "supabaseAnonKey": "PEGA_AQUI_LA_PUBLISHABLE_KEY",
+  "supabaseBucket": "jarvis-gallery"
+}
