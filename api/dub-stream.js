@@ -19,7 +19,8 @@ const RATE = 16000;
 const SESSIONS = new Map();               // in memory, per process
 const SESSION_TTL_MS = 2 * 3600 * 1000;
 const MAX_SPEAKERS = 6;
-const PROVISIONAL_SEC = Number(process.env.DUB_PROVISIONAL_SEC || 3);
+// OpenVoice se_extractor splits the VAD'd sample in ~10 s chunks and rounds: under ~5-6 s of speech it fails («input audio is too short»)
+const PROVISIONAL_SEC = Math.max(6, Number(process.env.DUB_PROVISIONAL_SEC || 6));
 const FULL_SEC = Number(process.env.DUB_SAMPLE_SEC || 10);
 const SAME_SPK = Number(process.env.DUB_SPEAKER_SIM || 0.86);
 
@@ -122,7 +123,7 @@ export function pickSpeaker(s, fp, voicedSec) {
   for (const sp of s.speakers) { const sim = similarity(fp, sp.fp); if (sim > bestSim) { bestSim = sim; best = sp; } }
   if (best && bestSim >= SAME_SPK) { best.fp = blend(best.fp, fp, 0.2); best.at = Date.now(); s.current = best.id; return best; }
   if (s.speakers.length >= MAX_SPEAKERS) s.speakers.sort((a, b) => b.at - a.at).pop();
-  const sp = { id: s.nextSpk++, fp, sample: Buffer.alloc(0), enrolledSec: 0, profile: null, at: Date.now(), sim: bestSim };
+  const sp = { id: s.nextSpk++, fp, sample: Buffer.alloc(0), enrolledSec: 0, profile: null, at: Date.now(), sim: bestSim, failAt: 0 };
   sp.profileId = `dub_${s.id}_${sp.id}`;
   s.speakers.push(sp); s.current = sp.id; return sp;
 }
@@ -205,10 +206,13 @@ function send(res, code, obj) { res.setHeader('Cache-Control', 'no-store'); retu
 
 async function enrollIfDue(sp, force = false) {
   const sec = sp.sample.length / 2 / RATE;
-  const due = force ? sec >= 2 : (!sp.profile && sec >= PROVISIONAL_SEC) || (sp.enrolledSec < FULL_SEC && sec >= FULL_SEC);
+  const due = force ? sec >= PROVISIONAL_SEC : (!sp.profile && sec >= PROVISIONAL_SEC) || (sp.enrolledSec < FULL_SEC && sec >= FULL_SEC);
   if (!due) return false;
+  if (!force && sp.failAt && sec < sp.failAt + 2) return false;
+  try {
   await P.ovEnroll(sp.profileId, sp.sample.subarray(0, Math.min(sp.sample.length, 12 * RATE * 2)));
-  sp.profile = sp.profileId; sp.enrolledSec = sec; return true;
+  } catch (e) { sp.failAt = sec; throw e; }
+  sp.profile = sp.profileId; sp.enrolledSec = sec; sp.failAt = 0; return true;
 }
 
 export default async function handler(req, res) {
@@ -248,7 +252,7 @@ export default async function handler(req, res) {
     const fp = fingerprint(v.pcm);
     let sp = s.current ? s.speakers.find(x => x.id === s.current) : null;
     if (!sp || (fp && similarity(fp, sp.fp) < SAME_SPK)) sp = pickSpeaker(s, fp, v.sec);
-    if (!sp) return send(res, 422, { error: 'no_voice_in_sample', voicedSec: v.sec });
+    if (!sp || v.sec < PROVISIONAL_SEC) return send(res, 422, { error: 'no_voice_in_sample', voicedSec: +v.sec.toFixed(1), needSec: PROVISIONAL_SEC });
     sp.sample = v.pcm; if (fp) sp.fp = fp;
     try { await enrollIfDue(sp, true); } catch (e) { return send(res, 502, { error: 'enroll_failed', detail: String(e?.message || e).slice(0, 120) }); }
     return send(res, 200, { ok: true, speaker: sp.id, voicedSec: +v.sec.toFixed(1), voice: sp.enrolledSec >= FULL_SEC ? 'clone' : 'clone-provisional' });

@@ -27,15 +27,16 @@ await t('health GET needs no token and shows no secrets', async () => { const r 
 await t('wrong / missing token -> 401', async () => { assert.equal((await call('POST', { session: 'tv1234' }, voice(2, 120, 1), { 'x-dub-token': 'nope' })).code, 401); assert.equal((await call('POST', { session: 'tv1234' }, voice(2, 120, 1), { 'x-dub-token': '' })).code, 401); });
 await t('bad session / unsupported target', async () => { assert.equal((await call('POST', { session: '../x' }, voice(2, 120, 1))).code, 400); assert.equal((await call('POST', { session: 'tv1234', target: 'de' }, voice(2, 120, 1))).code, 422); });
 await t('silence is skipped without calling STT', async () => { const r = await call('POST', { session: 'tvsil1', target: 'es' }, Buffer.alloc(32000 * 2)); assert.equal(r.body.skip, 'silence'); });
-const A1 = voice(4, 115, 1.1, 3), A2 = voice(4, 118, 1.1, 7), A3 = voice(3.5, 116, 1.1, 9), B1 = voice(4, 230, 2.2, 5);
+const A1 = voice(4, 115, 1.1, 3), A2 = voice(4, 118, 1.1, 7), A3 = voice(3.5, 116, 1.1, 9), B1 = voice(7, 230, 2.2, 5);
 await t('fingerprints: same voice similar, different voice not', async () => { const fa = M.fingerprint(A1), fa2 = M.fingerprint(A2), fb = M.fingerprint(B1); const sAA = M.similarity(fa, fa2), sAB = M.similarity(fa, fb); console.log('   sim A~A', sAA.toFixed(3), 'A~B', sAB.toFixed(3)); assert(sAA > 0.86); assert(sAB < 0.86); });
 let seg1;
-await t('1st phrase of speaker A: detected en, translated to es-ES, voice enrolled provisionally from the video audio (>=3 s)', async () => {
-  const r = await call('POST', { session: 'tvabc1', target: 'es-ES' }, A1); console.log('   ', JSON.stringify(r.body)); assert.equal(r.code, 200, JSON.stringify(r.body)); const b = r.body;
-  assert.equal(b.lang, 'en'); assert.equal(b.translation, 'Hola, ¿qué tal estás hoy?'); assert.equal(b.speaker, 1); assert.equal(b.voice, 'clone-provisional'); assert.equal(enrolls.length, 1); assert.equal(enrolls[0][0], 'dub_tvabc1_1'); seg1 = b.seg; });
+await t('1st phrase of speaker A (4 s): detected en, translated to es-ES, voice pending (OpenVoice needs >= 6 s)', async () => {
+  const r = await call('POST', { session: 'tvabc1', target: 'es-ES' }, A1); assert.equal(r.code, 200, JSON.stringify(r.body)); const b = r.body;
+  assert.equal(b.lang, 'en'); assert.equal(b.translation, 'Hola, ¿qué tal estás hoy?'); assert.equal(b.speaker, 1); assert.equal(b.voice, 'pending'); assert.equal(enrolls.length, 0); seg1 = b.seg;
+  assert.equal((await call('POST', { session: 'tvabc1', action: 'tts', seg: String(seg1) })).code, 409, 'no voice yet');
+  const r2 = await call('POST', { session: 'tvabc1', target: 'es' }, A2); assert.equal(r2.body.speaker, 1); assert.equal(r2.body.voice, 'clone-provisional'); assert.equal(enrolls[0][0], 'dub_tvabc1_1'); seg1 = r2.body.seg; });
 await t('tts uses that cloned profile in ES', async () => { const r = await call('POST', { session: 'tvabc1', action: 'tts', seg: String(seg1) }); assert.equal(r.code, 200); assert.equal(synths[0][0], 'dub_tvabc1_1'); assert.equal(synths[0][2], 'es'); assert(r.body.audioB64); });
 await t('same speaker keeps id; sample grows to ~10 s -> re-enroll as full clone', async () => {
-  const r2 = await call('POST', { session: 'tvabc1', target: 'es' }, A2); assert.equal(r2.body.speaker, 1);
   const r3 = await call('POST', { session: 'tvabc1', target: 'es' }, A3); assert.equal(r3.body.speaker, 1); assert.equal(r3.body.voice, 'clone'); assert.equal(enrolls.length, 2); assert(enrolls[1][1] >= 9.5, 'enrolled ' + enrolls[1][1]); });
 await t('speaker change -> new speaker, new sample, own profile', async () => { const r = await call('POST', { session: 'tvabc1', target: 'es' }, B1); assert.equal(r.body.speaker, 2); assert.equal(r.body.voice, 'clone-provisional'); assert.equal(enrolls[2][0], 'dub_tvabc1_2');
   const back = await call('POST', { session: 'tvabc1', target: 'es' }, voice(3, 117, 1.1, 11)); assert.equal(back.body.speaker, 1, 'A comes back -> A again'); });
@@ -45,6 +46,8 @@ await t('Groq down -> Gemini STT; Gemini translate down -> Groq LLM; OpenAI off 
   P.trGemini = async () => { throw new Error('quota'); }; P.trGroq = async () => 'Buenos días';
   const r = await call('POST', { session: 'tvabc2', target: 'es' }, A1); assert.equal(r.body.translation, 'Buenos días'); assert.equal(r.body.provider, 'gemini'); assert(r.body.warnings.length >= 2); });
 await t('manual 10 s sample from TV -> enroll now', async () => { const r = await call('POST', { session: 'tvabc3', action: 'sample' }, voice(10, 130, 1.3, 4)); assert.equal(r.code, 200); assert.equal(r.body.voice, 'clone'); assert.equal(enrolls[enrolls.length - 1][0], 'dub_tvabc3_1'); });
-await t('tts before any voice -> 409 voice_pending; reset', async () => { assert.equal((await call('POST', { session: 'tvabc9', action: 'tts', seg: '1' })).code, 404); assert.equal((await call('POST', { session: 'tvabc1', action: 'reset' })).body.ok, true); });
+await t('failed enroll is not retried on every phrase', async () => { const old = P.ovEnroll; let n = 0; P.ovEnroll = async () => { n++; throw new Error('openvoice_enroll_http_500'); }; P.sttGroq = async () => ({ text: 'Hi there', lang: 'en', provider: 'groq' }); P.trGemini = async () => 'Hola';
+  await call('POST', { session: 'tvfail1', target: 'es' }, voice(6.5, 140, 1.2, 2)); await call('POST', { session: 'tvfail1', target: 'es' }, voice(1.5, 140, 1.2, 3)); assert.equal(n, 1); await call('POST', { session: 'tvfail1', target: 'es' }, voice(2.5, 140, 1.2, 4)); assert.equal(n, 2); P.ovEnroll = old; });
+await t('unknown segment -> 404; reset', async () => { assert.equal((await call('POST', { session: 'tvabc9', action: 'tts', seg: '1' })).code, 404); assert.equal((await call('POST', { session: 'tvabc1', action: 'reset' })).body.ok, true); });
 await t('DUB_TOKEN unset -> 503 for every POST', async () => { delete process.env.DUB_TOKEN; assert.equal((await call('POST', { session: 'tvabc1' }, A1)).code, 503); process.env.DUB_TOKEN = 'test-token-only'; });
 console.log('dub-stream: ' + ok + ' ok');
