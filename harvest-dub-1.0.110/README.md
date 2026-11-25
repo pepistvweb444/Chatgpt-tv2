@@ -68,3 +68,18 @@ Branch: pepistvweb444/Chatgpt-tv2 feat/harvest-doblaje-1.0.110 (api/dub-stream.j
    - `sh …/voice/enable-harvest-voice.sh`.
 4. In the TV panel: Captura = the source the probe found; Probar captura 5 s; paste the token; Activar.
 - Rollback: tar -xzf /media/developer/harvest-backup-antes-1.0.110.tar.gz -C /media/developer/apps/usr/palm/applications, then rerun enable-harvest-voice.sh.
+
+## Backend deployed on Contabo (25 Nov 2026, 16:20 CET, approved by Alberto)
+- Files changed:
+  - /opt/others/vercel/chatgpt-tv2/app/api/dub-stream.js: branch commit 7d1602f, sha256 f892b602….
+  - DUB_TOKEN added to /opt/others/vercel/chatgpt-tv2/.env. A copy is on the box in /workspace/secrets-local/dub_token.txt (0600).
+- Container: only others-chatgpt-tv2 was recreated (docker compose up -d --no-deps --force-recreate app). init-staging-* were not touched.
+- Backup: /opt/others/backups/dub-stream-1.0.110-20261125-162052 (.env, compose.yaml, docker inspect, api listing).
+- Rollback: sh /opt/others/rollback_dub-stream_1.0.110.sh. It removes the file, restores .env and recreates only that container.
+- Fix found while deploying: OpenVoice enroll fails («input audio is too short») with less than about 5–6 s of speech. The provisional voice is now enrolled at 6 s (not 3 s); a failed enroll is retried only after 2 s more audio.
+- Verified:
+  - Jarvis routes are unchanged against the baseline (voice-clone, weather, news and capabilities 200; speech-dub, translate-audio and tv-fast 405 on GET; sync 401).
+  - dub-stream GET 200 configured:true.
+  - POST without a token or with a wrong token gives 401.
+  - With the token, an espeak English test clip (7.2 s): STT en in about 0.3 s, es-ES translation, segment in 3.0 s. The 2nd phrase gives voice clone-provisional (8.9 s sample).
+  - tts gives 7.9 s of cloned wav in 38.4 s, so the CPU is the bottleneck.
