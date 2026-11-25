@@ -1,0 +1,58 @@
+--- tv-1.0.109/src/usr/palm/applications/com.jarvis.harvesttv/voice/harvest_voice_daemon.py	2026-11-15 16:22:04.009573547 +0100
++++ tv-1.0.110/src/usr/palm/applications/com.jarvis.harvesttv/voice/harvest_voice_daemon.py	2026-11-25 16:03:44.521490068 +0100
+@@ -4,7 +4,7 @@
+    so any async fs (photo background slides, TTS audio streams) waited forever. More threads, set before the first async fs call. */
+ if(!process.env.UV_THREADPOOL_SIZE)process.env.UV_THREADPOOL_SIZE='32';
+ var fs=require('fs'),net=require('net'),cp=require('child_process'),http=require('http');
+-var APP_ID='com.jarvis.harvesttv';var HV_VERSION='1.0.109';
++var APP_ID='com.jarvis.harvesttv';var HV_VERSION='1.0.110';
+ var BACKEND='https://chatgpt-tv2.vercel.app';var WT=require(require('path').join(__dirname,'harvest_weather_time.js'));
+ var DL=require(require('path').join(__dirname,'harvest_deeplink.js'));var SAVER=require(require('path').join(__dirname,'harvest_saver.js'));var SPAM=require(require('path').join(__dirname,'harvest_spam.js'));var HOME=require(require('path').join(__dirname,'harvest_home.js'));var OVLR=require(require('path').join(__dirname,'harvest_overlay.js'));var AVM=require(require('path').join(__dirname,'harvest_av.js'));var NOTIFY=require(require('path').join(__dirname,'harvest_notify.js'));var ALARM=require(require('path').join(__dirname,'harvest_alarm.js'));var NEWS=require(require('path').join(__dirname,'harvest_news.js'));var BRIEF=require(require('path').join(__dirname,'harvest_brief.js'));var GAL=require(require('path').join(__dirname,'harvest_gallery.js'));var WATCH=require(require('path').join(__dirname,'harvest_watch.js'));
+ function curlPostJson(url,obj,cb){var t0=Date.now();execFile('/usr/bin/curl',['-sS','--max-time','8','-X','POST','-H','Content-Type: application/json','--data-binary',JSON.stringify(obj),url],10000,function(e,out){log('post '+url.split('/')[2]+' ms='+(Date.now()-t0)+' err='+(e?e.message:''));if(e)return cb(e);try{cb(null,JSON.parse(out));}catch(x){cb(x);}});}
+@@ -87,6 +87,7 @@
+     if(global.__CLIP&&/^\/hv\/(clip|kbd)\//.test(req.url||'')&&global.__CLIP.local(req,res))return;/* 1.0.101 loopback clipboard / keyboard fallback */
+     if(global.__DESK&&/^\/hv\/desk\//.test(req.url||'')&&global.__DESK.local(req,res))return;/* 1.0.109 Jarvis Escritorio */
+     if(global.__CAST&&/^\/hv\/cast\//.test(req.url||'')&&global.__CAST.local(req,res))return;/* 1.0.108 Cast y AirPlay + YouTube lounge */
++    if(global.__DUB&&/^\/hv\/dub\//.test(req.url||'')&&global.__DUB.local(req,res))return;/* 1.0.110 Doblaje */
+     if(global.__BUDS&&/^\/hv\/buds\//.test(req.url||'')&&global.__BUDS.local(req,res))return;/* 1.0.108 Galaxy Buds *//* 1.0.108 Cast y AirPlay + YouTube lounge */
+     if(global.__CR&&/^\/hv\/(chat|cr\/|web\/)/.test(req.url||'')&&global.__CR.local(req,res))return;/* 1.0.107 Crear + Navegador + AI proxy */
+     if(global.__S107&&/^\/hv\/(series-alerts|series107\/)/.test(req.url||'')&&global.__S107.local(req,res,function(id,cb){V167.openSeries(id,cb);}))return;/* 1.0.107 Mis series alerts */
+@@ -656,6 +657,7 @@
+           if(RING.state().ringing&&ALARM.isStop(text)){RING.stop('voice');return finishWithAnswer(sid,text,'',null,'Alarma apagada. ¡Buenos días!');}
+           /* 1.0.107: «🎨 Crear» (Word/Excel/PowerPoint/CSV/PDF, correo, imagen, vídeo, plano 3D, apps/juegos), «🌐 Navegador», mensajes leídos en el chat, cámara del móvil */
+           /* 1.0.108 «conecta / desconecta los buds» (Galaxy Buds as TV audio output, only on request) */
++          try{if(global.__DUB){var dq110=require(require('path').join(__dirname,'harvest_dub1110.js')).parse(text);if(dq110){launchState('thinking',text,'','',{session:sid});return global.__DUB.run(dq110,function(say){if(sid!==sessionSeq)return;finishWithAnswer(sid,text,'dub110',{},say);});}}}catch(e){log('[1.0.110] dub voice '+e.message);}
+           try{if(global.__BUDS){var bq108=require(require('path').join(__dirname,'harvest_buds1108.js')).parse(text);if(bq108){launchState('thinking',text,'','',{session:sid});return global.__BUDS.run(bq108,function(say){if(sid!==sessionSeq)return;finishWithAnswer(sid,text,'buds108',{},say);});}}}catch(e){log('[1.0.108] buds voice '+e.message);}
+           try{if(global.__CR&&global.__CR.voice(sid,text,{finish:function(s1,t1,i1,c1,a1){if(s1!==sessionSeq)return;finishWithAnswer(s1,t1,i1,c1,a1);},state:function(s1,t1){launchState('thinking',t1,'','',{session:s1});},phone:function(pp,cb){phoneRequest(pp,'GET',null,function(e,j){cb(e,j);});},inbox:function(){try{return global.__PHS&&global.__PHS.msgs?global.__PHS.msgs.list():[];}catch(e){return [];}}}))return;}catch(e){log('[1.0.107] create hook '+e.message);}
+           /* 1.0.107 «¿hay novedades de mis series?» -> live summary + cards (poster, T/E, fecha, plataforma, «Ver en TV» on tap) */
+@@ -833,6 +835,13 @@
+ try{global.__DESK=new (require(require('path').join(__dirname,'harvest_desk1109.js')).Desk)({log:log,front:function(cb){launchApp(APP_ID,{jarvisDesk:1},function(){cb();});},
+     toast:function(t){execFile('/usr/bin/luna-send',['-n','1','-a','com.webos.service.secondscreen.gateway','luna://com.webos.notification/createToast',JSON.stringify({sourceId:APP_ID,message:String(t).slice(0,180),noaction:true})],4000,function(){});}});
+   log('[1.0.109] jarvis escritorio ready');}catch(e){log('[1.0.109] desk init '+e.message);}
++/* 1.0.110 «🌐 Doblaje»: TV audio -> /api/dub-stream (Contabo, same OpenVoice cloner as Jarvis Mobile) -> dub through the TV speakers (harvest_dub1110.js). Off until «Activar». */
++try{global.__DUB=new (require(require('path').join(__dirname,'harvest_dub1110.js')).Dub)({log:log,exec:execFile0,
++    spawn:function(b,a,env){var op={stdio:['ignore','pipe','pipe']};if(env)op.env=env;return cp.spawn(b,a,op);},
++    volGet:function(cb){volGet(cb);},volSet:function(v,cb){volSet(v,cb);},
++    toast:function(t){execFile('/usr/bin/luna-send',['-n','1','-a','com.webos.service.secondscreen.gateway','luna://com.webos.notification/createToast',JSON.stringify({sourceId:APP_ID,message:String(t).slice(0,180),noaction:true})],4000,function(){});}});
++  setTimeout(function(){try{if(global.__DUB.cfg().enabled){var r110=global.__DUB.start();log('[1.0.110] dub autostart '+(r110.ok?'ok':r110.error));}}catch(e){log('[1.0.110] dub autostart '+e.message);}},20000);
++  log('[1.0.110] doblaje ready');}catch(e){log('[1.0.110] dub init '+e.message);}
+ /* 1.0.108 Galaxy Buds: short LE scans, ask, connect A2DP only after Sí (harvest_buds1108.js) */
+ try{global.__BUDS=new (require(require('path').join(__dirname,'harvest_buds1108.js')).Buds)({log:log,luna:function(u,o,cb){luna(u,o,cb);},spawn:function(b,a){return cp.spawn(b,a,{stdio:['ignore','pipe','ignore']});},
+     toast:function(t){execFile('/usr/bin/luna-send',['-n','1','-a','com.webos.service.secondscreen.gateway','luna://com.webos.notification/createToast',JSON.stringify({sourceId:APP_ID,message:String(t).slice(0,180),noaction:true})],4000,function(){});},
+--- tv-1.0.109/src/usr/palm/applications/com.jarvis.harvesttv/index.html	2026-11-15 16:22:04.009573547 +0100
++++ tv-1.0.110/src/usr/palm/applications/com.jarvis.harvesttv/index.html	2026-11-25 16:04:29.733346682 +0100
+@@ -142,5 +142,6 @@
+ <script src="jarvis-create-1.0.107.js?v=1.0.107"></script>
+ <script src="jarvis-cast-1.0.108.js?v=1.0.108"></script>
+ <script src="jarvis-desk-1.0.109.js?v=1.0.109"></script>
++<script src="jarvis-dub-1.0.110.js?v=1.0.110"></script>
+ </body>
+ </html>
+\ No newline at end of file
+--- tv-1.0.109/src/usr/palm/applications/com.jarvis.harvesttv/appinfo.json	2026-11-15 16:22:04.029573483 +0100
++++ tv-1.0.110/src/usr/palm/applications/com.jarvis.harvesttv/appinfo.json	2026-11-25 16:04:29.733346682 +0100
+@@ -1 +1 @@
+-{"id": "com.jarvis.harvesttv", "version": "1.0.109", "vendor": "Jarvis", "type": "web", "main": "index.html", "title": "Harvest TV", "requiredMemory": 64, "disableBackHistoryAPI": true, "icon": "icon.png", "requiredACG": ["application.launcher", "application.query"]}
+\ No newline at end of file
++{"id": "com.jarvis.harvesttv", "version": "1.0.110", "vendor": "Jarvis", "type": "web", "main": "index.html", "title": "Harvest TV", "requiredMemory": 64, "disableBackHistoryAPI": true, "icon": "icon.png", "requiredACG": ["application.launcher", "application.query"]}
+\ No newline at end of file
