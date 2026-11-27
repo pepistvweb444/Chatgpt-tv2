@@ -1,0 +1,4 @@
+local.properties
+.gradle/
+**/build/
+mobile/src/main/assets/model-es/

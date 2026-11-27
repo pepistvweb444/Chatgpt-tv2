@@ -8,6 +8,7 @@ object CallActionRegistry {
     private val calls = ConcurrentHashMap<String, Actions>()
 
     fun put(key: String, actions: Actions) { if (key.isNotBlank()) calls[key] = actions }
+    fun actions(key: String): Actions? = calls[key]
     fun remove(key: String) { calls.remove(key) }
     fun execute(key: String, action: String): Boolean {
         val a = calls[key] ?: return false

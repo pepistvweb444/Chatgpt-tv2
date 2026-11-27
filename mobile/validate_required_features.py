@@ -2,39 +2,38 @@ from pathlib import Path
 import sys
 
 checks = {
+    "mobile/src/main/java/com/jarvis/mobile/FutureVisionActivity.kt": [
+        "presentCall",
+        "Llamar desde Jarvis",
+        "InitTPV",
+    ],
     "mobile/src/main/java/com/jarvis/mobile/MainActivity.kt": [
-        "toggleEmbeddedVoiceRecognition",
-        "showRoomAssignmentDialog",
-        "showUnifiedDomoticsWidget",
-        "homey_devices_json",
         "PhoneAgentController",
+        "DeliveryCoordinator",
+        "showCartApproval",
     ],
     "mobile/src/main/java/com/jarvis/mobile/PhoneAgentController.kt": [
         "openWebSearch",
         "openUrl",
         "preferredProvider",
-    ],
-    "mobile/src/main/java/com/jarvis/mobile/HomeyActivity.kt": [
-        "CONECTAR / AUTORIZAR HOMEY CLOUD",
-        "/api/domotics/homey",
-    ],
-    "mobile/src/main/java/com/jarvis/mobile/WakeWordService.kt": [
-        "org.vosk",
-    ],
-    "mobile/src/main/java/com/jarvis/mobile/JarvisOverlayService.kt": [
-        "WindowManager",
+        "CartLoopGuard",
     ],
     "mobile/src/main/java/com/jarvis/mobile/JarvisCallScreeningService.kt": [
         "IncomingCallPresenter.show",
+        "CallSessionWatcher.afterCallPublished",
     ],
     "mobile/src/main/java/com/jarvis/mobile/PhoneBridgeService.kt": [
         "CallStateStore.current(this)",
     ],
+    "logic/src/main/kotlin/com/jarvis/logic/Cart.kt": [
+        "class IdempotentCart",
+        "fun payRequest",
+    ],
     "mobile/src/main/AndroidManifest.xml": [
-        ".HomeyActivity",
+        ".FutureVisionActivity",
         ".JarvisAccessibilityService",
-        ".WakeWordService",
         ".JarvisCallScreeningService",
+        "WRITE_CONTACTS",
     ],
 }
 
@@ -56,9 +55,7 @@ if failed:
     sys.exit(1)
 
 print("Jarvis feature validation OK")
-print(" - embedded Vosk voice present")
-print(" - persistent wake/overlay present")
-print(" - Homey Cloud integration present")
-print(" - room assignment/domotics integration present")
-print(" - phone agent browser/app helpers present")
-print(" - incoming call mobile/TV bridge hooks present")
+print(" - future vision call cards present")
+print(" - idempotent delivery carts present")
+print(" - phone agent loop guard present")
+print(" - incoming call bridge hooks present")

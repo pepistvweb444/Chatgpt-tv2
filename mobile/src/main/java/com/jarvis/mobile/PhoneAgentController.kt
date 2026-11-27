@@ -5,6 +5,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.appcompat.app.AlertDialog
+import com.jarvis.logic.CartLoopGuard
+import com.jarvis.logic.CartUi
+import com.jarvis.logic.DeliveryTaskParser
+import com.jarvis.logic.LoopDecision
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -16,6 +20,9 @@ class PhoneAgentController(private val activity: Activity) {
     private val prefs = activity.getSharedPreferences("jarvis_mobile", Activity.MODE_PRIVATE)
     private val backend = "https://chatgpt-tv2.vercel.app"
     @Volatile private var cancelled = false
+    private var shoppingItem: String? = null
+    private var shoppingTarget: Int? = null
+    private val cartGuard = CartLoopGuard()
 
     fun looksLikePhoneTask(text: String): Boolean {
         val s = text.lowercase().trim()
@@ -33,7 +40,7 @@ class PhoneAgentController(private val activity: Activity) {
 
     private fun looksLikeShoppingTask(task: String): Boolean {
         val s = canonical(task)
-        return listOf("compra", "comprar", "anade", "agrega", "carrito", "cesta", "pedido", "glovo", "amazon", "aliexpress", "dia").any { s.contains(it) }
+        return listOf("compra", "comprar", "anade", "agrega", "carrito", "cesta", "pedido", "glovo", "uber", "just eat", "deliveroo", "amazon", "aliexpress", "dia", "makro").any { s.contains(it) }
     }
 
     private fun hasCartEvidence(ui: JSONArray): Boolean {
@@ -56,6 +63,10 @@ class PhoneAgentController(private val activity: Activity) {
     fun run(task: String, onUpdate: (String) -> Unit, onDone: (String) -> Unit) {
         cancelled = false
         val resolved = resolveTask(task)
+        val parsed = DeliveryTaskParser.parse(resolved)
+        shoppingItem = parsed?.item
+        shoppingTarget = parsed?.quantity
+        cartGuard.reset()
         prefs.edit().putString("phone_agent_pending_task", resolved).apply()
         Thread { loop(resolved, 0, onUpdate, onDone) }.start()
     }
@@ -71,7 +82,8 @@ class PhoneAgentController(private val activity: Activity) {
 
     private fun loop(task: String, startStep: Int, onUpdate: (String) -> Unit, onDone: (String) -> Unit) {
         var step = startStep
-        while (!cancelled && step < 25) {
+        val cap = if (looksLikeShoppingTask(task)) 12 else 25
+        while (!cancelled && step < cap) {
             refreshSnapshot(); Thread.sleep(if (step == 0) 350 else 850)
             val ui = runCatching { JSONArray(prefs.getString("accessibility_ui", "[]")) }.getOrElse { JSONArray() }
             val pkg = prefs.getString("foreground_package", "").orEmpty()
@@ -87,7 +99,17 @@ class PhoneAgentController(private val activity: Activity) {
                 }
                 "open_url" -> { onUpdate("Abriendo web…"); openUrl(action.optString("url")); Thread.sleep(1200) }
                 "web_search" -> { onUpdate("Buscando en Internet…"); openWebSearch(action.optString("query").ifBlank { task }); Thread.sleep(1400) }
-                "click" -> { onUpdate("Pulsando ${action.optString("text")}…"); send(JarvisAccessibilityService.ACTION_CLICK_TEXT) { putExtra("text", action.optString("text")) } }
+                "click" -> {
+                    val texts = (0 until ui.length()).map { ui.optJSONObject(it)?.optString("text").orEmpty() }
+                    val observed = CartUi.observeQuantity(texts, shoppingItem)
+                    when (val decision = cartGuard.decide(action.optString("text"), observed, shoppingTarget)) {
+                        is LoopDecision.Stop -> return finish(onDone, decision.message, decision.success)
+                        LoopDecision.Proceed -> {
+                            onUpdate("Pulsando ${action.optString("text")}…")
+                            send(JarvisAccessibilityService.ACTION_CLICK_TEXT) { putExtra("text", action.optString("text")) }
+                        }
+                    }
+                }
                 "type" -> { onUpdate("Escribiendo…"); send(JarvisAccessibilityService.ACTION_SET_TEXT) { putExtra("text", action.optString("text")); putExtra("target", action.optString("target")) } }
                 "scroll" -> { onUpdate("Desplazando…"); send(if (action.optString("direction") == "backward") JarvisAccessibilityService.ACTION_SCROLL_BACKWARD else JarvisAccessibilityService.ACTION_SCROLL_FORWARD) }
                 "back" -> send(JarvisAccessibilityService.ACTION_BACK)
@@ -137,7 +159,7 @@ class PhoneAgentController(private val activity: Activity) {
     }
     private fun openApp(name: String): Boolean {
         val wanted=canonical(name); if(wanted.isBlank())return false
-        val known=mapOf("glovo" to listOf("com.glovo"),"amazon" to listOf("com.amazon.mShop.android.shopping"),"chrome" to listOf("com.android.chrome"),"aliexpress" to listOf("com.alibaba.aliexpresshd"),"booking" to listOf("com.booking"))
+        val known=mapOf("glovo" to listOf("com.glovo"),"uber eats" to listOf("com.ubercab.eats"),"just eat" to listOf("com.justeat.app.es"),"deliveroo" to listOf("com.deliveroo.orderapp"),"amazon" to listOf("com.amazon.mShop.android.shopping"),"chrome" to listOf("com.android.chrome"),"aliexpress" to listOf("com.alibaba.aliexpresshd"),"booking" to listOf("com.booking"))
         known[wanted]?.forEach { if(launchPackage(it)) return true }
         val pm=activity.packageManager; val launcher=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER); val activities=pm.queryIntentActivities(launcher,PackageManager.MATCH_ALL)
         val scored=activities.map{ri->val label=canonical(ri.loadLabel(pm)?.toString().orEmpty());val pkg=ri.activityInfo.packageName;val tail=canonical(pkg.substringAfterLast('.'));val score=when{label==wanted->0;label.contains(wanted)||wanted.contains(label)->1;tail==wanted||tail.contains(wanted)->2;else->3+distance(label.take(32),wanted.take(32))};Triple(score,ri,label)}.sortedBy{it.first}

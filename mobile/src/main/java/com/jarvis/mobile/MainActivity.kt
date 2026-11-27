@@ -25,6 +25,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.jarvis.logic.ApprovalCard
+import com.jarvis.logic.DeliveryTaskParser
+import com.jarvis.logic.PayResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -43,6 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var widgetHost: LinearLayout
 
     private val prefs by lazy { getSharedPreferences("jarvis_mobile", MODE_PRIVATE) }
+    private val phoneAgent by lazy { PhoneAgentController(this) }
     private var conversationId = ""
     private var lastLocation: Location? = null
 
@@ -347,12 +351,77 @@ class MainActivity : AppCompatActivity() {
         input.text.clear()
         renderMessageCard("user", message)
         saveHistory("user", message, false)
+        val delivery = DeliveryTaskParser.parse(message)
+        if (delivery != null && delivery.store !in DeliveryTaskParser.apiStores) {
+            val note = "Preparo ${delivery.item} en ${DeliveryCoordinator.storeName(delivery.store)} con la app, comprobando la cantidad para no duplicarla."
+            renderMessageCard("assistant", note)
+            saveHistory("assistant", note, false)
+            phoneAgent.run(message, { status.text = it }, { done ->
+                status.text = "Jarvis listo"
+                renderMessageCard("assistant", done)
+                saveHistory("assistant", done, false)
+            })
+            return
+        }
+        if (delivery != null && delivery.store in DeliveryTaskParser.apiStores) {
+            status.text = "Preparando la cesta…"
+            Thread {
+                when (val prep = DeliveryCoordinator(this).prepare(delivery)) {
+                    is DeliveryCoordinator.Prep.Ready -> runOnUiThread { status.text = "Jarvis listo"; showCartApproval(delivery.store, prep.card) }
+                    is DeliveryCoordinator.Prep.Stopped -> runOnUiThread {
+                        status.text = "Jarvis listo"
+                        renderMessageCard("assistant", prep.message)
+                        saveHistory("assistant", prep.message, false)
+                    }
+                    is DeliveryCoordinator.Prep.Fallback -> runOnUiThread {
+                        val note = prep.reason + " Sigo en la app y paro si la cantidad no se puede comprobar."
+                        renderMessageCard("assistant", note)
+                        saveHistory("assistant", note, false)
+                        phoneAgent.run(message, { status.text = it }, { done ->
+                            status.text = "Jarvis listo"
+                            renderMessageCard("assistant", done)
+                            saveHistory("assistant", done, false)
+                        })
+                    }
+                }
+            }.start()
+            return
+        }
         when (val kind = classifyVisualRequest(message)) {
             "news" -> openNewsFast()
             "weather" -> openWeatherForCurrentLocation(message)
             "home", "day" -> executeChat("$message. Devuelve cada elemento relevante en una línea separada, sin introducción ni conclusión.", kind)
             else -> executeChat(message, null)
         }
+    }
+
+    private fun showCartApproval(store: String, card: ApprovalCard) {
+        val summary = card.summary()
+        renderMessageCard("assistant", summary)
+        saveHistory("assistant", summary, false)
+        AlertDialog.Builder(this).setTitle("Cesta de ${DeliveryCoordinator.storeName(store)}")
+            .setMessage(summary)
+            .setPositiveButton("La cesta está lista", null)
+            .setNegativeButton("Pagar y pedir") { _, _ ->
+                AlertDialog.Builder(this).setTitle("Confirmar pago")
+                    .setMessage("Esto enviará el pedido y puede cobrarlo. ¿Confirmas el pago?")
+                    .setPositiveButton("Sí, pagar") { _, _ ->
+                        Thread {
+                            val result = DeliveryCoordinator(this).pay(store, card.basket, true)
+                            val text = when (result) {
+                                is PayResult.Blocked -> result.message
+                                is PayResult.Submitted -> result.message
+                            }
+                            runOnUiThread {
+                                renderMessageCard("assistant", text)
+                                saveHistory("assistant", text, false)
+                            }
+                        }.start()
+                    }
+                    .setNegativeButton("No pagar", null)
+                    .show()
+            }
+            .show()
     }
 
     private fun sendVisualPrompt(kind: String, prompt: String) {
