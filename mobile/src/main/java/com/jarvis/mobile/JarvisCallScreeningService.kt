@@ -33,10 +33,15 @@ class JarvisCallScreeningService : CallScreeningService() {
             .put("spamScore", 0).put("spamSources", "")
             .put("publicLabel", "").put("publicSource", "").put("publicConfidence", "")
             .put("photoData", contact?.photoData.orEmpty()).put("video", false)
+            .put("channelLabel", "LLAMADA ENTRANTE").put("phase", "ringing")
+            .put("sourceLabel", if (contact != null) "Contacto" else "")
+            .put("lineLabel", "InitTPV").put("aiConnected", false).put("aiStatus", "")
+            .put("videoPreview", "hidden")
             .put("time", System.currentTimeMillis()).put("updatedAt", System.currentTimeMillis())
         CallStateStore.save(this, call)
         appendFeed(call)
         IncomingCallPresenter.show(this, call)
+        CallSessionWatcher.afterCallPublished(this, id)
 
         if (contact == null && number.isNotBlank()) Thread {
             val rep = runCatching { reputation(number) }.getOrNull() ?: run {

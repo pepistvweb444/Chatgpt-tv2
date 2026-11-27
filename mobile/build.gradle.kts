@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.mobile.stable"
         minSdk = 28
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.2.25"
+        versionCode = 280
+        versionName = "0.2.80"
     }
 
     compileOptions {
@@ -20,9 +20,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
 }
 
 dependencies {
+    implementation(project(":logic")) {
+        exclude(group = "org.json", module = "json")
+    }
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")

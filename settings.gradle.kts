@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "Jarvis"
 include(":app")
 include(":mobile")
+include(":logic")

@@ -23,7 +23,7 @@ object IncomingCallPresenter {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             })
         }
-        val activityIntent = Intent(context, IncomingCallActivity::class.java).addFlags(
+        val activityIntent = Intent(context, FutureVisionActivity::class.java).addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         )
         val open = PendingIntent.getActivity(context, 5107, activityIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
